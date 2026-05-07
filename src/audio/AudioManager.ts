@@ -29,6 +29,8 @@ export class AudioManager {
   } | null = null;
   private supportsOggOpus: boolean | null = null;
   private readonly activeSfx = new Set<HTMLAudioElement>();
+  private readonly sfxBuffers = new Map<string, AudioBuffer | null>();
+  private readonly sfxBufferLoads = new Map<string, Promise<AudioBuffer | null>>();
   private lastHoverSfxAt = 0;
 
   setSfxVolume(value: number): void {
@@ -69,7 +71,7 @@ export class AudioManager {
   }
 
   playSwallow(): void {
-    this.playGeneratedSwallow('decor', 4);
+    return;
   }
 
   playObjectSwallow(kind: WorldObjectKind, category: CityObjectCategory, mass: number): void {
@@ -80,7 +82,7 @@ export class AudioManager {
         asset,
         fallMix.gain,
         this.randomRate(fallMix.rateMin, fallMix.rateMax),
-        () => this.playGeneratedSwallow(category, mass),
+        () => undefined,
         {
           fadeInSeconds: fallMix.fadeInSeconds,
           fadeOutSeconds: fallMix.fadeOutSeconds,
@@ -91,7 +93,8 @@ export class AudioManager {
       return;
     }
 
-    this.playGeneratedSwallow(category, mass);
+    void category;
+    void mass;
   }
 
   playPowerUp(type: PowerUpType): void {
@@ -106,22 +109,12 @@ export class AudioManager {
 
   playHoleSwallow(): void {
     if (HOLE_SWALLOW_SFX_ASSET) {
-      this.playSfxAsset(HOLE_SWALLOW_SFX_ASSET, 1, this.randomRate(0.94, 1.03), () => {
-        this.playTone(98, 24, 0.32, 'sawtooth', 0.36);
-        this.playTone(180, 42, 0.18, 'triangle', 0.18);
-      });
-      return;
+      this.playSfxAsset(HOLE_SWALLOW_SFX_ASSET, 1, this.randomRate(0.94, 1.03), () => undefined);
     }
-
-    this.playTone(98, 24, 0.32, 'sawtooth', 0.36);
-    this.playTone(180, 42, 0.18, 'triangle', 0.18);
   }
 
   playDeath(): void {
-    this.playSfxAsset(PLAYER_DIE_SFX_ASSET, 0.36, this.randomRate(0.98, 1.02), () => {
-      this.playTone(180, 34, 0.42, 'sawtooth', 0.34);
-      this.playTone(72, 24, 0.34, 'sine', 0.24);
-    }, { fadeInSeconds: 0.08, fadeOutSeconds: 0.42 });
+    this.playSfxAsset(PLAYER_DIE_SFX_ASSET, 0.36, this.randomRate(0.98, 1.02), () => undefined, { fadeInSeconds: 0.08, fadeOutSeconds: 0.42 });
   }
 
   playUiClick(): void {
@@ -146,11 +139,11 @@ export class AudioManager {
   }
 
   playMatchStart(): void {
-    this.playTone(260, 520, 0.22, 'triangle', 0.22);
+    return;
   }
 
   playMatchEnd(): void {
-    this.playTone(360, 140, 0.45, 'sine', 0.22);
+    return;
   }
 
   unlock(): void {
@@ -168,6 +161,8 @@ export class AudioManager {
       this.pendingMusicRequest = null;
       this.playMusicAsset(pending.key, pending.assets, pending.index, pending.forceOriginalAsset);
     }
+
+    this.preloadSfxAssets();
   }
 
   startMenuMusic(): void {
@@ -332,57 +327,176 @@ export class AudioManager {
       return;
     }
 
-    const sourcePath = forceOriginalAsset ? path : this.getPreferredAudioPath(path);
-    const audio = new Audio(sourcePath);
-    const targetVolume = this.clamp01(this.sfxVolume * gain);
-    audio.volume = fade?.fadeInSeconds ? 0 : targetVolume;
-    audio.playbackRate = playbackRate;
-    const audioGraph = this.createAssetAudioGraph(audio, fade?.lowPassFrequency);
-    let fadeFrame = 0;
-    const release = (): void => {
-      if (fadeFrame) {
-        window.cancelAnimationFrame(fadeFrame);
+    const sourcePath = path;
+    const context = this.getContext();
+    if (!context) {
+      this.playHtmlSfx(sourcePath, path, gain, playbackRate, onError, fade, forceOriginalAsset);
+      return;
+    }
+
+    void this.loadSfxBuffer(sourcePath).then((buffer) => {
+      if (!buffer && !forceOriginalAsset && sourcePath !== path) {
+        this.playSfxAsset(path, gain, playbackRate, onError, fade, true);
+        return;
       }
-      audioGraph?.source.disconnect();
-      audioGraph?.filter.disconnect();
+      if (!buffer) {
+        onError();
+        return;
+      }
+      this.playSfxBuffer(context, buffer, gain, playbackRate, fade);
+    });
+  }
+
+  private playSfxBuffer(
+    context: AudioContext,
+    buffer: AudioBuffer,
+    gain: number,
+    playbackRate: number,
+    fade?: {
+      fadeInSeconds?: number;
+      fadeOutSeconds?: number;
+      fadeAway?: boolean;
+      lowPassFrequency?: number;
+    }
+  ): void {
+    if (context.state === 'suspended') {
+      void context.resume();
+    }
+
+    const source = context.createBufferSource();
+    const gainNode = context.createGain();
+    const filter = fade?.lowPassFrequency ? context.createBiquadFilter() : null;
+    const targetVolume = this.clamp01(this.sfxVolume * gain);
+    const now = context.currentTime;
+    const duration = Math.max(0.05, buffer.duration / Math.max(0.01, playbackRate));
+    const fadeIn = Math.min(fade?.fadeInSeconds ?? 0, duration * 0.45);
+    const fadeOut = Math.min(fade?.fadeOutSeconds ?? 0, duration * 0.85);
+    const fadeTarget = fade?.fadeAway ? targetVolume * 0.05 : targetVolume;
+    const releaseStart = Math.max(fadeIn, duration - fadeOut);
+
+    source.buffer = buffer;
+    source.playbackRate.value = playbackRate;
+    gainNode.gain.setValueAtTime(fadeIn > 0 ? 0.0001 : targetVolume, now);
+    if (fadeIn > 0) {
+      gainNode.gain.linearRampToValueAtTime(targetVolume, now + fadeIn);
+    }
+    if (fade?.fadeAway || fadeOut > 0) {
+      gainNode.gain.setValueAtTime(targetVolume, now + releaseStart);
+      gainNode.gain.linearRampToValueAtTime(Math.max(0.0001, fadeTarget), now + duration);
+    }
+
+    if (filter) {
+      filter.type = 'lowpass';
+      filter.frequency.value = fade?.lowPassFrequency ?? 1600;
+      filter.Q.value = 0.45;
+      source.connect(filter);
+      filter.connect(gainNode);
+    } else {
+      source.connect(gainNode);
+    }
+    gainNode.connect(context.destination);
+    source.onended = (): void => {
+      source.disconnect();
+      filter?.disconnect();
+      gainNode.disconnect();
+    };
+    source.start(now);
+    source.stop(now + duration + 0.02);
+  }
+
+  private playHtmlSfx(
+    sourcePath: string,
+    originalPath: string,
+    gain: number,
+    playbackRate: number,
+    onError: () => void,
+    fade: {
+      fadeInSeconds?: number;
+      fadeOutSeconds?: number;
+      fadeAway?: boolean;
+      lowPassFrequency?: number;
+    } | undefined,
+    forceOriginalAsset: boolean
+  ): void {
+    const audio = new Audio(sourcePath);
+    audio.volume = this.clamp01(this.sfxVolume * gain);
+    audio.playbackRate = playbackRate;
+    const release = (): void => {
       audio.removeEventListener('ended', release);
       audio.removeEventListener('error', release);
       this.activeSfx.delete(audio);
     };
-    const applyFade = (): void => {
-      const fadeIn = fade?.fadeInSeconds ?? 0;
-      const fadeOut = fade?.fadeOutSeconds ?? 0;
-      let multiplier = 1;
-      if (fadeIn > 0) {
-        multiplier = Math.min(multiplier, audio.currentTime / fadeIn);
-      }
-      if (fadeOut > 0 && Number.isFinite(audio.duration) && audio.duration > 0) {
-        multiplier = Math.min(multiplier, Math.max(0, (audio.duration - audio.currentTime) / fadeOut));
-      }
-      if (fade?.fadeAway && Number.isFinite(audio.duration) && audio.duration > 0) {
-        const progress = Math.max(0, Math.min(1, audio.currentTime / audio.duration));
-        multiplier = Math.min(multiplier, Math.max(0.05, 1 - Math.pow(progress, 0.7) * 0.95));
-      }
-      audio.volume = targetVolume * Math.max(0, Math.min(1, multiplier));
-      if (!audio.paused && !audio.ended) {
-        fadeFrame = window.requestAnimationFrame(applyFade);
-      }
-    };
     audio.addEventListener('ended', release);
     audio.addEventListener('error', release);
     this.activeSfx.add(audio);
-    void audio.play().then(() => {
-      if (fade) {
-        applyFade();
-      }
-    }).catch((error) => {
+    void audio.play().catch(() => {
       release();
-      if (!forceOriginalAsset && sourcePath !== path) {
-        this.playSfxAsset(path, gain, playbackRate, onError, fade, true);
+      if (!forceOriginalAsset && sourcePath !== originalPath) {
+        this.playSfxAsset(originalPath, gain, playbackRate, onError, fade, true);
         return;
       }
       onError();
-      void error;
+    });
+  }
+
+  private loadSfxBuffer(path: string): Promise<AudioBuffer | null> {
+    const cached = this.sfxBuffers.get(path);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+    if (this.sfxBuffers.has(path)) {
+      return Promise.resolve(null);
+    }
+
+    const existingLoad = this.sfxBufferLoads.get(path);
+    if (existingLoad) {
+      return existingLoad;
+    }
+
+    const load = fetch(path)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load audio ${path}`);
+        }
+        return response.arrayBuffer();
+      })
+      .then((data) => this.getContext()?.decodeAudioData(data) ?? null)
+      .then((buffer) => {
+        this.sfxBuffers.set(path, buffer);
+        this.sfxBufferLoads.delete(path);
+        return buffer;
+      })
+      .catch(() => {
+        this.sfxBuffers.set(path, null);
+        this.sfxBufferLoads.delete(path);
+        return null;
+      });
+    this.sfxBufferLoads.set(path, load);
+    return load;
+  }
+
+  private preloadSfxAssets(): void {
+    const assets = new Set<string>();
+    assets.add(BUTTON_HOVER_SFX_ASSET);
+    assets.add(BUTTON_CLICK_SFX_ASSET);
+    assets.add(PLAYER_DIE_SFX_ASSET);
+    for (const asset of Object.values(OBJECT_SWALLOW_SFX_ASSETS)) {
+      if (Array.isArray(asset)) {
+        asset.forEach((item) => assets.add(item));
+      } else if (asset) {
+        assets.add(asset);
+      }
+    }
+    for (const asset of Object.values(POWERUP_SFX_ASSETS)) {
+      if (asset) {
+        assets.add(asset);
+      }
+    }
+    if (HOLE_SWALLOW_SFX_ASSET) {
+      assets.add(HOLE_SWALLOW_SFX_ASSET);
+    }
+    assets.forEach((asset) => {
+      void this.loadSfxBuffer(asset);
     });
   }
 

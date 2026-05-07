@@ -105,6 +105,7 @@ export class Game {
     this.root.appendChild(this.shell);
     this.bindUiButtonSounds();
     this.bindCameraZoomControls();
+    this.bindAudioUnlock();
 
     this.sceneManager = new SceneManager(this.sceneLayer);
     this.inputManager = new InputManager({
@@ -1289,12 +1290,6 @@ export class Game {
   }
 
   private bindUiButtonSounds(): void {
-    this.uiLayer.addEventListener(
-      'pointerdown',
-      () => this.audioManager.unlock(),
-      { capture: true }
-    );
-
     this.uiLayer.addEventListener('pointerover', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) {
@@ -1333,9 +1328,22 @@ export class Game {
     );
   }
 
+  private bindAudioUnlock(): void {
+    window.addEventListener('pointerdown', this.handleAudioUnlock, { capture: true });
+    window.addEventListener('touchstart', this.handleAudioUnlock, { capture: true, passive: true });
+    window.addEventListener('keydown', this.handleAudioUnlock, { capture: true });
+  }
+
+  private readonly handleAudioUnlock = (): void => {
+    this.audioManager.unlock();
+  };
+
   dispose(): void {
     window.cancelAnimationFrame(this.animationId);
     window.removeEventListener('keydown', this.handleZoomKeyDown);
+    window.removeEventListener('pointerdown', this.handleAudioUnlock, { capture: true });
+    window.removeEventListener('touchstart', this.handleAudioUnlock, { capture: true });
+    window.removeEventListener('keydown', this.handleAudioUnlock, { capture: true });
     this.sceneLayer?.removeEventListener('wheel', this.handleZoomWheel);
     this.inputManager.dispose();
     this.sceneManager.dispose();
