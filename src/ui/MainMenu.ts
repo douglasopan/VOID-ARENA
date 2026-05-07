@@ -73,8 +73,9 @@ export class MainMenu {
     element.querySelector('.find-games')?.addEventListener('click', () => callbacks.onFindGames(readName()));
     element.querySelector('.host-match')?.addEventListener('click', () => callbacks.onHostMatch(readName()));
     element.querySelector('.settings')?.addEventListener('click', () => callbacks.onSettings());
-    element.querySelector<HTMLSelectElement>('.language-select')?.addEventListener('change', (event) => {
-      const value = event.currentTarget.value as LanguageCode;
+    const languageSelect = element.querySelector<HTMLSelectElement>('.language-select');
+    languageSelect?.addEventListener('change', () => {
+      const value = languageSelect.value as LanguageCode;
       callbacks.onLanguageChange(value, input?.value.trim() || profile?.playerName);
     });
     this.root.appendChild(element);

@@ -121,6 +121,17 @@ export class NetworkClient {
 }
 
 function resolveMultiplayerServerUrl(): string {
+  const urlParam = new URLSearchParams(window.location.search).get('server')?.trim();
+  if (urlParam) {
+    window.localStorage.setItem('void-arena-multiplayer-server-url', urlParam);
+    return urlParam;
+  }
+
+  const saved = window.localStorage.getItem('void-arena-multiplayer-server-url')?.trim();
+  if (saved) {
+    return saved;
+  }
+
   const configured = import.meta.env.VITE_MULTIPLAYER_SERVER_URL?.trim();
   if (configured) {
     return configured;

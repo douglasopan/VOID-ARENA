@@ -1,6 +1,7 @@
 {
   "name": "void-arena",
   "version": "0.1.0",
+  "description": "A 3D city-swallowing arena game with solo play, bots, customizable void rims, mobile controls, and Socket.IO multiplayer infrastructure.",
   "private": true,
   "type": "module",
   "scripts": {

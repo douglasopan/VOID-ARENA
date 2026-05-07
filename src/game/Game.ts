@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { AudioManager } from '../audio/AudioManager';
+import { detectLanguage } from '../i18n/I18n';
 import { BOT_NAMES, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
-import type { ChatMessage, HoleRimStyle, MatchResult, MockRoomSummary } from '../shared/types';
+import type { ChatMessage, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary } from '../shared/types';
 import { InputManager } from '../input/InputManager';
 import { NetworkClient } from '../network/NetworkClient';
 import { PlayerProfileStore } from '../player/PlayerProfileStore';
@@ -70,6 +71,7 @@ export class Game {
   private deathCameraEnabled = true;
   private holeRimColor = RIM_COLORS[0];
   private holeRimStyle: HoleRimStyle = 'neon';
+  private language: LanguageCode = detectLanguage();
   private deathCameraTargetId: string | null = null;
   private deathCameraElapsed = 0;
   private messageId = 1;
@@ -182,16 +184,22 @@ export class Game {
     if (profile) {
       this.holeRimColor = profile.holeRimColor || RIM_COLORS[0];
       this.holeRimStyle = profile.holeRimStyle || 'neon';
+      this.language = profile.language || this.language;
     }
     this.mainMenu.show(
       {
         onStartSolo: (name) => this.showSoloSetup(this.activateProfile(name)),
         onFindGames: (name) => void this.showFindGames(this.activateProfile(name)),
         onHostMatch: (name) => this.showHostMatch(this.activateProfile(name)),
-        onSettings: () => this.showSettingsOverlay(false)
+        onSettings: () => this.showSettingsOverlay(false),
+        onLanguageChange: (language, playerName) => {
+          this.applyLanguage(language, playerName);
+          this.showMainMenu();
+        }
       },
       this.playerName,
-      profile
+      profile,
+      this.language
     );
   }
 
@@ -668,6 +676,7 @@ export class Game {
     const safeName = playerName.trim() || `Player_${Math.floor(1000 + Math.random() * 9000)}`;
     const profile = this.profileStore.getOrCreate(safeName);
     this.profileStore.updateAppearance(profile.playerName, this.holeRimColor, this.holeRimStyle);
+    this.profileStore.updateLanguage(profile.playerName, this.language);
     this.playerName = profile.playerName;
     return profile.playerName;
   }
@@ -850,7 +859,8 @@ export class Game {
           }
         },
         onNextMusic: () => this.audioManager.nextMusicTrack(),
-        onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle)
+        onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle),
+        onLanguageChange: (language) => this.applyLanguage(language)
       },
       {
         chatEnabled: this.chatEnabled,
@@ -858,7 +868,8 @@ export class Game {
         deathCameraEnabled: this.deathCameraEnabled,
         hudDisplaySettings: this.hud.getDisplaySettings(),
         holeRimColor: this.holeRimColor,
-        holeRimStyle: this.holeRimStyle
+        holeRimStyle: this.holeRimStyle,
+        language: this.language
       }
     );
   }
@@ -899,7 +910,11 @@ export class Game {
           }
         },
         onNextMusic: () => this.audioManager.nextMusicTrack(),
-        onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle)
+        onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle),
+        onLanguageChange: (language) => {
+          this.applyLanguage(language);
+          this.showSettingsOverlay(inMatch);
+        }
       },
       {
         chatEnabled: this.chatEnabled,
@@ -907,7 +922,8 @@ export class Game {
         deathCameraEnabled: this.deathCameraEnabled,
         hudDisplaySettings: this.hud.getDisplaySettings(),
         holeRimColor: this.holeRimColor,
-        holeRimStyle: this.holeRimStyle
+        holeRimStyle: this.holeRimStyle,
+        language: this.language
       }
     );
   }
@@ -927,6 +943,14 @@ export class Game {
     const name = this.playerName || this.profileStore.load()?.playerName;
     if (name) {
       this.profileStore.updateAppearance(name, rimColor, rimStyle);
+    }
+  }
+
+  private applyLanguage(language: LanguageCode, playerName = this.playerName): void {
+    this.language = language;
+    const name = playerName || this.profileStore.load()?.playerName;
+    if (name) {
+      this.profileStore.updateLanguage(name, language);
     }
   }
 

@@ -149,8 +149,9 @@ export class PauseMenu {
       deathCameraToggle.textContent = deathCameraEnabled ? enabledText : disabledText;
       callbacks.onDeathCameraToggle?.(deathCameraEnabled);
     });
-    element.querySelector<HTMLSelectElement>('.language-select')?.addEventListener('change', (event) => {
-      callbacks.onLanguageChange?.(event.currentTarget.value as LanguageCode);
+    const languageSelect = element.querySelector<HTMLSelectElement>('.language-select');
+    languageSelect?.addEventListener('change', () => {
+      callbacks.onLanguageChange?.(languageSelect.value as LanguageCode);
     });
     let rimColor = options.holeRimColor ?? RIM_COLORS[0];
     let rimStyle: HoleRimStyle = options.holeRimStyle ?? 'neon';

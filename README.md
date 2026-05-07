@@ -4,17 +4,15 @@
   <img src="https://raw.githubusercontent.com/douglasopan/VOID-ARENA/main/public/logo.png" width="400" />
 </p>
 
-<h3 align="center">
-Consume. Grow. Dominate.
-</h3>
+<h3 align="center">Consume. Grow. Dominate.</h3>
 
----
+Void Arena is a 3D city-swallowing arena game built with Vite, TypeScript, Three.js, Express, and Socket.IO. It includes solo play, bot matches, online room infrastructure, mobile touch controls, in-world ads, player profiles, match history, multi-language UI groundwork, and customizable void rims.
 
-## About The Project
+## About
 
-VOID ARENA is a large-scale competitive multiplayer game where players control gravitational entities capable of consuming the world around them in order to grow, evolve, and dominate the arena.
+VOID ARENA is a competitive multiplayer game where players control gravitational voids that consume structures, vehicles, trees, NPCs, objects, parts of the city, and other players.
 
-The core gameplay loop is simple, satisfying, and highly addictive:
+The core loop is simple:
 
 - Hunt
 - Consume
@@ -22,100 +20,9 @@ The core gameplay loop is simple, satisfying, and highly addictive:
 - Dominate
 - Repeat
 
-Players absorb:
-- structures
-- vehicles
-- trees
-- objects
-- NPCs
-- parts of the city
-- and even other players
+The long-term vision is a replayable, scalable multiplayer game with physics-based interaction, environmental destruction, procedural arenas, ranked systems, cosmetics, persistent progression, and streamable chaos.
 
-As the Void grows, the player's influence over the arena increases, transforming both the gameplay and the map itself.
-
-Every match becomes a living ecosystem of destruction, territorial control, survival, and chaos.
-
----
-
-# Vision
-
-VOID ARENA is designed to become more than just another multiplayer game.
-
-The vision is to create a highly replayable and massively scalable experience that combines:
-
-- Real-time multiplayer gameplay
-- Physics-based interaction
-- Environmental destruction
-- Emergent gameplay
-- Territorial domination
-- Dynamic arenas
-- Social competition
-- Streamable chaos
-
-We want every match to feel alive and unpredictable.
-
----
-
-# The Core Feeling
-
-One of the most important aspects of VOID ARENA is the emotional satisfaction created by the act of consumption itself.
-
-There is something strangely enjoyable and instinctive about chasing objects across the map just to watch them be swallowed by the Void.
-
-As players move through the arena, they unconsciously enter an addictive gameplay loop:
-
-- Search
-- Consume
-- Expand
-- Dominate
-
-Watching the Void erase parts of the environment creates a powerful sense of progression and visual reward.
-
-The game is built around this sensation:
-
-> The pleasure of consuming the world and becoming something larger, stronger, and impossible to ignore.
-
----
-
-# Gameplay Philosophy
-
-VOID ARENA focuses on:
-
-- Fast and satisfying gameplay
-- Constant progression
-- Massive multiplayer potential
-- Environmental interaction
-- Emergent strategies
-- Visual feedback
-- Replayability
-
-The arena itself becomes part of the gameplay.
-
-The battlefield changes dynamically as players consume and reshape the environment in real time.
-
----
-
-# Future Goals
-
-The long-term vision for VOID ARENA includes:
-
-- Massive multiplayer matches
-- Competitive ranked systems
-- Clans and factions
-- Dynamic world events
-- Seasonal content
-- Procedural arenas
-- Persistent progression
-- Cosmetics and customization
-- AI-driven ecosystems
-- Large-scale city destruction
-- Cross-platform gameplay
-
----
-
-# Technology Stack
-
-VOID ARENA is currently built using:
+## Tech Stack
 
 - Vite
 - TypeScript
@@ -124,91 +31,100 @@ VOID ARENA is currently built using:
 - Socket.IO
 - Node.js
 
----
-
-# Running Locally
-
-## Install dependencies
+## Running Locally
 
 ```bash
 npm install
+npm run dev
+```
 
+The client opens at `http://localhost:5173` and the multiplayer server runs at `http://localhost:3001`.
 
+To run them separately:
 
-Running Client and Server Separately
-Client
+```bash
 npm run dev:client
-Server
 npm run dev:server
-Environment Variables
+```
 
-Copy:
+## Environment
 
-.env.example
+Copy `.env.example` to `.env` when configuring local or production URLs.
 
-to:
+Client:
 
-.env
-
-Example:
-
+```bash
 VITE_MULTIPLAYER_SERVER_URL=http://localhost:3001
+```
 
-Deployment
-Frontend
+Server:
 
-Recommended:
+```bash
+PORT=3001
+HOST=0.0.0.0
+CLIENT_ORIGIN=http://localhost:5173
+```
 
-Vercel
-Multiplayer Server
+In production, `VITE_MULTIPLAYER_SERVER_URL` must point to the public Socket.IO server URL. The Vercel client also accepts `?server=https://your-server-url` for quick testing and saves that URL in the browser.
 
-Recommended:
+## Deployment
 
-Railway
-Render
-Fly.io
-VPS
-Project Structure
+### Frontend On Vercel
+
+1. Import this GitHub repository in Vercel.
+2. Use:
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+3. Configure:
+   - `VITE_MULTIPLAYER_SERVER_URL=https://your-public-realtime-server`
+
+`vercel.json` is ready for the Vite frontend. Vercel should serve the client; the realtime multiplayer server must run on a host that supports persistent Node/WebSocket processes.
+
+### Multiplayer Server
+
+The multiplayer server uses Socket.IO/WebSockets. Host it on Railway, Render, Fly.io, a VPS, Docker, or another platform that keeps a Node process alive.
+
+Recommended server environment:
+
+```bash
+PORT=3001
+HOST=0.0.0.0
+CLIENT_ORIGINS=https://your-game.vercel.app,https://void-arena-six.vercel.app
+```
+
+Then set the Vercel frontend variable:
+
+```bash
+VITE_MULTIPLAYER_SERVER_URL=https://your-public-realtime-server
+```
+
+The repo also includes a `Dockerfile` and `Procfile` for server-focused hosts.
+
+## Project Structure
+
+```text
 VOID-ARENA/
-├── public/
-├── server/
-├── src/
-├── package.json
-├── vite.config.ts
-├── vercel.json
-└── README.md
-Inspirations
+  public/
+  server/
+  src/
+  package.json
+  vite.config.ts
+  vercel.json
+  README.md
+```
 
-VOID ARENA draws inspiration from:
+## GitHub
 
-Competitive .io games
-Battle Royale experiences
-Sandbox destruction systems
-Physics-driven gameplay
-Cyberpunk aesthetics
-Emergent multiplayer chaos
+Generated files, `node_modules`, `dist`, logs, and local smoke screenshots are ignored by Git.
 
-But its identity is centered around one core idea:
+Checklist before publishing:
 
-"Consume. Grow. Dominate."
-Final Objective
+```bash
+npm run build
+git status
+git add .
+git commit -m "Prepare Void Arena for online deploy"
+git push origin main
+```
 
-VOID ARENA aims to become:
-
-Easy to understand
-Difficult to master
-Exciting to watch
-Highly shareable
-Creator-friendly
-Socially engaging
-Competitive
-Infinitely replayable
-
-The Void is always hungry.
-
-Author
-
-Created by Douglas Pan.
-
-GitHub:
-https://github.com/douglasopan & Codex (OpenAI)
+Created by Douglas Pan and Codex.
