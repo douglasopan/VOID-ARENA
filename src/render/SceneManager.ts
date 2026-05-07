@@ -13,7 +13,7 @@ import { ObjectFactory } from './ObjectFactory';
 export class SceneManager {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(58, 1, 0.1, 1200);
-  readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+  readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance', stencil: true });
   private readonly objectFactory = new ObjectFactory();
   private readonly cameraController = new CameraController();
   private readonly holeRenderer = new HoleRenderer(this.scene);
@@ -39,6 +39,7 @@ export class SceneManager {
   constructor(private readonly container: HTMLElement) {
     this.scene.background = new THREE.Color('#0b2330');
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.autoClearStencil = true;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);

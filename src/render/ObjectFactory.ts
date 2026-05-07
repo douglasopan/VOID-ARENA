@@ -8,7 +8,7 @@ export class ObjectFactory {
 
   createGround(halfExtent: number): THREE.Mesh {
     const geometry = new THREE.PlaneGeometry(halfExtent * 2, halfExtent * 2, 1, 1);
-    const material = new THREE.MeshStandardMaterial({ color: '#263228', roughness: 0.95 });
+    const material = this.createTerrainCutoutMaterial('#263228', 0.95, 0);
     const ground = new THREE.Mesh(geometry, material);
     ground.position.y = 0.005;
     ground.rotation.x = -Math.PI / 2;
@@ -19,18 +19,14 @@ export class ObjectFactory {
   createWater(halfExtent: number): THREE.Group {
     const group = new THREE.Group();
     const waterGeometry = new THREE.PlaneGeometry(halfExtent * 5.2, halfExtent * 5.2, 1, 1);
-    const waterMaterial = new THREE.MeshStandardMaterial({
-      color: '#155a73',
-      emissive: '#063345',
-      emissiveIntensity: 0.25,
-      roughness: 0.42,
-      metalness: 0.18
-    });
+    const waterMaterial = this.createTerrainCutoutMaterial('#155a73', 0.42, 0.18);
+    waterMaterial.emissive.set('#063345');
+    waterMaterial.emissiveIntensity = 0.25;
     const water = new THREE.Mesh(waterGeometry, waterMaterial);
     water.rotation.x = -Math.PI / 2;
     water.position.y = -0.1;
 
-    const shoreMaterial = this.getMaterial('#8aa79d', 0.88, 0.02);
+    const shoreMaterial = this.createTerrainCutoutMaterial('#8aa79d', 0.88, 0.02);
     const edgeThickness = 2.6;
     const length = halfExtent * 2 + edgeThickness;
     const horizontal = new THREE.BoxGeometry(length, 0.08, edgeThickness);
@@ -51,7 +47,7 @@ export class ObjectFactory {
 
   createRoad(road: RoadSegment): THREE.Mesh {
     const geometry = new THREE.BoxGeometry(road.width, 0.035, road.length);
-    const material = this.getMaterial('#1e2430', 0.9, 0.02);
+    const material = this.createTerrainCutoutMaterial('#1e2430', 0.9, 0.02);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(road.x, 0.025, road.z);
     mesh.rotation.y = road.rotationY;
@@ -72,7 +68,7 @@ export class ObjectFactory {
       surface.kind === 'sidewalk'
         ? '#747c77'
         : '#f6f4d7';
-    const material = this.getMaterial(color, surface.kind === 'sidewalk' ? 0.86 : 0.58, 0.02);
+    const material = this.createTerrainCutoutMaterial(color, surface.kind === 'sidewalk' ? 0.86 : 0.58, 0.02);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(surface.x, surface.kind === 'sidewalk' ? 0.06 : 0.08, surface.z);
     mesh.rotation.y = surface.rotationY;
@@ -82,7 +78,7 @@ export class ObjectFactory {
 
   private createCrosswalk(surface: SurfaceSegment): THREE.Group {
     const group = new THREE.Group();
-    const material = this.getMaterial('#e7edf1', 0.58, 0.02);
+    const material = this.createTerrainCutoutMaterial('#e7edf1', 0.58, 0.02);
     const stripeCount = Math.max(4, Math.floor(surface.length / 0.74));
     const stripeLength = surface.length / (stripeCount * 2.1);
     const spacing = surface.length / stripeCount;
@@ -99,7 +95,7 @@ export class ObjectFactory {
 
   private createPlaza(surface: SurfaceSegment): THREE.Mesh {
     const geometry = new THREE.BoxGeometry(surface.width, 0.045, surface.length);
-    const material = this.getMaterial('#66736c', 0.88, 0.02);
+    const material = this.createTerrainCutoutMaterial('#66736c', 0.88, 0.02);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(surface.x, 0.045, surface.z);
     mesh.rotation.y = surface.rotationY;
@@ -548,6 +544,17 @@ export class ObjectFactory {
 
     const material = new THREE.MeshStandardMaterial({ color, roughness, metalness });
     this.materialCache.set(key, material);
+    return material;
+  }
+
+  private createTerrainCutoutMaterial(color: string, roughness: number, metalness: number): THREE.MeshStandardMaterial {
+    const material = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+    material.stencilWrite = true;
+    material.stencilRef = 1;
+    material.stencilFunc = THREE.NotEqualStencilFunc;
+    material.stencilFail = THREE.KeepStencilOp;
+    material.stencilZFail = THREE.KeepStencilOp;
+    material.stencilZPass = THREE.KeepStencilOp;
     return material;
   }
 

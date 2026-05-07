@@ -13,9 +13,9 @@ interface HoleView {
 export class HoleRenderer {
   private readonly views = new Map<string, HoleView>();
   private readonly labelRenderer = new NameLabelRenderer();
-  private readonly apertureGeometry = new THREE.CircleGeometry(0.9, 96);
-  private readonly tunnelGeometry = new THREE.CylinderGeometry(0.98, 0.48, 2.9, 96, 1, true);
-  private readonly throatGeometry = new THREE.CircleGeometry(0.52, 96);
+  private readonly stencilMaskGeometry = new THREE.CircleGeometry(0.92, 96);
+  private readonly tunnelGeometry = new THREE.CylinderGeometry(0.98, 0.3, 4.6, 96, 1, true);
+  private readonly throatGeometry = new THREE.CircleGeometry(0.36, 96);
   private readonly innerRingGeometry = new THREE.TorusGeometry(0.72, 0.026, 8, 72);
   private readonly rimGeometry = new THREE.TorusGeometry(1, 0.075, 12, 64);
   private readonly thinRimGeometry = new THREE.TorusGeometry(1, 0.032, 8, 72);
@@ -56,7 +56,7 @@ export class HoleRenderer {
       this.disposeView(view);
     }
     this.views.clear();
-    this.apertureGeometry.dispose();
+    this.stencilMaskGeometry.dispose();
     this.tunnelGeometry.dispose();
     this.throatGeometry.dispose();
     this.innerRingGeometry.dispose();
@@ -85,7 +85,7 @@ export class HoleRenderer {
     const shadowMaterial = new THREE.MeshBasicMaterial({
       color: '#000000',
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.22,
       side: THREE.DoubleSide
     });
     const tunnelMaterial = new THREE.MeshStandardMaterial({
@@ -99,7 +99,7 @@ export class HoleRenderer {
     const throatMaterial = new THREE.MeshBasicMaterial({
       color: '#020817',
       transparent: true,
-      opacity: 0.72,
+      opacity: 0.82,
       side: THREE.DoubleSide
     });
     const innerRingMaterial = new THREE.MeshBasicMaterial({
@@ -109,24 +109,30 @@ export class HoleRenderer {
       depthWrite: false
     });
 
-    const aperture = new THREE.Mesh(this.apertureGeometry, this.createApertureMaterial(player.rimColor));
-    aperture.rotation.x = -Math.PI / 2;
-    aperture.position.y = -0.048;
-    aperture.renderOrder = 4;
+    const stencilMask = new THREE.Mesh(this.stencilMaskGeometry, this.createStencilMaskMaterial());
+    stencilMask.rotation.x = -Math.PI / 2;
+    stencilMask.position.y = 0.03;
+    stencilMask.renderOrder = -100;
 
     const tunnel = new THREE.Mesh(this.tunnelGeometry, tunnelMaterial);
-    tunnel.position.y = -1.32;
+    tunnel.position.y = -2.12;
     tunnel.renderOrder = 5;
 
     const throat = new THREE.Mesh(this.throatGeometry, throatMaterial);
     throat.rotation.x = -Math.PI / 2;
-    throat.position.y = -2.78;
+    throat.position.y = -4.42;
     throat.renderOrder = 4;
 
     const depthRing = new THREE.Mesh(this.innerRingGeometry, innerRingMaterial);
     depthRing.rotation.x = Math.PI / 2;
     depthRing.position.y = -0.88;
     depthRing.renderOrder = 5;
+
+    const lowerDepthRing = new THREE.Mesh(this.innerRingGeometry, innerRingMaterial.clone());
+    lowerDepthRing.rotation.x = Math.PI / 2;
+    lowerDepthRing.position.y = -2.25;
+    lowerDepthRing.scale.setScalar(0.66);
+    lowerDepthRing.renderOrder = 5;
 
     const rim = new THREE.Mesh(this.rimGeometry, rimMaterial);
     rim.rotation.x = Math.PI / 2;
@@ -168,7 +174,7 @@ export class HoleRenderer {
     shadow.position.y = -0.045;
     shadow.renderOrder = 5;
 
-    group.add(shadow, aperture, tunnel, throat, depthRing, ...rimDetails, rim);
+    group.add(stencilMask, shadow, tunnel, throat, depthRing, lowerDepthRing, ...rimDetails, rim);
     const label = this.labelRenderer.createLabel(player.name, player.rimColor);
     this.scene.add(group, label);
     const view = {
@@ -181,42 +187,18 @@ export class HoleRenderer {
     return view;
   }
 
-  private createApertureMaterial(rimColor: string): THREE.MeshBasicMaterial {
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
-    const context = canvas.getContext('2d');
-    if (!context) {
-      return new THREE.MeshBasicMaterial({ color: '#01030b' });
-    }
-
-    const gradient = context.createRadialGradient(128, 128, 8, 128, 128, 128);
-    gradient.addColorStop(0, '#000004');
-    gradient.addColorStop(0.35, '#01030b');
-    gradient.addColorStop(0.62, '#02101c');
-    gradient.addColorStop(0.82, '#071827');
-    gradient.addColorStop(1, rimColor);
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 256, 256);
-
-    context.globalCompositeOperation = 'screen';
-    context.strokeStyle = rimColor;
-    context.lineWidth = 2;
-    context.globalAlpha = 0.15;
-    for (const radius of [42, 66, 92, 116]) {
-      context.beginPath();
-      context.arc(128, 128, radius, Math.PI * 0.18, Math.PI * 1.65);
-      context.stroke();
-      context.globalAlpha *= 0.72;
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
+  private createStencilMaskMaterial(): THREE.MeshBasicMaterial {
     return new THREE.MeshBasicMaterial({
-      map: texture,
-      side: THREE.FrontSide,
-      depthTest: true,
-      depthWrite: true
+      colorWrite: false,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      stencilWrite: true,
+      stencilRef: 1,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilFail: THREE.ReplaceStencilOp,
+      stencilZFail: THREE.ReplaceStencilOp,
+      stencilZPass: THREE.ReplaceStencilOp
     });
   }
 
