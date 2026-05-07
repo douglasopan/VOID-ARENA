@@ -2,7 +2,8 @@ import type { MapSize, PowerUpType, WorldObjectKind } from '../shared/types';
 
 const CITY_MAP_MUSIC_ASSETS = [
   '/audio/music/citymap1.mp3',
-  '/audio/music/citymap2.mp3'
+  '/audio/music/citymap2.mp3',
+  '/audio/music/concrete_symphony.mp3'
 ];
 
 export const MENU_MUSIC_ASSETS = [
@@ -17,7 +18,21 @@ export const MAP_MUSIC_ASSETS: Record<MapSize, string[]> = {
   huge: CITY_MAP_MUSIC_ASSETS
 };
 
-export const OBJECT_SWALLOW_SFX_ASSETS: Partial<Record<WorldObjectKind, string>> = {};
+export const OBJECT_SWALLOW_SFX_ASSETS: Partial<Record<WorldObjectKind, string | string[]>> = {
+  tree: '/audio/sfx/tree_fall.mp3',
+  planter: '/audio/sfx/tree_fall.mp3',
+  car: [
+    '/audio/sfx/car_crash_fall.mp3',
+    '/audio/sfx/car_horn_away_1.mp3',
+    '/audio/sfx/car_horn_away_2.mp3'
+  ],
+  truck: [
+    '/audio/sfx/car_crash_fall.mp3',
+    '/audio/sfx/car_horn_away_1.mp3',
+    '/audio/sfx/car_horn_away_2.mp3'
+  ],
+  pedestrian: '/audio/sfx/man_fall.mp3'
+};
 
 export const POWERUP_SFX_ASSETS: Partial<Record<PowerUpType, string>> = {};
 

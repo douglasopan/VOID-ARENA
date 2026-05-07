@@ -809,9 +809,21 @@ export class Game {
           if (!enabled) {
             this.clearDeathCamera();
           }
-        }
+        },
+        onHudDisplayToggle: (key, visible) => {
+          this.hud.setDisplaySetting(key, visible);
+          if (key === 'chat') {
+            this.chatUI.setVisible(visible);
+          }
+        },
+        onNextMusic: () => this.audioManager.nextMusicTrack()
       },
-      { chatEnabled: this.chatEnabled, inMatch: true, deathCameraEnabled: this.deathCameraEnabled }
+      {
+        chatEnabled: this.chatEnabled,
+        inMatch: true,
+        deathCameraEnabled: this.deathCameraEnabled,
+        hudDisplaySettings: this.hud.getDisplaySettings()
+      }
     );
   }
 
@@ -842,9 +854,21 @@ export class Game {
           if (!enabled) {
             this.clearDeathCamera();
           }
-        }
+        },
+        onHudDisplayToggle: (key, visible) => {
+          this.hud.setDisplaySetting(key, visible);
+          if (key === 'chat') {
+            this.chatUI.setVisible(visible);
+          }
+        },
+        onNextMusic: () => this.audioManager.nextMusicTrack()
       },
-      { chatEnabled: this.chatEnabled, inMatch, deathCameraEnabled: this.deathCameraEnabled }
+      {
+        chatEnabled: this.chatEnabled,
+        inMatch,
+        deathCameraEnabled: this.deathCameraEnabled,
+        hudDisplaySettings: this.hud.getDisplaySettings()
+      }
     );
   }
 

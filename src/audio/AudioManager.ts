@@ -19,6 +19,8 @@ export class AudioManager {
   private musicGain: GainNode | null = null;
   private musicElement: HTMLAudioElement | null = null;
   private activeMusicKey: string | null = null;
+  private activeMusicAssets: string[] = [];
+  private activeMusicIndex = 0;
   private readonly activeSfx = new Set<HTMLAudioElement>();
   private lastHoverSfxAt = 0;
 
@@ -64,9 +66,12 @@ export class AudioManager {
   }
 
   playObjectSwallow(kind: WorldObjectKind, category: CityObjectCategory, mass: number): void {
-    const asset = OBJECT_SWALLOW_SFX_ASSETS[kind];
+    const asset = this.pickAsset(OBJECT_SWALLOW_SFX_ASSETS[kind]);
     if (asset) {
-      this.playSfxAsset(asset, 0.95, this.randomRate(0.95, 1.06), () => this.playGeneratedSwallow(category, mass));
+      this.playSfxAsset(asset, 0.95, this.randomRate(0.95, 1.06), () => this.playGeneratedSwallow(category, mass), {
+        fadeInSeconds: 0.025,
+        fadeOutSeconds: 0.42
+      });
       return;
     }
 
@@ -146,6 +151,15 @@ export class AudioManager {
     this.startGeneratedMusic();
   }
 
+  nextMusicTrack(): void {
+    if (this.activeMusicAssets.length <= 1 || !this.activeMusicKey) {
+      return;
+    }
+
+    const nextIndex = (this.activeMusicIndex + 1) % this.activeMusicAssets.length;
+    this.playMusicAsset(this.activeMusicKey, this.activeMusicAssets, nextIndex);
+  }
+
   private startTrackGroup(key: string, assets: string[]): void {
     if (this.musicElement && this.activeMusicKey === key && !this.musicElement.paused) {
       return;
@@ -156,8 +170,14 @@ export class AudioManager {
       return;
     }
 
+    this.playMusicAsset(key, assets, Math.floor(Math.random() * assets.length));
+  }
+
+  private playMusicAsset(key: string, assets: string[], index: number): void {
     this.stopMusic();
-    const audio = new Audio(this.pickRandom(assets));
+    this.activeMusicAssets = [...assets];
+    this.activeMusicIndex = Math.max(0, Math.min(assets.length - 1, index));
+    const audio = new Audio(assets[this.activeMusicIndex]);
     audio.loop = true;
     audio.preload = 'auto';
     audio.volume = this.muted ? 0 : this.musicVolume;
@@ -197,6 +217,8 @@ export class AudioManager {
     this.musicElement?.pause();
     this.musicElement = null;
     this.activeMusicKey = null;
+    this.activeMusicAssets = [];
+    this.activeMusicIndex = 0;
   }
 
   private playGeneratedSwallow(category: CityObjectCategory, mass: number): void {
@@ -359,6 +381,14 @@ export class AudioManager {
 
   private pickRandom<T>(items: T[]): T {
     return items[Math.floor(Math.random() * items.length)];
+  }
+
+  private pickAsset(asset: string | string[] | undefined): string | undefined {
+    if (Array.isArray(asset)) {
+      return asset.length ? this.pickRandom(asset) : undefined;
+    }
+
+    return asset;
   }
 
   private clamp01(value: number): number {

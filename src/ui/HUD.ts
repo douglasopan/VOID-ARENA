@@ -44,7 +44,6 @@ export class HUD {
   private playerStats: HTMLDivElement | null = null;
   private leaderboard: HTMLDivElement | null = null;
   private powerUpTray: HTMLDivElement | null = null;
-  private settingsPanel: HTMLDivElement | null = null;
   private callbacks: HudCallbacks | null = null;
   private displaySettings = this.loadDisplaySettings();
 
@@ -57,9 +56,6 @@ export class HUD {
     element.className = 'hud';
     element.innerHTML = `
       <section class="hud-panel hud-stats" data-display="stats">
-        <div class="panel-title">
-          <h3>Status</h3>
-        </div>
         <div class="player-stats"></div>
       </section>
       <section class="leaderboard" data-display="leaderboard">
@@ -74,21 +70,6 @@ export class HUD {
         <button class="zoom-out" type="button" aria-label="Zoom out">-</button>
         <button class="zoom-in" type="button" aria-label="Zoom in">+</button>
       </section>
-      <button class="hud-settings-toggle" type="button" aria-label="HUD settings">HUD</button>
-      <section class="hud-settings hidden" aria-label="HUD display settings">
-        <div class="panel-title">
-          <h3>HUD</h3>
-          <button class="panel-close settings-close" type="button" aria-label="Close HUD settings">X</button>
-        </div>
-        <div class="hud-toggle-list">
-          ${this.toggleMarkup('stats', 'Status')}
-          ${this.toggleMarkup('leaderboard', 'Leaderboard')}
-          ${this.toggleMarkup('chat', 'Chat')}
-          ${this.toggleMarkup('powerups', 'Powerups')}
-          ${this.toggleMarkup('zoom', 'Zoom buttons')}
-          ${this.toggleMarkup('help', 'Controls hint')}
-        </div>
-      </section>
       <div class="help" data-display="help">WASD / Arrows move - Shift boost - ESC menu - Enter chat - Wheel zoom</div>
     `;
     this.root.appendChild(element);
@@ -96,29 +77,14 @@ export class HUD {
     this.playerStats = element.querySelector('.player-stats');
     this.leaderboard = element.querySelector('.leaderboard-list');
     this.powerUpTray = element.querySelector('.powerup-tray');
-    this.settingsPanel = element.querySelector('.hud-settings');
     element.querySelector<HTMLButtonElement>('.zoom-in')?.addEventListener('click', () => this.callbacks?.onZoomIn());
     element.querySelector<HTMLButtonElement>('.zoom-out')?.addEventListener('click', () => this.callbacks?.onZoomOut());
-    element.querySelector<HTMLButtonElement>('.hud-settings-toggle')?.addEventListener('click', () => {
-      this.settingsPanel?.classList.toggle('hidden');
-    });
-    element.querySelector<HTMLButtonElement>('.settings-close')?.addEventListener('click', () => {
-      this.settingsPanel?.classList.add('hidden');
-    });
     element.addEventListener('pointerup', (event) => this.handleHudPointer(event));
     element.querySelectorAll<HTMLButtonElement>('[data-display-toggle]').forEach((button) => {
       button.addEventListener('click', () => {
         const key = button.dataset.displayToggle as HudDisplayKey | undefined;
         if (key) {
           this.setDisplaySetting(key, false);
-        }
-      });
-    });
-    element.querySelectorAll<HTMLButtonElement>('.hud-toggle-row').forEach((button) => {
-      button.addEventListener('click', () => {
-        const key = button.dataset.displayKey as HudDisplayKey | undefined;
-        if (key) {
-          this.setDisplaySetting(key, !this.displaySettings[key]);
         }
       });
     });
@@ -146,6 +112,7 @@ export class HUD {
               <div class="stamina-fill" style="width: ${Math.max(0, Math.min(100, player.stamina))}%"></div>
             </div>
           </div>
+          <div class="hud-row"><span>Score</span><strong>${player.score}</strong></div>
           <div class="hud-row"><span>${timer ? 'Time' : 'Alive'}</span><strong>${timer ? timer.format() : remainingPlayers}</strong></div>
         `;
       }
@@ -174,11 +141,14 @@ export class HUD {
     this.playerStats = null;
     this.leaderboard = null;
     this.powerUpTray = null;
-    this.settingsPanel = null;
   }
 
   getDisplaySetting(key: HudDisplayKey): boolean {
     return this.displaySettings[key];
+  }
+
+  getDisplaySettings(): HudDisplaySettings {
+    return { ...this.displaySettings };
   }
 
   setDisplaySetting(key: HudDisplayKey, visible: boolean): void {
@@ -224,15 +194,6 @@ export class HUD {
     this.applyDisplaySettings();
   }
 
-  private toggleMarkup(key: HudDisplayKey, label: string): string {
-    return `
-      <button class="hud-toggle-row" type="button" data-display-key="${key}" aria-pressed="${this.displaySettings[key]}">
-        <span>${label}</span>
-        <strong>${this.displaySettings[key] ? 'Hide' : 'Show'}</strong>
-      </button>
-    `;
-  }
-
   private applyDisplaySettings(): void {
     if (!this.element) {
       return;
@@ -243,17 +204,6 @@ export class HUD {
       const visible = key ? this.displaySettings[key] : true;
       const isEmptyPowerUpTray = key === 'powerups' && item.classList.contains('empty');
       item.classList.toggle('hidden', !visible || isEmptyPowerUpTray);
-    });
-    this.element.querySelectorAll<HTMLButtonElement>('.hud-toggle-row').forEach((button) => {
-      const key = button.dataset.displayKey as HudDisplayKey | undefined;
-      if (key) {
-        button.classList.toggle('active', this.displaySettings[key]);
-        button.setAttribute('aria-pressed', String(this.displaySettings[key]));
-        const value = button.querySelector('strong');
-        if (value) {
-          value.textContent = this.displaySettings[key] ? 'Hide' : 'Show';
-        }
-      }
     });
   }
 

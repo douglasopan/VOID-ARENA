@@ -467,6 +467,14 @@ label {
   margin-top: 10px;
 }
 
+.hud-options-field {
+  grid-column: 1 / -1;
+}
+
+.pause-hud-toggle-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+}
+
 .hud-toggle-row {
   display: flex;
   align-items: center;
