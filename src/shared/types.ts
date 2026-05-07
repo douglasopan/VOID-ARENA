@@ -3,6 +3,7 @@ import type { BotDifficultyMix } from '../game/BotDifficulty';
 
 export type MapSize = 'small' | 'medium' | 'large' | 'huge';
 export type GraphicsQuality = 'performance' | 'balanced' | 'quality';
+export type LanguageCode = 'en' | 'es' | 'pt' | 'fr' | 'de' | 'ru' | 'ja' | 'zh';
 export type CityObjectCategory =
   | 'building'
   | 'roadside'
@@ -210,6 +211,7 @@ export interface PlayerProfile {
   playerName: string;
   holeRimColor: string;
   holeRimStyle: HoleRimStyle;
+  language: LanguageCode;
   createdAt: string;
   updatedAt: string;
   matchHistory: MatchHistoryEntry[];

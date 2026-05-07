@@ -1,6 +1,7 @@
 import type { AudioManager } from '../audio/AudioManager';
-import { HOLE_RIM_STYLE_OPTIONS, RIM_COLORS } from '../shared/constants';
-import type { HoleRimStyle } from '../shared/types';
+import { HOLE_RIM_STYLE_OPTIONS, LANGUAGE_OPTIONS, RIM_COLORS } from '../shared/constants';
+import { t } from '../i18n/I18n';
+import type { HoleRimStyle, LanguageCode } from '../shared/types';
 import type { HudDisplayKey, HudDisplaySettings } from './HUD';
 
 export interface PauseCallbacks {
@@ -11,6 +12,7 @@ export interface PauseCallbacks {
   onHudDisplayToggle?: (key: HudDisplayKey, visible: boolean) => void;
   onNextMusic?: () => void;
   onHoleAppearanceChange?: (rimColor: string, rimStyle: HoleRimStyle) => void;
+  onLanguageChange?: (language: LanguageCode) => void;
 }
 
 export class PauseMenu {
@@ -30,36 +32,46 @@ export class PauseMenu {
       hudDisplaySettings?: HudDisplaySettings;
       holeRimColor?: string;
       holeRimStyle?: HoleRimStyle;
+      language?: LanguageCode;
     }
   ): void {
     this.hide();
     const element = document.createElement('div');
     element.className = 'pause-screen';
     const hudSettings = options.hudDisplaySettings;
+    const language = options.language ?? 'en';
+    const enabledText = t(language, 'enabled');
+    const disabledText = t(language, 'disabled');
     element.innerHTML = `
       <section class="menu-panel narrow">
-        <h2>${options.inMatch ? 'Paused' : 'Settings'}</h2>
+        <h2>${options.inMatch ? t(language, 'paused') : t(language, 'settings')}</h2>
         <div class="form-grid">
-          <label class="field">Sound Effects
+          <label class="field">${t(language, 'soundEffects')}
             <div class="range-row"><input class="sfx" type="range" min="0" max="100" value="${Math.round(this.audioManager.getSfxVolume() * 100)}" /><span class="sfx-value"></span></div>
           </label>
-          <label class="field">Music
+          <label class="field">${t(language, 'music')}
             <div class="range-row"><input class="music" type="range" min="0" max="100" value="${Math.round(this.audioManager.getMusicVolume() * 100)}" /><span class="music-value"></span></div>
           </label>
           <div class="field">
-            <label>Music track</label>
-            <button class="next-music" type="button">Next Track</button>
+            <label>${t(language, 'musicTrack')}</label>
+            <button class="next-music" type="button">${t(language, 'nextTrack')}</button>
           </div>
           <div class="field">
-            <label>Chat</label>
-            <button class="toggle chat-toggle ${options.chatEnabled ? 'active' : ''}">${options.chatEnabled ? 'Enabled' : 'Disabled'}</button>
+            <label>${t(language, 'chat')}</label>
+            <button class="toggle chat-toggle ${options.chatEnabled ? 'active' : ''}">${options.chatEnabled ? enabledText : disabledText}</button>
           </div>
           <div class="field">
-            <label>Death camera</label>
-            <button class="toggle death-camera-toggle ${options.deathCameraEnabled !== false ? 'active' : ''}">${options.deathCameraEnabled !== false ? 'Enabled' : 'Disabled'}</button>
+            <label>${t(language, 'deathCamera')}</label>
+            <button class="toggle death-camera-toggle ${options.deathCameraEnabled !== false ? 'active' : ''}">${options.deathCameraEnabled !== false ? enabledText : disabledText}</button>
           </div>
+          <label class="field">
+            ${t(language, 'language')}
+            <select class="language-select">
+              ${LANGUAGE_OPTIONS.map((option) => `<option value="${option.value}" ${option.value === language ? 'selected' : ''}>${option.label}</option>`).join('')}
+            </select>
+          </label>
           <div class="field hole-appearance-field">
-            <label>Hole border</label>
+            <label>${t(language, 'holeBorder')}</label>
             <div class="rim-swatch-grid">
               ${RIM_COLORS.map((color) => `
                 <button
@@ -83,7 +95,7 @@ export class PauseMenu {
           </div>
           ${hudSettings ? `
             <div class="field hud-options-field">
-              <label>HUD display</label>
+              <label>${t(language, 'hudDisplay')}</label>
               <div class="hud-toggle-list pause-hud-toggle-list">
                 ${this.hudToggleMarkup('stats', 'Stats', hudSettings.stats)}
                 ${this.hudToggleMarkup('leaderboard', 'Leaderboard', hudSettings.leaderboard)}
@@ -96,8 +108,8 @@ export class PauseMenu {
           ` : ''}
         </div>
         <div class="button-grid">
-          <button class="primary resume">${options.inMatch ? 'Resume' : 'Back'}</button>
-          ${options.inMatch ? '<button class="danger back-menu">Back to Main Menu</button>' : ''}
+          <button class="primary resume">${options.inMatch ? t(language, 'resume') : t(language, 'back')}</button>
+          ${options.inMatch ? `<button class="danger back-menu">${t(language, 'backToMenu')}</button>` : ''}
         </div>
       </section>
     `;
@@ -126,7 +138,7 @@ export class PauseMenu {
     chatToggle?.addEventListener('click', () => {
       chatEnabled = !chatEnabled;
       chatToggle.classList.toggle('active', chatEnabled);
-      chatToggle.textContent = chatEnabled ? 'Enabled' : 'Disabled';
+      chatToggle.textContent = chatEnabled ? enabledText : disabledText;
       callbacks.onChatToggle(chatEnabled);
     });
     let deathCameraEnabled = options.deathCameraEnabled !== false;
@@ -134,8 +146,11 @@ export class PauseMenu {
     deathCameraToggle?.addEventListener('click', () => {
       deathCameraEnabled = !deathCameraEnabled;
       deathCameraToggle.classList.toggle('active', deathCameraEnabled);
-      deathCameraToggle.textContent = deathCameraEnabled ? 'Enabled' : 'Disabled';
+      deathCameraToggle.textContent = deathCameraEnabled ? enabledText : disabledText;
       callbacks.onDeathCameraToggle?.(deathCameraEnabled);
+    });
+    element.querySelector<HTMLSelectElement>('.language-select')?.addEventListener('change', (event) => {
+      callbacks.onLanguageChange?.(event.currentTarget.value as LanguageCode);
     });
     let rimColor = options.holeRimColor ?? RIM_COLORS[0];
     let rimStyle: HoleRimStyle = options.holeRimStyle ?? 'neon';

@@ -1,6 +1,7 @@
 import type { MatchHistoryEntry, PlayerProfile } from '../shared/types';
-import type { HoleRimStyle } from '../shared/types';
+import type { HoleRimStyle, LanguageCode } from '../shared/types';
 import { RIM_COLORS } from '../shared/constants';
+import { detectLanguage } from '../i18n/I18n';
 
 const PROFILE_STORAGE_KEY = 'void-arena-profile-v1';
 const MAX_HISTORY_ENTRIES = 60;
@@ -21,7 +22,8 @@ export class PlayerProfileStore {
       return {
         ...parsed,
         holeRimColor: parsed.holeRimColor || RIM_COLORS[0],
-        holeRimStyle: parsed.holeRimStyle || 'neon'
+        holeRimStyle: parsed.holeRimStyle || 'neon',
+        language: parsed.language || detectLanguage()
       } as PlayerProfile;
     } catch {
       return null;
@@ -46,6 +48,7 @@ export class PlayerProfileStore {
       playerName,
       holeRimColor: RIM_COLORS[0],
       holeRimStyle: 'neon',
+      language: detectLanguage(),
       createdAt: now,
       updatedAt: now,
       matchHistory: []
@@ -84,6 +87,17 @@ export class PlayerProfileStore {
       ...profile,
       holeRimColor,
       holeRimStyle,
+      updatedAt: new Date().toISOString()
+    };
+    this.save(next);
+    return next;
+  }
+
+  updateLanguage(playerName: string, language: LanguageCode): PlayerProfile {
+    const profile = this.getOrCreate(playerName);
+    const next: PlayerProfile = {
+      ...profile,
+      language,
       updatedAt: new Date().toISOString()
     };
     this.save(next);

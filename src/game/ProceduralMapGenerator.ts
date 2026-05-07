@@ -923,9 +923,9 @@ export class ProceduralMapGenerator {
       case 'statue':
         return this.withSize(base, 'Stone Statue', { x: 1.15, y: 2.35, z: 1.15 }, '#9ca3af', 0.78, 14, 38);
       case 'billboard':
-        return this.withSize(base, 'Billboard Ad', { x: 4.7, y: 3.2, z: 0.35 }, '#31394b', 2.35, 38, 60);
+        return this.withSize(base, 'Billboard Ad', { x: 7.6, y: 4.7, z: 0.42 }, '#31394b', 3.82, 48, 82);
       case 'screen':
-        return this.withSize(base, 'Video Ad Screen', { x: 4.4, y: 2.9, z: 0.38 }, '#222a3a', 2.24, 40, 65);
+        return this.withSize(base, 'Video Ad Screen', { x: 7.2, y: 4.5, z: 0.42 }, '#222a3a', 3.64, 52, 88);
       case 'building':
       default: {
         const width = rng.range(4.2, 10.5);
@@ -984,7 +984,7 @@ export class ProceduralMapGenerator {
     size: MapSize
   ): void {
     const settings = MAP_SIZE_SETTINGS[size];
-    const billboardCount = Math.max(5, Math.floor(settings.halfExtent / 18));
+    const billboardCount = Math.max(8, Math.floor(settings.halfExtent / 12));
     const buildingCandidates = objects.filter((object) => object.kind === 'building');
     const vehicleCandidates = objects.filter((object) => object.kind === 'truck' || object.kind === 'car');
 
@@ -1006,6 +1006,36 @@ export class ProceduralMapGenerator {
       objects.push(adObject);
       occupied.push({ x: candidate.x, z: candidate.z, radius: adObject.boundingRadius });
       const surfacePosition = { x: candidate.x, y: adObject.position.y + 0.28, z: candidate.z };
+      const surface =
+        kind === 'screen'
+          ? adManager.createDigitalVideoScreen(surfacePosition, candidate.rotationY)
+          : adManager.createBillboardAd(surfacePosition, candidate.rotationY);
+      adObject.adSurfaceId = surface.id;
+      adSurfaces.push(surface);
+    }
+
+    const edgeOffset = settings.halfExtent * 0.9;
+    const edgePlacements: SpawnCandidate[] = [
+      { x: -edgeOffset, z: -edgeOffset, rotationY: Math.PI * 0.25 },
+      { x: edgeOffset, z: -edgeOffset, rotationY: -Math.PI * 0.25 },
+      { x: -edgeOffset, z: edgeOffset, rotationY: Math.PI * 0.75 },
+      { x: edgeOffset, z: edgeOffset, rotationY: -Math.PI * 0.75 },
+      { x: 0, z: -edgeOffset, rotationY: 0 },
+      { x: 0, z: edgeOffset, rotationY: Math.PI },
+      { x: -edgeOffset, z: 0, rotationY: Math.PI / 2 },
+      { x: edgeOffset, z: 0, rotationY: -Math.PI / 2 }
+    ];
+
+    for (const candidate of edgePlacements.slice(0, Math.max(4, Math.floor(settings.halfExtent / 22)))) {
+      if (this.overlapsOccupied(candidate.x, candidate.z, 3.4, occupied)) {
+        continue;
+      }
+      const kind: WorldObjectKind = rng.chance(0.38) ? 'screen' : 'billboard';
+      const adObject = this.createObjectDefinition(kind, objects.length, candidate, rng);
+      adObject.isAd = true;
+      objects.push(adObject);
+      occupied.push({ x: candidate.x, z: candidate.z, radius: adObject.boundingRadius });
+      const surfacePosition = { x: candidate.x, y: adObject.position.y + 0.4, z: candidate.z };
       const surface =
         kind === 'screen'
           ? adManager.createDigitalVideoScreen(surfacePosition, candidate.rotationY)

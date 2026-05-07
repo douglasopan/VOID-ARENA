@@ -86,6 +86,17 @@ export const HOLE_RIM_STYLE_OPTIONS = [
   { value: 'clean', label: 'Clean' }
 ] as const;
 
+export const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Español' },
+  { value: 'pt', label: 'Português' },
+  { value: 'fr', label: 'Français' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'ru', label: 'Русский' },
+  { value: 'ja', label: '日本語' },
+  { value: 'zh', label: '中文' }
+] as const;
+
 export const POWERUP_SETTINGS = {
   magnet: {
     label: 'Magnet Field',
