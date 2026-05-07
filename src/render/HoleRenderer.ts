@@ -13,6 +13,7 @@ interface HoleView {
 export class HoleRenderer {
   private readonly views = new Map<string, HoleView>();
   private readonly labelRenderer = new NameLabelRenderer();
+  private readonly apertureGeometry = new THREE.CircleGeometry(0.9, 96);
   private readonly tunnelGeometry = new THREE.CylinderGeometry(0.98, 0.48, 2.9, 96, 1, true);
   private readonly throatGeometry = new THREE.CircleGeometry(0.52, 96);
   private readonly innerRingGeometry = new THREE.TorusGeometry(0.72, 0.026, 8, 72);
@@ -55,6 +56,7 @@ export class HoleRenderer {
       this.disposeView(view);
     }
     this.views.clear();
+    this.apertureGeometry.dispose();
     this.tunnelGeometry.dispose();
     this.throatGeometry.dispose();
     this.innerRingGeometry.dispose();
@@ -106,6 +108,11 @@ export class HoleRenderer {
       opacity: player.rimStyle === 'clean' ? 0.16 : 0.34,
       depthWrite: false
     });
+
+    const aperture = new THREE.Mesh(this.apertureGeometry, this.createApertureMaterial(player.rimColor));
+    aperture.rotation.x = -Math.PI / 2;
+    aperture.position.y = -0.048;
+    aperture.renderOrder = 4;
 
     const tunnel = new THREE.Mesh(this.tunnelGeometry, tunnelMaterial);
     tunnel.position.y = -1.32;
@@ -161,7 +168,7 @@ export class HoleRenderer {
     shadow.position.y = -0.045;
     shadow.renderOrder = 5;
 
-    group.add(shadow, tunnel, throat, depthRing, ...rimDetails, rim);
+    group.add(shadow, aperture, tunnel, throat, depthRing, ...rimDetails, rim);
     const label = this.labelRenderer.createLabel(player.name, player.rimColor);
     this.scene.add(group, label);
     const view = {
@@ -172,6 +179,45 @@ export class HoleRenderer {
     };
     this.views.set(player.id, view);
     return view;
+  }
+
+  private createApertureMaterial(rimColor: string): THREE.MeshBasicMaterial {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return new THREE.MeshBasicMaterial({ color: '#01030b' });
+    }
+
+    const gradient = context.createRadialGradient(128, 128, 8, 128, 128, 128);
+    gradient.addColorStop(0, '#000004');
+    gradient.addColorStop(0.35, '#01030b');
+    gradient.addColorStop(0.62, '#02101c');
+    gradient.addColorStop(0.82, '#071827');
+    gradient.addColorStop(1, rimColor);
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 256, 256);
+
+    context.globalCompositeOperation = 'screen';
+    context.strokeStyle = rimColor;
+    context.lineWidth = 2;
+    context.globalAlpha = 0.15;
+    for (const radius of [42, 66, 92, 116]) {
+      context.beginPath();
+      context.arc(128, 128, radius, Math.PI * 0.18, Math.PI * 1.65);
+      context.stroke();
+      context.globalAlpha *= 0.72;
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshBasicMaterial({
+      map: texture,
+      side: THREE.FrontSide,
+      depthTest: true,
+      depthWrite: true
+    });
   }
 
   private disposeView(view: HoleView): void {
