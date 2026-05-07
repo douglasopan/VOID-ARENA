@@ -68,10 +68,16 @@ export class AudioManager {
   playObjectSwallow(kind: WorldObjectKind, category: CityObjectCategory, mass: number): void {
     const asset = this.pickAsset(OBJECT_SWALLOW_SFX_ASSETS[kind]);
     if (asset) {
-      this.playSfxAsset(asset, 0.95, this.randomRate(0.95, 1.06), () => this.playGeneratedSwallow(category, mass), {
-        fadeInSeconds: 0.025,
-        fadeOutSeconds: 0.42
-      });
+      const isPedestrian = kind === 'pedestrian' || category === 'pedestrian';
+      this.playSfxAsset(
+        asset,
+        isPedestrian ? 0.18 : 0.95,
+        this.randomRate(isPedestrian ? 0.92 : 0.95, isPedestrian ? 1.04 : 1.06),
+        () => this.playGeneratedSwallow(category, mass),
+        isPedestrian
+          ? { fadeInSeconds: 0.035, fadeOutSeconds: 2.7, fadeAway: true }
+          : { fadeInSeconds: 0.025, fadeOutSeconds: 0.42 }
+      );
       return;
     }
 
@@ -278,7 +284,7 @@ export class AudioManager {
     gain: number,
     playbackRate: number,
     onError: () => void,
-    fade?: { fadeInSeconds?: number; fadeOutSeconds?: number }
+    fade?: { fadeInSeconds?: number; fadeOutSeconds?: number; fadeAway?: boolean }
   ): void {
     if (this.muted) {
       return;
@@ -306,6 +312,10 @@ export class AudioManager {
       }
       if (fadeOut > 0 && Number.isFinite(audio.duration) && audio.duration > 0) {
         multiplier = Math.min(multiplier, Math.max(0, (audio.duration - audio.currentTime) / fadeOut));
+      }
+      if (fade?.fadeAway && Number.isFinite(audio.duration) && audio.duration > 0) {
+        const progress = Math.max(0, Math.min(1, audio.currentTime / audio.duration));
+        multiplier = Math.min(multiplier, Math.max(0.05, 1 - Math.pow(progress, 0.7) * 0.95));
       }
       audio.volume = targetVolume * Math.max(0, Math.min(1, multiplier));
       if (!audio.paused && !audio.ended) {

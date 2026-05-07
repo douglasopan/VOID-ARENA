@@ -31,7 +31,10 @@ export const OBJECT_SWALLOW_SFX_ASSETS: Partial<Record<WorldObjectKind, string |
     '/audio/sfx/car_horn_away_1.mp3',
     '/audio/sfx/car_horn_away_2.mp3'
   ],
-  pedestrian: '/audio/sfx/man_fall.mp3'
+  pedestrian: [
+    '/audio/sfx/man_fall.mp3',
+    '/audio/sfx/woman_fall.mp3'
+  ]
 };
 
 export const POWERUP_SFX_ASSETS: Partial<Record<PowerUpType, string>> = {};
