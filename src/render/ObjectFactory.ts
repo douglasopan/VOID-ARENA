@@ -79,12 +79,13 @@ export class ObjectFactory {
   private createCrosswalk(surface: SurfaceSegment): THREE.Group {
     const group = new THREE.Group();
     const material = this.createTerrainCutoutMaterial('#e7edf1', 0.58, 0.02);
-    const stripeCount = Math.max(4, Math.floor(surface.length / 0.74));
-    const stripeLength = surface.length / (stripeCount * 2.1);
-    const spacing = surface.length / stripeCount;
+    const stripeCount = Math.max(4, Math.floor(surface.width / 0.72));
+    const stripeWidth = surface.width / (stripeCount * 2.1);
+    const spacing = surface.width / stripeCount;
+    const stripeLength = surface.length * 0.92;
     for (let i = 0; i < stripeCount; i += 1) {
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(surface.width, 0.05, stripeLength), material);
-      stripe.position.z = -surface.length * 0.5 + spacing * (i + 0.5);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(stripeWidth, 0.05, stripeLength), material);
+      stripe.position.x = -surface.width * 0.5 + spacing * (i + 0.5);
       stripe.receiveShadow = true;
       group.add(stripe);
     }
@@ -225,6 +226,7 @@ export class ObjectFactory {
 
   private createBuilding(object: WorldObject): THREE.Group {
     const group = new THREE.Group();
+    const isIndustrial = object.label === 'Factory Block' || object.label === 'Warehouse';
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(object.size.x, object.size.y, object.size.z),
       this.getMaterial(object.color, 0.82, 0.06)
@@ -239,6 +241,8 @@ export class ObjectFactory {
     roof.position.y = object.size.y * 0.5 + 0.12;
     roof.castShadow = true;
     group.add(body, roof);
+    this.addBuildingFacadeLights(group, object, isIndustrial);
+    this.addRooftopDetails(group, object, isIndustrial);
     return group;
   }
 
@@ -271,9 +275,21 @@ export class ObjectFactory {
       this.getMaterial('#f6c453', 0.4, 0.2)
     );
     cap.position.y = object.size.y * 0.5 + 0.12;
+    const arm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.72, 0.055, 0.055),
+      this.getMaterial('#b6c3ce', 0.5, 0.2)
+    );
+    arm.position.set(0.32, object.size.y * 0.5 + 0.08, 0);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 10, 8),
+      this.createCityLightMaterial('#ffe4a3', 0.08, 0.92)
+    );
+    bulb.position.set(0.72, object.size.y * 0.5 + 0.02, 0);
+    this.markCityLight(bulb, 0.08, 0.92);
     pole.castShadow = true;
     cap.castShadow = true;
-    group.add(pole, cap);
+    arm.castShadow = true;
+    group.add(pole, cap, arm, bulb);
     return group;
   }
 
@@ -510,6 +526,18 @@ export class ObjectFactory {
       }
     }
 
+    const headlightMaterial = this.createCityLightMaterial('#fff4bc', 0.12, 1);
+    const tailLightMaterial = this.createCityLightMaterial('#ff4c4c', 0.08, 0.82);
+    for (const x of [-object.size.x * 0.28, object.size.x * 0.28]) {
+      const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.05), headlightMaterial);
+      headlight.position.set(x, object.size.y * 0.06, object.size.z * 0.51);
+      this.markCityLight(headlight, 0.12, 1);
+      const tailLight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.05), tailLightMaterial);
+      tailLight.position.set(x, object.size.y * 0.02, -object.size.z * 0.51);
+      this.markCityLight(tailLight, 0.08, 0.82);
+      group.add(headlight, tailLight);
+    }
+
     body.castShadow = true;
     cabin.castShadow = true;
     group.add(body, cabin);
@@ -533,6 +561,92 @@ export class ObjectFactory {
     right.castShadow = true;
     group.add(panel, left, right);
     return group;
+  }
+
+  private addBuildingFacadeLights(group: THREE.Group, object: WorldObject, isIndustrial: boolean): void {
+    const floorCount = Math.max(2, Math.min(isIndustrial ? 5 : 14, Math.floor(object.size.y / 1.18)));
+    const rowStep = object.size.y / (floorCount + 1);
+    const lightColor = isIndustrial ? '#ffd38a' : object.label === 'Office Building' ? '#dff6ff' : '#ffe6a7';
+    const material = this.createCityLightMaterial(lightColor, 0.025, isIndustrial ? 0.68 : 0.9);
+    const frontGeometry = new THREE.BoxGeometry(object.size.x * 0.68, 0.12, 0.045);
+    const sideGeometry = new THREE.BoxGeometry(0.045, 0.12, object.size.z * 0.58);
+
+    for (let floor = 1; floor <= floorCount; floor += 1) {
+      if (isIndustrial && floor % 2 === 0) {
+        continue;
+      }
+
+      const y = -object.size.y * 0.5 + rowStep * floor;
+      const rowOpacity = floor % 3 === 0 ? 0.68 : 0.94;
+      for (const z of [-object.size.z * 0.506, object.size.z * 0.506]) {
+        const strip = new THREE.Mesh(frontGeometry, material);
+        strip.position.set(0, y, z);
+        this.markCityLight(strip, 0.025, rowOpacity);
+        group.add(strip);
+      }
+
+      if (object.size.z > 4.8 && floor % 2 === 1) {
+        for (const x of [-object.size.x * 0.506, object.size.x * 0.506]) {
+          const strip = new THREE.Mesh(sideGeometry, material);
+          strip.position.set(x, y, 0);
+          this.markCityLight(strip, 0.018, rowOpacity * 0.82);
+          group.add(strip);
+        }
+      }
+    }
+  }
+
+  private addRooftopDetails(group: THREE.Group, object: WorldObject, isIndustrial: boolean): void {
+    const roofY = object.size.y * 0.5 + 0.3;
+    const equipmentMaterial = this.getMaterial('#29323d', 0.72, 0.1);
+    const ventCount = Math.max(1, Math.min(4, Math.floor((object.size.x + object.size.z) / 5.8)));
+    for (let i = 0; i < ventCount; i += 1) {
+      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.34, 0.76), equipmentMaterial);
+      const offset = (i - (ventCount - 1) * 0.5) * Math.min(1.3, object.size.x * 0.18);
+      vent.position.set(offset, roofY, i % 2 === 0 ? object.size.z * 0.18 : -object.size.z * 0.16);
+      vent.castShadow = true;
+      group.add(vent);
+    }
+
+    if (object.size.y > 7 || isIndustrial) {
+      const antenna = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.035, 0.05, Math.min(2.2, object.size.y * 0.18), 6),
+        this.getMaterial('#202733', 0.54, 0.22)
+      );
+      antenna.position.set(object.size.x * 0.28, roofY + 0.8, -object.size.z * 0.24);
+      const beacon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 8, 6),
+        this.createCityLightMaterial('#ff675e', 0.06, 0.72)
+      );
+      beacon.position.set(antenna.position.x, antenna.position.y + 0.88, antenna.position.z);
+      this.markCityLight(beacon, 0.06, 0.72);
+      group.add(antenna, beacon);
+    }
+
+    if (!isIndustrial && object.label !== 'Office Building' && object.size.x > 4.6) {
+      const tank = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.38, 0.46, 0.62, 10),
+        this.getMaterial('#697780', 0.82, 0.04)
+      );
+      tank.position.set(-object.size.x * 0.28, roofY + 0.34, object.size.z * 0.22);
+      tank.castShadow = true;
+      group.add(tank);
+    }
+  }
+
+  private createCityLightMaterial(color: string, dayOpacity: number, nightOpacity: number): THREE.MeshBasicMaterial {
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: dayOpacity,
+      depthWrite: false
+    });
+    material.userData.cityLight = { dayOpacity, nightOpacity };
+    return material;
+  }
+
+  private markCityLight(mesh: THREE.Mesh, dayOpacity: number, nightOpacity: number): void {
+    mesh.userData.cityLight = { dayOpacity, nightOpacity };
   }
 
   private getMaterial(color: string, roughness: number, metalness: number): THREE.MeshStandardMaterial {

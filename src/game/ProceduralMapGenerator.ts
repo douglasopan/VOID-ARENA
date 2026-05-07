@@ -132,7 +132,7 @@ export class ProceduralMapGenerator {
     const trafficRoutes: TrafficRoute[] = [];
     const pedestrianPaths: PedestrianPath[] = [];
     const half = settings.halfExtent;
-    const majorCount = Math.max(3, Math.floor(half / settings.blockSize) + 1);
+    const majorCount = Math.max(4, Math.floor(half / (settings.blockSize * 0.86)) + 2);
 
     const addRoad = (
       id: string,
@@ -167,7 +167,7 @@ export class ProceduralMapGenerator {
     verticalPositions.forEach((x, index) => addRoad(`avenue-v-${index}`, x, 0, half * 1.9, 0));
     horizontalPositions.forEach((z, index) => addRoad(`avenue-h-${index}`, 0, z, half * 1.9, Math.PI / 2));
 
-    const sideStreetCount = Math.floor(majorCount * 0.55);
+    const sideStreetCount = Math.floor(majorCount * 0.86);
     for (let i = 0; i < sideStreetCount; i += 1) {
       const vertical = rng.chance(0.5);
       const base = rng.pick(vertical ? verticalPositions : horizontalPositions);
@@ -193,9 +193,9 @@ export class ProceduralMapGenerator {
 
   private cityAxisPositions(count: number, half: number, blockSize: number, rng: SeededRandom): number[] {
     const positions = new Set<number>([0]);
-    const start = -half * 0.72;
-    const span = half * 1.44;
-    const minGap = blockSize * 0.48;
+    const start = -half * 0.78;
+    const span = half * 1.56;
+    const minGap = blockSize * 0.38;
     for (let i = 0; i < count; i += 1) {
       const base = start + (span * i) / Math.max(1, count - 1);
       const candidate = Math.round((base + rng.range(-blockSize * 0.26, blockSize * 0.26)) * 10) / 10;
@@ -282,7 +282,7 @@ export class ProceduralMapGenerator {
         const horizontalForward = this.forwardVector(horizontal.rotationY);
         const verticalApproach = horizontal.width * 0.5 + 2.05;
         const horizontalApproach = vertical.width * 0.5 + 2.05;
-        const crosswalkDepth = (road: RoadSegment): number => Math.max(3.4, Math.min(4.8, road.width * 0.56));
+        const crosswalkDepth = (road: RoadSegment): number => Math.max(2.8, Math.min(4.2, road.width * 0.5));
         const candidates: SurfaceSegment[] = [];
         for (const sign of [-1, 1]) {
           candidates.push(
@@ -291,7 +291,7 @@ export class ProceduralMapGenerator {
               x: vertical.x + verticalForward.x * verticalApproach * sign,
               z: horizontal.z + verticalForward.z * verticalApproach * sign,
               width: crosswalkDepth(vertical),
-              length: vertical.width + 1.1,
+              length: vertical.width + 0.85,
               rotationY: vertical.rotationY + Math.PI / 2,
               kind: 'crosswalk'
             },
@@ -300,7 +300,7 @@ export class ProceduralMapGenerator {
               x: vertical.x + horizontalForward.x * horizontalApproach * sign,
               z: horizontal.z + horizontalForward.z * horizontalApproach * sign,
               width: crosswalkDepth(horizontal),
-              length: horizontal.width + 1.1,
+              length: horizontal.width + 0.85,
               rotationY: horizontal.rotationY + Math.PI / 2,
               kind: 'crosswalk'
             }
@@ -485,11 +485,11 @@ export class ProceduralMapGenerator {
   private createTrafficRoutesForRoad(road: RoadSegment): TrafficRoute[] {
     const forward = this.forwardVector(road.rotationY);
     const side = this.sideVector(road.rotationY);
-    const laneOffset = road.lanes === 2 ? road.width * 0.21 : 0;
+    const laneOffset = road.width * (road.lanes === 2 ? 0.25 : 0.23);
     const startAlong = -road.length * 0.48;
     const endAlong = road.length * 0.48;
     const routes: TrafficRoute[] = [];
-    for (const lane of road.lanes === 2 ? [-1, 1] : [0]) {
+    for (const lane of [-1, 1]) {
       routes.push({
         id: `${road.id}-traffic-${lane}`,
         loop: true,
@@ -548,24 +548,49 @@ export class ProceduralMapGenerator {
         }
         const verticalSign = rng.pick([-1, 1]);
         const horizontalSign = rng.pick([-1, 1]);
-        const laneOffsetV = vertical.lanes === 2 ? vertical.width * 0.18 : 0;
-        const laneOffsetH = horizontal.lanes === 2 ? horizontal.width * 0.18 : 0;
+        const laneOffsetV = vertical.width * (vertical.lanes === 2 ? 0.25 : 0.23);
+        const laneOffsetH = horizontal.width * (horizontal.lanes === 2 ? 0.25 : 0.23);
+        const turnRadius = Math.max(3.8, Math.min(6.8, (vertical.width + horizontal.width) * 0.34));
+        const vLaneX = center.x + laneOffsetV * horizontalSign;
+        const hLaneZ = center.z + laneOffsetH * verticalSign;
         const vStart = {
-          x: center.x + laneOffsetV * horizontalSign,
+          x: vLaneX,
           z: center.z - verticalSign * Math.min(20, vertical.length * 0.22)
+        };
+        const beforeTurn = {
+          x: vLaneX,
+          z: center.z - verticalSign * turnRadius
+        };
+        const afterTurn = {
+          x: center.x + horizontalSign * turnRadius,
+          z: hLaneZ
         };
         const hEnd = {
           x: center.x + horizontalSign * Math.min(22, horizontal.length * 0.22),
-          z: center.z + laneOffsetH * verticalSign
+          z: hLaneZ
         };
+        const arc = this.quadraticRoutePoints(beforeTurn, { x: vLaneX, z: hLaneZ }, afterTurn, 6);
         routes.push({
           id: `turn-${vertical.id}-${horizontal.id}-${routes.length}`,
           loop: true,
-          points: [vStart, center, hEnd, center]
+          points: [vStart, beforeTurn, ...arc, afterTurn, hEnd]
         });
       }
     }
     return routes;
+  }
+
+  private quadraticRoutePoints(start: RoutePoint, control: RoutePoint, end: RoutePoint, steps: number): RoutePoint[] {
+    const points: RoutePoint[] = [];
+    for (let i = 1; i < steps; i += 1) {
+      const t = i / steps;
+      const inv = 1 - t;
+      points.push({
+        x: inv * inv * start.x + 2 * inv * t * control.x + t * t * end.x,
+        z: inv * inv * start.z + 2 * inv * t * control.z + t * t * end.z
+      });
+    }
+    return points;
   }
 
   private createSpawnPoints(halfExtent: number, rng: SeededRandom): Vec3Data[] {
@@ -681,23 +706,59 @@ export class ProceduralMapGenerator {
     rng: SeededRandom,
     objectBudget: number
   ): void {
-    const target = Math.floor(objectBudget * 0.24);
-    for (let i = 0; i < target; i += 1) {
+    const target = Math.floor(objectBudget * 0.36);
+    let placed = 0;
+    let attempts = 0;
+    while (placed < target && attempts < target * 8) {
+      attempts += 1;
       const road = rng.pick(roads);
-      const candidate = this.roadsideCandidate(road, rng, rng.range(4.2, 9.2), spawnPoints);
-      if (!candidate || this.overlapsOccupied(candidate.x, candidate.z, 4.2, occupied)) {
+      const candidate = rng.chance(0.68)
+        ? this.roadsideCandidate(road, rng, rng.range(2.8, 6.8), spawnPoints)
+        : this.blockInteriorBuildingCandidate(roads, rng, spawnPoints);
+      if (!candidate || this.overlapsOccupied(candidate.x, candidate.z, 2.35, occupied)) {
         continue;
       }
       const object = this.createObjectDefinition('building', objects.length, candidate, rng);
+      const spacingRadius = this.buildingSpacingRadius(object);
+      const roadClearRadius = Math.min(4.2, Math.max(1.6, object.boundingRadius * 0.44));
       if (
-        this.overlapsOccupied(candidate.x, candidate.z, object.boundingRadius, occupied) ||
-        this.pointConflictsRoads(object.position.x, object.position.z, object.boundingRadius, roads)
+        this.overlapsOccupied(candidate.x, candidate.z, spacingRadius, occupied) ||
+        this.pointConflictsRoads(object.position.x, object.position.z, roadClearRadius, roads)
       ) {
         continue;
       }
       objects.push(object);
-      occupied.push({ x: candidate.x, z: candidate.z, radius: object.boundingRadius });
+      occupied.push({ x: candidate.x, z: candidate.z, radius: spacingRadius });
+      placed += 1;
     }
+  }
+
+  private blockInteriorBuildingCandidate(
+    roads: RoadSegment[],
+    rng: SeededRandom,
+    spawnPoints: Vec3Data[]
+  ): SpawnCandidate | null {
+    const halfExtent = Math.max(...roads.map((road) => road.length)) * 0.53;
+    for (let attempt = 0; attempt < 44; attempt += 1) {
+      const x = rng.range(-halfExtent * 0.78, halfExtent * 0.78);
+      const z = rng.range(-halfExtent * 0.78, halfExtent * 0.78);
+      const nearest = this.nearestRoad(x, z, roads);
+      const minRoadDistance = nearest.road.width * 0.5 + nearest.road.sidewalkWidth + 4.6;
+      const maxRoadDistance = Math.max(16, minRoadDistance + 15);
+      if (nearest.distance < minRoadDistance || nearest.distance > maxRoadDistance) {
+        continue;
+      }
+      if (this.isTooCloseToAnySpawn(x, z, spawnPoints.slice(0, 5), MAP_SIZE_SETTINGS.small.spawnClearRadius)) {
+        continue;
+      }
+      return { x, z, rotationY: nearest.road.rotationY };
+    }
+    return null;
+  }
+
+  private buildingSpacingRadius(object: ObjectSpawnDefinition): number {
+    const compactness = object.label === 'Factory Block' || object.label === 'Warehouse' ? 0.64 : 0.54;
+    return Math.max(1.9, object.boundingRadius * compactness);
   }
 
   private addRoadsideObjects(
@@ -708,25 +769,14 @@ export class ProceduralMapGenerator {
     rng: SeededRandom,
     objectBudget: number
   ): void {
-    const target = Math.floor(objectBudget * 0.3);
-    const kinds: WorldObjectKind[] = [
-      'post',
-      'tree',
-      'bench',
-      'hydrant',
-      'trash',
-      'cone',
-      'mailbox',
-      'bike',
-      'planter'
-    ];
+    const target = Math.floor(objectBudget * 0.34);
     for (let i = 0; i < target; i += 1) {
       const road = rng.pick(roads);
-      const kind = rng.pick(kinds);
       const candidate = this.roadsideCandidate(road, rng, rng.range(0.4, 1.3), spawnPoints, true);
       if (!candidate || this.overlapsOccupied(candidate.x, candidate.z, 0.8, occupied)) {
         continue;
       }
+      const kind = this.roadsideKindForZone(candidate.x, candidate.z, rng);
       const object = this.createObjectDefinition(kind, objects.length, candidate, rng);
       if (this.overlapsOccupied(candidate.x, candidate.z, object.boundingRadius, occupied)) {
         continue;
@@ -736,6 +786,17 @@ export class ProceduralMapGenerator {
     }
   }
 
+  private roadsideKindForZone(x: number, z: number, rng: SeededRandom): WorldObjectKind {
+    const zone = this.zoneForPosition(x, z);
+    const pools: Record<ReturnType<ProceduralMapGenerator['zoneForPosition']>, WorldObjectKind[]> = {
+      industrial: ['post', 'cone', 'trash', 'crate', 'hydrant', 'structure', 'bike'],
+      commercial: ['post', 'bench', 'trash', 'bike', 'planter', 'kiosk', 'hydrant'],
+      highResidential: ['post', 'tree', 'bench', 'trash', 'bike', 'planter', 'mailbox'],
+      lowResidential: ['post', 'tree', 'bench', 'mailbox', 'planter', 'hydrant']
+    };
+    return rng.pick(pools[zone]);
+  }
+
   private addTraffic(
     objects: ObjectSpawnDefinition[],
     occupied: OccupiedFootprint[],
@@ -743,7 +804,7 @@ export class ProceduralMapGenerator {
     rng: SeededRandom,
     objectBudget: number
   ): void {
-    const target = Math.floor(objectBudget * 0.09);
+    const target = Math.floor(objectBudget * 0.115);
     for (let i = 0; i < target; i += 1) {
       const route = rng.pick(routes);
       const t = rng.range(0, Math.max(1, route.points.length - 1));
@@ -770,7 +831,7 @@ export class ProceduralMapGenerator {
     rng: SeededRandom,
     objectBudget: number
   ): void {
-    const target = Math.floor(objectBudget * 0.055);
+    const target = Math.floor(objectBudget * 0.075);
     for (let i = 0; i < target; i += 1) {
       const road = rng.pick(roads);
       const candidate = this.parkingCandidate(road, rng, spawnPoints);
@@ -795,7 +856,7 @@ export class ProceduralMapGenerator {
     rng: SeededRandom,
     objectBudget: number
   ): void {
-    const target = Math.floor(objectBudget * 0.13);
+    const target = Math.floor(objectBudget * 0.16);
     for (let i = 0; i < target; i += 1) {
       const path = rng.pick(paths);
       const t = rng.range(0, Math.max(1, path.points.length - 1));

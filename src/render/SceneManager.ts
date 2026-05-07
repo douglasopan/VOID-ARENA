@@ -35,7 +35,11 @@ export class SceneManager {
     phase: number;
     span: number;
   }> = [];
+  private readonly cityLightMeshes: THREE.Mesh[] = [];
+  private ambientLight!: THREE.HemisphereLight;
+  private sunLight!: THREE.DirectionalLight;
   private skyElapsed = 0;
+  private dayNightElapsed = 0;
   private firstCameraFrame = true;
   private language: LanguageCode = 'en';
 
@@ -86,6 +90,7 @@ export class SceneManager {
       object.mesh = mesh;
       this.objectMeshes.set(object.id, mesh);
       this.objectById.set(object.id, object);
+      this.collectCityLightMeshes(mesh);
       this.worldRoot.add(mesh);
     }
 
@@ -119,6 +124,7 @@ export class SceneManager {
     deltaSeconds: number,
     zoom = 1
   ): void {
+    this.updateDayNight(deltaSeconds);
     if (world) {
       this.syncWorld(world, deltaSeconds);
       this.adSurfaceRenderer.update(deltaSeconds, this.objectById);
@@ -134,6 +140,7 @@ export class SceneManager {
   }
 
   updateDeathDive(world: World, playerManager: PlayerManager, attacker: Player, deltaSeconds: number, elapsedSeconds: number): void {
+    this.updateDayNight(deltaSeconds);
     this.syncWorld(world, deltaSeconds);
     this.adSurfaceRenderer.update(deltaSeconds, this.objectById);
     this.holeRenderer.update(playerManager.all());
@@ -152,6 +159,7 @@ export class SceneManager {
   }
 
   updateMenuPreview(world: World, deltaSeconds: number, elapsedSeconds: number): void {
+    this.updateDayNight(deltaSeconds);
     this.syncWorld(world, deltaSeconds);
     this.adSurfaceRenderer.update(deltaSeconds, this.objectById);
     this.holeRenderer.update([]);
@@ -185,6 +193,7 @@ export class SceneManager {
     this.powerUpMeshes.clear();
     this.powerUpLabels.clear();
     this.objectById.clear();
+    this.cityLightMeshes.length = 0;
   }
 
   dispose(): void {
@@ -197,20 +206,63 @@ export class SceneManager {
   }
 
   private setupLights(): void {
-    const ambient = new THREE.HemisphereLight('#d7f6ff', '#1d241e', 1.5);
-    this.scene.add(ambient);
+    this.ambientLight = new THREE.HemisphereLight('#d7f6ff', '#1d241e', 1.5);
+    this.scene.add(this.ambientLight);
 
-    const sun = new THREE.DirectionalLight('#ffffff', 2.1);
-    sun.position.set(34, 58, 28);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 160;
-    sun.shadow.camera.left = -85;
-    sun.shadow.camera.right = 85;
-    sun.shadow.camera.top = 85;
-    sun.shadow.camera.bottom = -85;
-    this.scene.add(sun);
+    this.sunLight = new THREE.DirectionalLight('#ffffff', 2.1);
+    this.sunLight.position.set(34, 58, 28);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.set(1024, 1024);
+    this.sunLight.shadow.camera.near = 1;
+    this.sunLight.shadow.camera.far = 160;
+    this.sunLight.shadow.camera.left = -85;
+    this.sunLight.shadow.camera.right = 85;
+    this.sunLight.shadow.camera.top = 85;
+    this.sunLight.shadow.camera.bottom = -85;
+    this.scene.add(this.sunLight);
+  }
+
+  private updateDayNight(deltaSeconds: number): void {
+    this.dayNightElapsed += deltaSeconds;
+    const cycleSeconds = 150;
+    const phase = (this.dayNightElapsed / cycleSeconds + 0.18) % 1;
+    const angle = phase * Math.PI * 2;
+    const sunHeight = Math.sin(angle);
+    const dayFactor = THREE.MathUtils.smoothstep(sunHeight, -0.14, 0.42);
+    const nightFactor = 1 - dayFactor;
+    const twilightFactor = Math.max(0, 1 - Math.abs(sunHeight) * 3.1) * 0.32;
+
+    const daySky = new THREE.Color('#8bc7df');
+    const twilightSky = new THREE.Color('#624761');
+    const nightSky = new THREE.Color('#07131f');
+    const sky = nightSky.clone().lerp(daySky, dayFactor).lerp(twilightSky, twilightFactor);
+    this.scene.background = sky;
+    if (this.scene.fog) {
+      this.scene.fog.color.copy(sky).lerp(new THREE.Color('#1d292b'), 0.18);
+    }
+
+    this.ambientLight.intensity = THREE.MathUtils.lerp(0.34, 1.55, dayFactor);
+    this.ambientLight.color.lerpColors(new THREE.Color('#89a6c7'), new THREE.Color('#d7f6ff'), dayFactor);
+    this.ambientLight.groundColor.lerpColors(new THREE.Color('#10181f'), new THREE.Color('#1d241e'), dayFactor);
+
+    this.sunLight.intensity = THREE.MathUtils.lerp(0.04, 2.1, dayFactor);
+    this.sunLight.color.lerpColors(new THREE.Color('#7aa1ff'), new THREE.Color('#fff7dc'), dayFactor);
+    this.sunLight.position.set(Math.cos(angle) * 62, Math.max(6, sunHeight * 72), Math.sin(angle + 0.35) * 58);
+
+    const lightFactor = THREE.MathUtils.smoothstep(nightFactor, 0.18, 0.86);
+    for (const mesh of this.cityLightMeshes) {
+      const data = mesh.userData.cityLight ?? this.materialCityLightData(mesh.material);
+      if (!data) {
+        continue;
+      }
+      const opacity = THREE.MathUtils.lerp(data.dayOpacity, data.nightOpacity, lightFactor);
+      mesh.visible = opacity > 0.012;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) {
+        material.transparent = true;
+        material.opacity = opacity;
+      }
+    }
   }
 
   private setupSkyTraffic(): void {
@@ -374,6 +426,31 @@ export class SceneManager {
         label.position.set(powerUp.position.x, powerUp.position.y + 1.58, powerUp.position.z);
       }
     }
+  }
+
+  private collectCityLightMeshes(object: THREE.Object3D): void {
+    object.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) {
+        return;
+      }
+      if (mesh.userData.cityLight || this.materialCityLightData(mesh.material)) {
+        this.cityLightMeshes.push(mesh);
+      }
+    });
+  }
+
+  private materialCityLightData(
+    material: THREE.Material | THREE.Material[]
+  ): { dayOpacity: number; nightOpacity: number } | null {
+    const materials = Array.isArray(material) ? material : [material];
+    for (const candidate of materials) {
+      const data = candidate.userData.cityLight as { dayOpacity?: number; nightOpacity?: number } | undefined;
+      if (data && typeof data.dayOpacity === 'number' && typeof data.nightOpacity === 'number') {
+        return { dayOpacity: data.dayOpacity, nightOpacity: data.nightOpacity };
+      }
+    }
+    return null;
   }
 
   private disposeSprite(sprite: THREE.Sprite): void {

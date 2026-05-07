@@ -66,7 +66,7 @@ export class World {
           const result = this.advanceRoute(route, object.routeT, object.routeSpeed * deltaSeconds);
           object.routeT = result.t;
           object.position.set(result.position.x, object.homePosition.y, result.position.z);
-          object.rotation.y = result.rotationY;
+          object.rotation.y = this.smoothAngle(object.rotation.y, result.rotationY, Math.min(1, deltaSeconds * 5.4));
         }
       }
 
@@ -76,7 +76,7 @@ export class World {
           const result = this.advanceRoute(path, object.routeT, object.routeSpeed * deltaSeconds);
           object.routeT = result.t;
           object.position.set(result.position.x, object.homePosition.y + Math.sin(object.routeT * Math.PI * 2) * 0.03, result.position.z);
-          object.rotation.y = result.rotationY;
+          object.rotation.y = this.smoothAngle(object.rotation.y, result.rotationY, Math.min(1, deltaSeconds * 6.8));
         }
       }
     }
@@ -260,5 +260,10 @@ export class World {
     const z = THREE.MathUtils.lerp(start.z, end.z, localT);
     const rotationY = Math.atan2(end.x - start.x, end.z - start.z);
     return { t: segmentIndex + localT, position: { x, z }, rotationY };
+  }
+
+  private smoothAngle(current: number, target: number, amount: number): number {
+    const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+    return current + delta * amount;
   }
 }
