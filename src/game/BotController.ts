@@ -1,5 +1,10 @@
 import * as THREE from 'three';
-import { canHoleSwallow, canObjectFit } from './BalanceConfig';
+import {
+  BOT_AGGRESSION_RAMP_SECONDS,
+  BOT_ATTACK_GRACE_SECONDS,
+  canHoleSwallow,
+  canObjectFit
+} from './BalanceConfig';
 import {
   BOT_DIFFICULTY_PROFILES,
   type BotDifficulty,
@@ -12,6 +17,7 @@ import type { WorldObject } from './WorldObject';
 
 export class BotController {
   private decisionCooldown = 0;
+  private matchElapsedSeconds = 0;
   private wantsBoost = false;
   private readonly direction = new THREE.Vector3();
   private readonly profile: BotDifficultyProfile;
@@ -26,6 +32,7 @@ export class BotController {
       return;
     }
 
+    this.matchElapsedSeconds += deltaSeconds;
     this.decisionCooldown -= deltaSeconds;
     if (this.decisionCooldown <= 0) {
       this.wantsBoost = this.decide(world, playerManager);
@@ -45,6 +52,7 @@ export class BotController {
       return false;
     }
 
+    const aggressionScale = this.attackAggressionScale();
     const danger = this.findDanger(playerManager);
     if (danger) {
       this.direction.subVectors(this.bot.position, danger.position);
@@ -52,11 +60,11 @@ export class BotController {
       return Math.random() < this.profile.boostWhenFleeing;
     }
 
-    const prey = this.findPrey(playerManager);
+    const prey = aggressionScale > 0 ? this.findPrey(playerManager, aggressionScale) : null;
     if (prey) {
       this.direction.subVectors(prey.position, this.bot.position);
       this.normalizeDirection();
-      return Math.random() < this.profile.boostWhenChasing;
+      return Math.random() < this.profile.boostWhenChasing * aggressionScale;
     }
 
     const edible = this.findEdibleObject(world);
@@ -70,6 +78,18 @@ export class BotController {
       this.pickWanderDirection();
     }
     return false;
+  }
+
+  private attackAggressionScale(): number {
+    if (this.matchElapsedSeconds < BOT_ATTACK_GRACE_SECONDS) {
+      return 0;
+    }
+
+    return THREE.MathUtils.clamp(
+      (this.matchElapsedSeconds - BOT_ATTACK_GRACE_SECONDS) / BOT_AGGRESSION_RAMP_SECONDS,
+      0,
+      1
+    );
   }
 
   private findDanger(playerManager: PlayerManager): Player | null {
@@ -92,7 +112,7 @@ export class BotController {
     return closest;
   }
 
-  private findPrey(playerManager: PlayerManager): Player | null {
+  private findPrey(playerManager: PlayerManager, aggressionScale: number): Player | null {
     let closest: Player | null = null;
     let bestScore = Number.NEGATIVE_INFINITY;
 
@@ -102,8 +122,11 @@ export class BotController {
       }
 
       const distanceSq = this.bot.position.distanceToSquared(other.position);
-      const chaseDistance = Math.max(16, this.bot.radius * 8.5 * this.profile.preyAwareness);
-      const score = other.score * 0.03 + other.radius * 12 * this.profile.preyAggression - Math.sqrt(distanceSq);
+      const chaseDistance = Math.max(10, this.bot.radius * 8.5 * this.profile.preyAwareness * aggressionScale);
+      const score =
+        other.score * 0.03 * aggressionScale +
+        other.radius * 12 * this.profile.preyAggression * aggressionScale -
+        Math.sqrt(distanceSq);
       if (distanceSq < chaseDistance * chaseDistance && score > bestScore) {
         closest = other;
         bestScore = score;

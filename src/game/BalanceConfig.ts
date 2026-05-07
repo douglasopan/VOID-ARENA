@@ -7,6 +7,9 @@ import {
   START_SPEED
 } from '../shared/constants';
 
+export const BOT_ATTACK_GRACE_SECONDS = 12;
+export const BOT_AGGRESSION_RAMP_SECONDS = 10;
+
 export function calculateRadius(totalMass: number): number {
   return START_RADIUS + Math.sqrt(Math.max(0, totalMass)) * GROWTH_PER_MASS;
 }

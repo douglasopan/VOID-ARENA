@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { AudioManager } from '../audio/AudioManager';
-import { detectLanguage, powerUpLabelKey, t, tf } from '../i18n/I18n';
+import { detectLanguage, powerUpLabelKey, t, tf, type TranslationKey } from '../i18n/I18n';
 import { BOT_NAMES, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
 import type { ChatMessage, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary } from '../shared/types';
 import { InputManager } from '../input/InputManager';
@@ -24,6 +24,12 @@ import type { MatchConfig } from './MatchConfig';
 import { createDefaultMatchConfig } from './MatchConfig';
 import { MatchMode } from './MatchMode';
 import { MatchTimer } from './MatchTimer';
+import {
+  CLEAR_NATURAL_DISASTER,
+  NaturalDisasterSystem,
+  type NaturalDisasterSnapshot,
+  type NaturalDisasterType
+} from './NaturalDisasterSystem';
 import { PlayerManager } from './PlayerManager';
 import { ProceduralMapGenerator } from './ProceduralMapGenerator';
 import { RespawnSystem } from './RespawnSystem';
@@ -44,6 +50,7 @@ export class Game {
   private readonly audioManager = new AudioManager();
   private readonly profileStore = new PlayerProfileStore();
   private readonly mapGenerator = new ProceduralMapGenerator();
+  private readonly naturalDisasterSystem = new NaturalDisasterSystem();
   private readonly networkClient = new NetworkClient();
   private readonly playerManager = new PlayerManager();
   private readonly botManager = new BotManager();
@@ -85,6 +92,11 @@ export class Game {
   private killNoticeTimer = 0;
   private localHoleCombo = 0;
   private lastLocalHoleKillAt = 0;
+  private currentDisasterSnapshot: NaturalDisasterSnapshot = CLEAR_NATURAL_DISASTER;
+  private performanceSampleElapsed = 0;
+  private performanceSampleFrames = 0;
+  private performanceSlowFrames = 0;
+  private performanceDegradeCooldown = 0;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -129,7 +141,14 @@ export class Game {
   }
 
   private readonly loop = (timestamp: number): void => {
-    const deltaSeconds = Math.min(0.05, (timestamp - this.lastFrame) / 1000);
+    if (document.hidden) {
+      this.lastFrame = timestamp;
+      this.animationId = window.requestAnimationFrame(this.loop);
+      return;
+    }
+
+    const rawDeltaMs = Math.max(0, timestamp - this.lastFrame);
+    const deltaSeconds = Math.min(0.05, rawDeltaMs / 1000);
     this.lastFrame = timestamp;
 
     if (this.state === 'playing') {
@@ -145,7 +164,8 @@ export class Game {
           this.playerManager,
           deathCameraTarget,
           deltaSeconds,
-          this.deathCameraElapsed
+          this.deathCameraElapsed,
+          this.currentDisasterSnapshot
         );
       } else {
         this.sceneManager.update(
@@ -153,7 +173,8 @@ export class Game {
           this.playerManager,
           this.playerManager.getLocalPlayer(),
           deltaSeconds,
-          this.cameraZoom
+          this.cameraZoom,
+          this.currentDisasterSnapshot
         );
       }
     } else if (this.state === 'menu' && this.menuWorld) {
@@ -166,12 +187,43 @@ export class Game {
         this.playerManager,
         this.playerManager.getLocalPlayer(),
         deltaSeconds,
-        this.cameraZoom
+        this.cameraZoom,
+        this.currentDisasterSnapshot
       );
     }
     this.sceneManager.render();
+    this.updateAdaptivePerformance(rawDeltaMs);
     this.animationId = window.requestAnimationFrame(this.loop);
   };
+
+  private updateAdaptivePerformance(rawDeltaMs: number): void {
+    if (rawDeltaMs <= 0) {
+      return;
+    }
+
+    this.performanceDegradeCooldown = Math.max(0, this.performanceDegradeCooldown - rawDeltaMs / 1000);
+    this.performanceSampleElapsed += rawDeltaMs;
+    this.performanceSampleFrames += 1;
+    if (rawDeltaMs > 33.5) {
+      this.performanceSlowFrames += 1;
+    }
+
+    if (this.performanceSampleElapsed < 2400 || this.performanceSampleFrames < 90) {
+      return;
+    }
+
+    const averageFrameMs = this.performanceSampleElapsed / this.performanceSampleFrames;
+    const slowFrameRatio = this.performanceSlowFrames / this.performanceSampleFrames;
+    if (this.performanceDegradeCooldown <= 0 && (averageFrameMs > 24.5 || slowFrameRatio > 0.18)) {
+      if (this.sceneManager.reduceRenderingCost()) {
+        this.performanceDegradeCooldown = 8;
+      }
+    }
+
+    this.performanceSampleElapsed = 0;
+    this.performanceSampleFrames = 0;
+    this.performanceSlowFrames = 0;
+  }
 
   private showMainMenu(): void {
     this.state = 'menu';
@@ -252,7 +304,7 @@ export class Game {
           durationSeconds: 120,
           botCount: 5,
           botDifficultyMix: 'relaxed',
-          objectDensityMultiplier: 0.82,
+          objectDensityMultiplier: 0.96,
           powerUpCount: 18,
           respawnSafeRadius: 14
         };
@@ -263,7 +315,7 @@ export class Game {
           durationSeconds: 300,
           botCount: 35,
           botDifficultyMix: 'competitive',
-          objectDensityMultiplier: 1.35,
+          objectDensityMultiplier: 1.08,
           powerUpCount: 72,
           respawnSafeRadius: 10
         };
@@ -428,12 +480,14 @@ export class Game {
     this.holeRimStyle = preparedConfig.holeRimStyle;
     this.clearDeathCamera();
     this.sizeAnnouncements.clear();
+    this.naturalDisasterSystem.reset();
+    this.currentDisasterSnapshot = CLEAR_NATURAL_DISASTER;
 
     const mapData = this.mapGenerator.generate({
       size: preparedConfig.mapSize,
       enableAds: preparedConfig.enableAds,
       seed: preparedConfig.mapSeed,
-      objectDensityMultiplier: preparedConfig.objectDensityMultiplier,
+      objectDensityMultiplier: this.effectiveObjectDensityMultiplier(preparedConfig),
       powerUpCount: preparedConfig.powerUpCount
     });
     this.world = new World(mapData);
@@ -506,12 +560,21 @@ export class Game {
 
     this.world.updateDynamicObjects(deltaSeconds);
     this.world.rebuildObjectGrid();
+    this.currentDisasterSnapshot = this.naturalDisasterSystem.update(deltaSeconds, this.world, this.playerManager);
+    if (this.currentDisasterSnapshot.started) {
+      this.addSystemMessage(
+        tf(this.language, 'naturalDisasterStarted', {
+          event: t(this.language, this.naturalDisasterNameKey(this.currentDisasterSnapshot.type))
+        })
+      );
+    }
+    const disasterSpeedMultiplier = this.naturalDisasterSystem.playerSpeedMultiplier(this.currentDisasterSnapshot);
 
     if (localPlayer?.alive && !this.chatUI.isInputFocused()) {
       const movement = this.inputManager.getMovementVector();
       const wantsBoost = movement.lengthSq() > 0.001 && this.inputManager.wantsBoost();
       localPlayer.updateResources(deltaSeconds, wantsBoost);
-      const speed = localPlayer.getSpeed(localPlayer.isBoosting);
+      const speed = localPlayer.getSpeed(localPlayer.isBoosting) * disasterSpeedMultiplier;
       localPlayer.position.x += movement.x * speed * deltaSeconds;
       localPlayer.position.z += movement.z * speed * deltaSeconds;
       this.world.clampToArena(localPlayer.position, localPlayer.radius);
@@ -1135,6 +1198,8 @@ export class Game {
     this.appliedNetworkSwallows.clear();
     this.localHoleCombo = 0;
     this.lastLocalHoleKillAt = 0;
+    this.naturalDisasterSystem.reset();
+    this.currentDisasterSnapshot = CLEAR_NATURAL_DISASTER;
     this.sceneManager?.clearWorld();
     this.audioManager.stopMusic();
     this.inputManager?.setTouchControlsVisible(false);
@@ -1153,6 +1218,51 @@ export class Game {
     this.hostMenu?.hide();
     this.soloPresetMenu?.hide();
     this.pauseMenu?.hide();
+  }
+
+  private naturalDisasterNameKey(type: NaturalDisasterType): TranslationKey {
+    switch (type) {
+      case 'rain':
+        return 'disasterRain';
+      case 'thunderstorm':
+        return 'disasterThunderstorm';
+      case 'earthquake':
+        return 'disasterEarthquake';
+      case 'meteorShower':
+        return 'disasterMeteorShower';
+      case 'clear':
+      default:
+        return 'disasterClear';
+    }
+  }
+
+  private effectiveObjectDensityMultiplier(config: MatchConfig): number {
+    let multiplier = config.objectDensityMultiplier;
+    const mapCap = {
+      small: 1.08,
+      medium: 1,
+      large: 0.96,
+      huge: 0.78
+    } satisfies Record<MatchConfig['mapSize'], number>;
+
+    multiplier = Math.min(multiplier, mapCap[config.mapSize]);
+    if (config.graphicsQuality === 'performance') {
+      multiplier = Math.min(multiplier, 0.72);
+    }
+    if (this.isLikelyLowPowerDevice()) {
+      multiplier = Math.min(multiplier, config.mapSize === 'huge' ? 0.58 : 0.82);
+    }
+
+    return multiplier;
+  }
+
+  private isLikelyLowPowerDevice(): boolean {
+    const navigatorWithMemory = navigator as Navigator & { deviceMemory?: number };
+    return (
+      window.devicePixelRatio >= 2.5 ||
+      (typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4) ||
+      (typeof navigatorWithMemory.deviceMemory === 'number' && navigatorWithMemory.deviceMemory <= 4)
+    );
   }
 
   private adjustCameraZoom(delta: number): void {
@@ -1181,7 +1291,7 @@ export class Game {
       size: 'medium',
       enableAds: true,
       seed: 'void-arena-menu-city',
-      objectDensityMultiplier: 0.86,
+      objectDensityMultiplier: this.isLikelyLowPowerDevice() ? 0.52 : 0.68,
       powerUpCount: 0
     });
     this.menuWorld = new World(mapData);

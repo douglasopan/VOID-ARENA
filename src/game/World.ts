@@ -85,6 +85,11 @@ export class World {
         continue;
       }
 
+      if (object.isPhysicsControlled) {
+        object.updateNaturalPhysics(deltaSeconds, this.halfExtent);
+        continue;
+      }
+
       if (object.routeId) {
         const route = this.routesById.get(object.routeId);
         if (route) {
@@ -111,6 +116,8 @@ export class World {
         }
       }
     }
+
+    this.enforceTrafficSpacing(trafficByRoute);
   }
 
   updateRespawns(now: number, playerManager?: PlayerManager, safeRadius = 8): WorldObject[] {
@@ -252,7 +259,7 @@ export class World {
   private groupTrafficObjectsByRoute(): Map<string, WorldObject[]> {
     const grouped = new Map<string, WorldObject[]>();
     for (const object of this.objects) {
-      if (!object.active || object.swallowAnimation || !object.routeId) {
+      if (!object.active || object.swallowAnimation || object.isPhysicsControlled || !object.routeId) {
         continue;
       }
       const objects = grouped.get(object.routeId) ?? [];
@@ -276,15 +283,58 @@ export class World {
 
     const vehicleAhead = this.distanceToVehicleAhead(object, route, routeObjects);
     if (vehicleAhead) {
-      const gap = Math.max(2.4, object.size.z * 0.5 + vehicleAhead.object.size.z * 0.5 + 1.15);
+      const gap = this.vehicleSpacingGap(object, vehicleAhead.object);
       if (vehicleAhead.distance <= gap) {
         desiredSpeed = 0;
-      } else if (vehicleAhead.distance < gap + 10) {
-        desiredSpeed = Math.min(desiredSpeed, Math.max(0, (vehicleAhead.distance - gap) * 1.35));
+      } else if (vehicleAhead.distance < gap + 18) {
+        desiredSpeed = Math.min(desiredSpeed, Math.max(0, (vehicleAhead.distance - gap) * 0.86));
       }
     }
 
     return desiredSpeed;
+  }
+
+  private enforceTrafficSpacing(trafficByRoute: Map<string, WorldObject[]>): void {
+    for (const [routeId, objects] of trafficByRoute) {
+      const route = this.routesById.get(routeId);
+      const metrics = route ? this.routeMetrics.get(route.id) : undefined;
+      if (!route || !metrics || objects.length < 2 || metrics.totalLength < objects.length * 4.5) {
+        continue;
+      }
+
+      let ordered = objects
+        .filter((object) => object.active && !object.swallowAnimation)
+        .map((object) => ({ object, distance: this.routeDistanceAtT(route, object.routeT) }))
+        .sort((a, b) => a.distance - b.distance);
+
+      for (let pass = 0; pass < 3; pass += 1) {
+        for (let index = 0; index < ordered.length; index += 1) {
+          const follower = ordered[index];
+          const leader = ordered[(index + 1) % ordered.length];
+          if (!route.loop && index === ordered.length - 1) {
+            continue;
+          }
+
+          const gap = this.distanceBetweenRouteDistances(follower.distance, leader.distance, metrics.totalLength, route.loop);
+          const minGap = this.vehicleSpacingGap(follower.object, leader.object);
+          if (gap >= minGap || !Number.isFinite(gap)) {
+            continue;
+          }
+
+          follower.distance = route.loop
+            ? this.normalizeRouteDistance(leader.distance - minGap, metrics.totalLength)
+            : Math.max(0, leader.distance - minGap);
+          this.placeObjectAtRouteDistance(route, follower.object, follower.distance);
+          follower.object.routeVelocity = Math.min(follower.object.routeVelocity, leader.object.routeVelocity);
+        }
+
+        ordered = ordered.sort((a, b) => a.distance - b.distance);
+      }
+    }
+  }
+
+  private vehicleSpacingGap(follower: WorldObject, leader: WorldObject): number {
+    return Math.max(3.15, follower.size.z * 0.5 + leader.size.z * 0.5 + 1.55);
   }
 
   private distanceToNextStoppingSignal(object: WorldObject, route: TrafficRoute): number | null {
@@ -319,7 +369,7 @@ export class World {
         continue;
       }
       const distance = this.distanceAheadOnRoute(route, object.routeT, other.routeT);
-      if (distance > 0.05 && distance < 34 && (!nearest || distance < nearest.distance)) {
+      if (distance > 0.05 && distance < 48 && (!nearest || distance < nearest.distance)) {
         nearest = { object: other, distance };
       }
     }
@@ -361,6 +411,45 @@ export class World {
       return Number.POSITIVE_INFINITY;
     }
     return metrics.totalLength - fromDistance + toDistance;
+  }
+
+  private distanceBetweenRouteDistances(fromDistance: number, toDistance: number, totalLength: number, loop: boolean): number {
+    if (toDistance > fromDistance) {
+      return toDistance - fromDistance;
+    }
+    if (!loop) {
+      return Number.POSITIVE_INFINITY;
+    }
+    return totalLength - fromDistance + toDistance;
+  }
+
+  private placeObjectAtRouteDistance(route: TrafficRoute, object: WorldObject, distance: number): void {
+    object.routeT = this.tAtRouteDistance(route, distance);
+    const result = this.advanceRoute(route, object.routeT, 0);
+    object.position.set(result.position.x, object.homePosition.y, result.position.z);
+    object.rotation.y = result.rotationY;
+  }
+
+  private tAtRouteDistance(route: TrafficRoute, distance: number): number {
+    const metrics = this.routeMetrics.get(route.id) ?? this.createRouteMetrics(route);
+    let remaining = route.loop
+      ? this.normalizeRouteDistance(distance, metrics.totalLength)
+      : THREE.MathUtils.clamp(distance, 0, metrics.totalLength);
+    for (let index = 0; index < metrics.segmentLengths.length; index += 1) {
+      const segmentLength = metrics.segmentLengths[index];
+      if (remaining <= segmentLength) {
+        return index + remaining / Math.max(0.001, segmentLength);
+      }
+      remaining -= segmentLength;
+    }
+    return route.loop ? 0 : Math.max(0, metrics.segmentLengths.length - 0.001);
+  }
+
+  private normalizeRouteDistance(distance: number, totalLength: number): number {
+    if (!Number.isFinite(distance) || totalLength <= 0) {
+      return 0;
+    }
+    return ((distance % totalLength) + totalLength) % totalLength;
   }
 
   private moveTowards(current: number, target: number, maxDelta: number): number {

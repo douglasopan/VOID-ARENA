@@ -17,6 +17,12 @@ export interface ObjectSwallowTarget {
   radius: number;
 }
 
+export interface ObjectPhysicsImpulse {
+  linear?: THREE.Vector3;
+  angular?: THREE.Vector3;
+  topple?: boolean;
+}
+
 export class WorldObject {
   readonly id: string;
   readonly kind: WorldObjectKind;
@@ -46,6 +52,10 @@ export class WorldObject {
   temporaryScale = 1;
   mesh: THREE.Object3D | null = null;
   swallowAnimation: ObjectSwallowAnimation | null = null;
+  physicsAwake = false;
+  physicsToppled = false;
+  readonly physicsVelocity = new THREE.Vector3();
+  readonly physicsAngularVelocity = new THREE.Vector3();
 
   constructor(definition: ObjectSpawnDefinition) {
     this.id = definition.id;
@@ -101,6 +111,92 @@ export class WorldObject {
       swirlDirection: Math.random() < 0.5 ? -1 : 1,
       sinkDepth: 2.4 + this.boundingRadius * 1.45
     };
+  }
+
+  get isPhysicsControlled(): boolean {
+    return this.physicsAwake || this.physicsToppled;
+  }
+
+  applyPhysicsImpulse(impulse: ObjectPhysicsImpulse): void {
+    if (!this.active || this.swallowAnimation) {
+      return;
+    }
+
+    if (impulse.linear) {
+      this.physicsVelocity.add(impulse.linear);
+    }
+    if (impulse.angular) {
+      this.physicsAngularVelocity.add(impulse.angular);
+    }
+    if (impulse.topple) {
+      this.physicsToppled = true;
+    }
+    this.physicsAwake = true;
+  }
+
+  updateNaturalPhysics(deltaSeconds: number, halfExtent: number): void {
+    if (!this.physicsAwake || this.swallowAnimation || !this.active) {
+      return;
+    }
+
+    const stepCount = Math.max(1, Math.ceil(deltaSeconds / 0.018));
+    const step = deltaSeconds / stepCount;
+    const groundY = this.physicsToppled
+      ? Math.max(0.12, this.homePosition.y - Math.min(this.size.y * 0.36, Math.max(0.18, this.size.y * 0.28)))
+      : this.homePosition.y;
+
+    for (let i = 0; i < stepCount; i += 1) {
+      this.physicsVelocity.y -= 9.8 * step;
+      this.position.addScaledVector(this.physicsVelocity, step);
+      this.rotation.x += this.physicsAngularVelocity.x * step;
+      this.rotation.y += this.physicsAngularVelocity.y * step;
+      this.rotation.z += this.physicsAngularVelocity.z * step;
+
+      if (this.position.y <= groundY) {
+        this.position.y = groundY;
+        if (this.physicsVelocity.y < -1.2) {
+          this.physicsVelocity.y *= -0.18;
+          this.physicsAngularVelocity.multiplyScalar(0.82);
+        } else {
+          this.physicsVelocity.y = 0;
+        }
+      }
+    }
+
+    const limit = halfExtent - Math.max(1.2, this.boundingRadius);
+    this.position.x = THREE.MathUtils.clamp(this.position.x, -limit, limit);
+    this.position.z = THREE.MathUtils.clamp(this.position.z, -limit, limit);
+    this.physicsVelocity.x *= Math.max(0, 1 - deltaSeconds * 3.2);
+    this.physicsVelocity.z *= Math.max(0, 1 - deltaSeconds * 3.2);
+    this.physicsAngularVelocity.multiplyScalar(Math.max(0, 1 - deltaSeconds * 2.2));
+
+    if (!this.physicsToppled) {
+      this.rotation.x = THREE.MathUtils.lerp(this.rotation.x, 0, Math.min(1, deltaSeconds * 2.5));
+      this.rotation.z = THREE.MathUtils.lerp(this.rotation.z, 0, Math.min(1, deltaSeconds * 2.5));
+    } else {
+      const maxTilt = this.category === 'building' ? 1.18 : 1.48;
+      this.rotation.x = THREE.MathUtils.clamp(this.rotation.x, -maxTilt, maxTilt);
+      this.rotation.z = THREE.MathUtils.clamp(this.rotation.z, -maxTilt, maxTilt);
+    }
+
+    const motion =
+      Math.abs(this.physicsVelocity.x) +
+      Math.abs(this.physicsVelocity.y) +
+      Math.abs(this.physicsVelocity.z) +
+      Math.abs(this.physicsAngularVelocity.x) +
+      Math.abs(this.physicsAngularVelocity.y) +
+      Math.abs(this.physicsAngularVelocity.z);
+
+    if (motion < 0.035) {
+      this.physicsVelocity.set(0, 0, 0);
+      this.physicsAngularVelocity.set(0, 0, 0);
+      this.physicsAwake = false;
+      if (!this.physicsToppled) {
+        this.position.y = this.homePosition.y;
+        this.rotation.x = 0;
+        this.rotation.z = 0;
+      }
+    }
   }
 
   updateSwallow(deltaSeconds: number, target: ObjectSwallowTarget | null): boolean {
@@ -176,5 +272,9 @@ export class WorldObject {
     this.swallowAnimation = null;
     this.swallowScale = 1;
     this.temporaryScale = 1;
+    this.physicsAwake = false;
+    this.physicsToppled = false;
+    this.physicsVelocity.set(0, 0, 0);
+    this.physicsAngularVelocity.set(0, 0, 0);
   }
 }

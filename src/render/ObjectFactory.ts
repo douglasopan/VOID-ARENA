@@ -246,6 +246,7 @@ export class ObjectFactory {
     roof.castShadow = true;
     group.add(body, roof);
     this.addBuildingFacadeLights(group, object, isIndustrial);
+    this.addBuildingGlow(group, object, isIndustrial);
     this.addRooftopDetails(group, object, isIndustrial);
     return group;
   }
@@ -271,29 +272,43 @@ export class ObjectFactory {
   private createPost(object: WorldObject): THREE.Group {
     const group = new THREE.Group();
     const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.09, 0.12, object.size.y, 8),
+      new THREE.CylinderGeometry(0.075, 0.13, object.size.y, 8),
       this.getMaterial(object.color, 0.55, 0.3)
     );
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.22, 0.18, 8),
+      this.getMaterial('#717d86', 0.62, 0.22)
+    );
+    base.position.y = -object.size.y * 0.5 + 0.09;
     const cap = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 8, 6),
-      this.getMaterial('#f6c453', 0.4, 0.2)
+      new THREE.SphereGeometry(0.12, 8, 6),
+      this.getMaterial('#b6c3ce', 0.48, 0.22)
     );
     cap.position.y = object.size.y * 0.5 + 0.12;
     const arm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.72, 0.055, 0.055),
+      new THREE.BoxGeometry(1.05, 0.06, 0.06),
       this.getMaterial('#b6c3ce', 0.5, 0.2)
     );
-    arm.position.set(0.32, object.size.y * 0.5 + 0.08, 0);
+    arm.position.set(0.47, object.size.y * 0.5 + 0.07, 0);
+    const lampHead = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.13, 0.22),
+      this.getMaterial('#2e3943', 0.52, 0.18)
+    );
+    lampHead.position.set(0.98, object.size.y * 0.5 + 0.02, 0);
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.13, 10, 8),
       this.createCityLightMaterial('#ffe4a3', 0.08, 0.92)
     );
-    bulb.position.set(0.72, object.size.y * 0.5 + 0.02, 0);
+    bulb.position.set(0.98, object.size.y * 0.5 - 0.08, 0);
     this.markCityLight(bulb, 0.08, 0.92);
+    const light = this.createCityPointLight('#ffe4a3', 0, 0.95, 13.5, 2.25, 3);
+    light.position.copy(bulb.position);
     pole.castShadow = true;
+    base.castShadow = true;
     cap.castShadow = true;
     arm.castShadow = true;
-    group.add(pole, cap, arm, bulb);
+    lampHead.castShadow = true;
+    group.add(base, pole, cap, arm, lampHead, bulb, light);
     return group;
   }
 
@@ -551,6 +566,7 @@ export class ObjectFactory {
       this.markCityLight(tailLight, 0.08, 0.82);
       group.add(headlight, tailLight);
     }
+    this.addVehicleHeadlightGlow(group, object.size.y, object.size.z);
 
     body.castShadow = true;
     cabin.castShadow = true;
@@ -688,6 +704,7 @@ export class ObjectFactory {
       this.markCityLight(tailLight, 0.08, 0.82);
       group.add(headlight, tailLight);
     }
+    this.addVehicleHeadlightGlow(group, height, length);
   }
 
   private createAdFrame(object: WorldObject): THREE.Group {
@@ -766,6 +783,21 @@ export class ObjectFactory {
     }
   }
 
+  private addBuildingGlow(group: THREE.Group, object: WorldObject, isIndustrial: boolean): void {
+    if (object.size.y < 5.8 && !isIndustrial) {
+      return;
+    }
+
+    const color = isIndustrial ? '#ffd38a' : object.label === 'Office Building' ? '#dff6ff' : '#ffe6a7';
+    const glow = new THREE.Mesh(
+      new THREE.BoxGeometry(object.size.x * 0.58, 0.08, 0.055),
+      this.createCityLightMaterial(color, 0.015, isIndustrial ? 0.56 : 0.68)
+    );
+    glow.position.set(0, Math.max(0.9, object.size.y * 0.08), -object.size.z * 0.53);
+    this.markCityLight(glow, 0.015, isIndustrial ? 0.56 : 0.68);
+    group.add(glow);
+  }
+
   private addRooftopDetails(group: THREE.Group, object: WorldObject, isIndustrial: boolean): void {
     const roofY = object.size.y * 0.5 + 0.3;
     const equipmentMaterial = this.getMaterial('#29323d', 0.72, 0.1);
@@ -817,6 +849,30 @@ export class ObjectFactory {
 
   private markCityLight(mesh: THREE.Mesh, dayOpacity: number, nightOpacity: number): void {
     mesh.userData.cityLight = { dayOpacity, nightOpacity };
+  }
+
+  private addVehicleHeadlightGlow(group: THREE.Group, height: number, length: number): void {
+    const glowMaterial = this.createCityLightMaterial('#fff4bc', 0.04, 0.62);
+    for (const x of [-0.32, 0.32]) {
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.05), glowMaterial);
+      glow.position.set(x, height * 0.08, length * 0.6);
+      this.markCityLight(glow, 0.04, 0.62);
+      group.add(glow);
+    }
+  }
+
+  private createCityPointLight(
+    color: string,
+    dayIntensity: number,
+    nightIntensity: number,
+    distance: number,
+    decay: number,
+    priority: number
+  ): THREE.PointLight {
+    const light = new THREE.PointLight(color, 0, distance, decay);
+    light.castShadow = false;
+    light.userData.cityPointLight = { dayIntensity, nightIntensity, priority };
+    return light;
   }
 
   private getMaterial(color: string, roughness: number, metalness: number): THREE.MeshStandardMaterial {

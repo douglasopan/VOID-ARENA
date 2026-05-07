@@ -7,22 +7,38 @@ import type { GraphicsQuality } from '../shared/types';
 import type { LanguageCode } from '../shared/types';
 import { powerUpLabelKey, t } from '../i18n/I18n';
 import { trafficSignalState, type TrafficSignalState } from '../game/TrafficSignalSystem';
+import { CLEAR_NATURAL_DISASTER, type NaturalDisasterSnapshot } from '../game/NaturalDisasterSystem';
 import { AdSurfaceRenderer } from './AdSurfaceRenderer';
 import { CameraController } from './CameraController';
 import { HoleRenderer } from './HoleRenderer';
 import { NameLabelRenderer } from './NameLabelRenderer';
 import { ObjectFactory } from './ObjectFactory';
 
+function isLikelyLowPowerDevice(): boolean {
+  const navigatorWithMemory = navigator as Navigator & { deviceMemory?: number };
+  return (
+    window.devicePixelRatio >= 2.5 ||
+    (typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4) ||
+    (typeof navigatorWithMemory.deviceMemory === 'number' && navigatorWithMemory.deviceMemory <= 4)
+  );
+}
+
 export class SceneManager {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(58, 1, 0.1, 1200);
-  readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance', stencil: true });
+  readonly renderer = new THREE.WebGLRenderer({
+    antialias: !isLikelyLowPowerDevice(),
+    alpha: false,
+    powerPreference: 'high-performance',
+    stencil: true
+  });
   private readonly objectFactory = new ObjectFactory();
   private readonly cameraController = new CameraController();
   private readonly holeRenderer = new HoleRenderer(this.scene);
   private readonly labelRenderer = new NameLabelRenderer();
   private readonly adSurfaceRenderer = new AdSurfaceRenderer(this.scene);
   private readonly worldRoot = new THREE.Group();
+  private readonly weatherRoot = new THREE.Group();
   private readonly objectMeshes = new Map<string, THREE.Object3D>();
   private readonly powerUpMeshes = new Map<string, THREE.Object3D>();
   private readonly powerUpLabels = new Map<string, THREE.Sprite>();
@@ -37,6 +53,13 @@ export class SceneManager {
     span: number;
   }> = [];
   private readonly cityLightMeshes: THREE.Mesh[] = [];
+  private readonly cityPointLights: Array<{
+    light: THREE.PointLight;
+    dayIntensity: number;
+    nightIntensity: number;
+    priority: number;
+    active: boolean;
+  }> = [];
   private readonly trafficSignalLamps: Array<{
     mesh: THREE.Mesh;
     signalId: string;
@@ -46,18 +69,29 @@ export class SceneManager {
   private sunLight!: THREE.DirectionalLight;
   private skyElapsed = 0;
   private dayNightElapsed = 0;
+  private weatherElapsed = 0;
+  private lightSelectionAccumulator = 999;
+  private adaptivePixelRatioScale = 1;
   private firstCameraFrame = true;
   private language: LanguageCode = 'en';
+  private currentGraphicsQuality: GraphicsQuality = 'balanced';
+  private currentDisaster: NaturalDisasterSnapshot = CLEAR_NATURAL_DISASTER;
+  private rainPoints!: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
+  private rainPositions!: Float32Array;
+  private rainVelocities!: Float32Array;
+  private lightningLight!: THREE.DirectionalLight;
+  private readonly tempLightPosition = new THREE.Vector3();
 
   constructor(private readonly container: HTMLElement) {
     this.scene.background = new THREE.Color('#0b2330');
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.applyRendererPixelRatio();
     this.renderer.autoClearStencil = true;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
-    this.scene.add(this.worldRoot, this.skyRoot);
+    this.scene.add(this.worldRoot, this.skyRoot, this.weatherRoot);
     this.setupLights();
+    this.setupWeather();
     this.setupSkyTraffic();
     this.setGraphicsQuality('balanced');
     this.resize();
@@ -99,6 +133,7 @@ export class SceneManager {
       this.collectCityLightMeshes(mesh);
       this.worldRoot.add(mesh);
     }
+    this.cityPointLights.sort((a, b) => b.priority - a.priority);
 
     for (const powerUp of world.powerUps) {
       const mesh = this.objectFactory.createPowerUpMesh(powerUp);
@@ -116,11 +151,32 @@ export class SceneManager {
   }
 
   setGraphicsQuality(quality: GraphicsQuality): void {
-    const pixelRatio = quality === 'performance' ? 1 : quality === 'balanced' ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2);
-    this.renderer.setPixelRatio(pixelRatio);
-    this.renderer.shadowMap.enabled = quality !== 'performance';
+    this.currentGraphicsQuality = quality;
+    this.adaptivePixelRatioScale = 1;
+    this.applyRendererPixelRatio();
+    this.renderer.shadowMap.enabled = quality === 'quality';
     this.renderer.shadowMap.type = quality === 'quality' ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+    this.lightSelectionAccumulator = 999;
     this.resize();
+  }
+
+  reduceRenderingCost(): boolean {
+    if (this.currentGraphicsQuality !== 'performance') {
+      this.currentGraphicsQuality = 'performance';
+      this.adaptivePixelRatioScale = 0.92;
+      this.renderer.shadowMap.enabled = false;
+      this.applyRendererPixelRatio();
+      this.lightSelectionAccumulator = 999;
+      return true;
+    }
+
+    if (this.adaptivePixelRatioScale > 0.64) {
+      this.adaptivePixelRatioScale = Math.max(0.64, this.adaptivePixelRatioScale - 0.12);
+      this.applyRendererPixelRatio();
+      return true;
+    }
+
+    return false;
   }
 
   update(
@@ -128,8 +184,10 @@ export class SceneManager {
     playerManager: PlayerManager | null,
     localPlayer: Player | undefined,
     deltaSeconds: number,
-    zoom = 1
+    zoom = 1,
+    disaster: NaturalDisasterSnapshot = CLEAR_NATURAL_DISASTER
   ): void {
+    this.currentDisaster = disaster;
     this.updateDayNight(deltaSeconds);
     if (world) {
       this.syncWorld(world, deltaSeconds);
@@ -142,11 +200,21 @@ export class SceneManager {
     }
 
     this.cameraController.update(this.camera, localPlayer, deltaSeconds, this.firstCameraFrame, zoom);
+    this.applyDisasterCameraShake(deltaSeconds);
+    this.updateWeather(deltaSeconds);
     this.updateSkyTraffic(deltaSeconds, world, zoom);
     this.firstCameraFrame = false;
   }
 
-  updateDeathDive(world: World, playerManager: PlayerManager, attacker: Player, deltaSeconds: number, elapsedSeconds: number): void {
+  updateDeathDive(
+    world: World,
+    playerManager: PlayerManager,
+    attacker: Player,
+    deltaSeconds: number,
+    elapsedSeconds: number,
+    disaster: NaturalDisasterSnapshot = CLEAR_NATURAL_DISASTER
+  ): void {
+    this.currentDisaster = disaster;
     this.updateDayNight(deltaSeconds);
     this.syncWorld(world, deltaSeconds);
     this.updateTrafficSignalLamps(world);
@@ -163,10 +231,13 @@ export class SceneManager {
       1 - Math.pow(0.0006, deltaSeconds)
     );
     this.camera.lookAt(attacker.position.x, -3.6 - attacker.radius * 0.42, attacker.position.z);
+    this.applyDisasterCameraShake(deltaSeconds);
+    this.updateWeather(deltaSeconds);
     this.updateSkyTraffic(deltaSeconds, world, 1.2);
   }
 
   updateMenuPreview(world: World, deltaSeconds: number, elapsedSeconds: number): void {
+    this.currentDisaster = CLEAR_NATURAL_DISASTER;
     this.updateDayNight(deltaSeconds);
     this.syncWorld(world, deltaSeconds);
     this.updateTrafficSignalLamps(world);
@@ -180,6 +251,7 @@ export class SceneManager {
     this.renderer.domElement.dataset.menuPreview = `${elapsedSeconds.toFixed(2)}:${z.toFixed(2)}`;
     this.camera.position.set(x, 15.5, z - 20);
     this.camera.lookAt(x * 0.42, 1.4, z + 28);
+    this.updateWeather(deltaSeconds);
     this.updateSkyTraffic(deltaSeconds, world, 1.12);
   }
 
@@ -203,6 +275,7 @@ export class SceneManager {
     this.powerUpLabels.clear();
     this.objectById.clear();
     this.cityLightMeshes.length = 0;
+    this.cityPointLights.length = 0;
     this.trafficSignalLamps.length = 0;
   }
 
@@ -211,6 +284,7 @@ export class SceneManager {
     this.clearWorld();
     this.holeRenderer.dispose();
     this.disposeSkyTraffic();
+    this.disposeWeather();
     this.objectFactory.dispose();
     this.renderer.dispose();
   }
@@ -230,10 +304,37 @@ export class SceneManager {
     this.sunLight.shadow.camera.top = 85;
     this.sunLight.shadow.camera.bottom = -85;
     this.scene.add(this.sunLight);
+
+    this.lightningLight = new THREE.DirectionalLight('#dbeafe', 0);
+    this.lightningLight.position.set(-18, 42, 24);
+    this.scene.add(this.lightningLight);
+  }
+
+  private setupWeather(): void {
+    const count = 520;
+    this.rainPositions = new Float32Array(count * 3);
+    this.rainVelocities = new Float32Array(count);
+    for (let i = 0; i < count; i += 1) {
+      this.resetRainDrop(i, 28);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(this.rainPositions, 3));
+    const material = new THREE.PointsMaterial({
+      color: '#bde7ff',
+      size: 0.095,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
+    this.rainPoints = new THREE.Points(geometry, material);
+    this.rainPoints.frustumCulled = false;
+    this.rainPoints.visible = false;
+    this.weatherRoot.add(this.rainPoints);
   }
 
   private updateDayNight(deltaSeconds: number): void {
     this.dayNightElapsed += deltaSeconds;
+    this.lightSelectionAccumulator += deltaSeconds;
     const cycleSeconds = 150;
     const phase = (this.dayNightElapsed / cycleSeconds + 0.18) % 1;
     const angle = phase * Math.PI * 2;
@@ -244,20 +345,29 @@ export class SceneManager {
 
     const daySky = new THREE.Color('#8bc7df');
     const twilightSky = new THREE.Color('#624761');
-    const nightSky = new THREE.Color('#07131f');
+    const nightSky = new THREE.Color('#0b1b2a');
     const sky = nightSky.clone().lerp(daySky, dayFactor).lerp(twilightSky, twilightFactor);
+    const stormDarkening = this.currentDisaster.type === 'thunderstorm'
+      ? this.currentDisaster.intensity * 0.42
+      : this.currentDisaster.type === 'rain'
+        ? this.currentDisaster.intensity * 0.18
+        : 0;
+    if (stormDarkening > 0) {
+      sky.lerp(new THREE.Color('#182432'), stormDarkening);
+    }
     this.scene.background = sky;
     if (this.scene.fog) {
-      this.scene.fog.color.copy(sky).lerp(new THREE.Color('#1d292b'), 0.18);
+      this.scene.fog.color.copy(sky).lerp(new THREE.Color('#1d292b'), 0.18 + stormDarkening * 0.24);
     }
 
-    this.ambientLight.intensity = THREE.MathUtils.lerp(0.34, 1.55, dayFactor);
+    this.ambientLight.intensity = THREE.MathUtils.lerp(0.58, 1.55, dayFactor);
     this.ambientLight.color.lerpColors(new THREE.Color('#89a6c7'), new THREE.Color('#d7f6ff'), dayFactor);
-    this.ambientLight.groundColor.lerpColors(new THREE.Color('#10181f'), new THREE.Color('#1d241e'), dayFactor);
+    this.ambientLight.groundColor.lerpColors(new THREE.Color('#15202a'), new THREE.Color('#1d241e'), dayFactor);
 
-    this.sunLight.intensity = THREE.MathUtils.lerp(0.04, 2.1, dayFactor);
+    this.sunLight.intensity = THREE.MathUtils.lerp(0.12, 2.1, dayFactor) * (1 - stormDarkening * 0.52);
     this.sunLight.color.lerpColors(new THREE.Color('#7aa1ff'), new THREE.Color('#fff7dc'), dayFactor);
     this.sunLight.position.set(Math.cos(angle) * 62, Math.max(6, sunHeight * 72), Math.sin(angle + 0.35) * 58);
+    this.lightningLight.intensity = this.currentDisaster.lightningFlash * 1.9;
 
     const lightFactor = THREE.MathUtils.smoothstep(nightFactor, 0.18, 0.86);
     for (const mesh of this.cityLightMeshes) {
@@ -273,6 +383,97 @@ export class SceneManager {
         material.opacity = opacity;
       }
     }
+
+    if (this.lightSelectionAccumulator >= 0.24) {
+      this.updateCityPointLightSelection();
+      this.lightSelectionAccumulator = 0;
+    }
+    for (const entry of this.cityPointLights) {
+      const intensity = THREE.MathUtils.lerp(entry.dayIntensity, entry.nightIntensity, lightFactor);
+      const active = entry.active && intensity > 0.01;
+      entry.light.visible = active;
+      entry.light.intensity = active ? intensity : 0;
+    }
+  }
+
+  private updateWeather(deltaSeconds: number): void {
+    this.weatherElapsed += deltaSeconds;
+    const precipitation = this.currentDisaster.precipitation;
+    const isMeteor = this.currentDisaster.type === 'meteorShower';
+    if (precipitation <= 0.02 && !isMeteor) {
+      this.rainPoints.visible = false;
+      this.rainPoints.material.opacity = 0;
+      return;
+    }
+
+    const maxDrops = this.currentGraphicsQuality === 'performance'
+      ? 72
+      : this.currentGraphicsQuality === 'quality'
+        ? 320
+        : 150;
+    const activeDrops = Math.max(0, Math.min(maxDrops, Math.floor(maxDrops * Math.max(precipitation, isMeteor ? 0.42 : 0))));
+    const positions = this.rainPositions;
+    const range = isMeteor ? 86 : 58;
+    const verticalSpeed = isMeteor ? 34 : 21 + precipitation * 15;
+    const wind = this.currentDisaster.wind * (isMeteor ? 12 : 5);
+    const cameraX = this.camera.position.x;
+    const cameraZ = this.camera.position.z;
+
+    this.rainPoints.visible = activeDrops > 0;
+    this.rainPoints.material.opacity = isMeteor
+      ? 0.72 * this.currentDisaster.intensity
+      : THREE.MathUtils.clamp(0.18 + precipitation * 0.5, 0, 0.72);
+    this.rainPoints.material.color.set(isMeteor ? '#ffb86b' : '#bde7ff');
+    this.rainPoints.material.size = isMeteor ? 0.16 : 0.095;
+    this.rainPoints.position.set(cameraX, 0, cameraZ);
+
+    for (let i = 0; i < activeDrops; i += 1) {
+      const offset = i * 3;
+      positions[offset] += wind * deltaSeconds;
+      positions[offset + 1] -= verticalSpeed * this.rainVelocities[i] * deltaSeconds;
+      positions[offset + 2] += (isMeteor ? -verticalSpeed * 0.32 : 0) * deltaSeconds;
+      if (
+        positions[offset + 1] < 0.4 ||
+        positions[offset] < -range ||
+        positions[offset] > range ||
+        positions[offset + 2] < -range ||
+        positions[offset + 2] > range
+      ) {
+        this.resetRainDrop(i, range);
+        if (isMeteor) {
+          positions[offset] -= range * 0.32;
+          positions[offset + 2] += range * 0.45;
+        }
+      }
+    }
+
+    for (let i = activeDrops; i < this.rainVelocities.length; i += 1) {
+      const offset = i * 3;
+      positions[offset + 1] = -200;
+    }
+
+    this.rainPoints.geometry.attributes.position.needsUpdate = true;
+  }
+
+  private resetRainDrop(index: number, range: number): void {
+    const offset = index * 3;
+    this.rainPositions[offset] = THREE.MathUtils.randFloatSpread(range * 2);
+    this.rainPositions[offset + 1] = THREE.MathUtils.randFloat(6, 34);
+    this.rainPositions[offset + 2] = THREE.MathUtils.randFloatSpread(range * 2);
+    this.rainVelocities[index] = THREE.MathUtils.randFloat(0.72, 1.35);
+  }
+
+  private applyDisasterCameraShake(deltaSeconds: number): void {
+    const shake = this.currentDisaster.cameraShake;
+    if (shake <= 0.01) {
+      return;
+    }
+    const qualityScale = this.currentGraphicsQuality === 'performance' ? 0.6 : 1;
+    const amount = shake * qualityScale * 0.46;
+    const t = this.weatherElapsed * 38;
+    this.camera.position.x += Math.sin(t * 1.11) * amount * deltaSeconds * 9;
+    this.camera.position.y += Math.sin(t * 1.47 + 1.4) * amount * deltaSeconds * 4;
+    this.camera.position.z += Math.cos(t * 0.92) * amount * deltaSeconds * 9;
   }
 
   private setupSkyTraffic(): void {
@@ -402,6 +603,12 @@ export class SceneManager {
     this.skyTraffic.length = 0;
   }
 
+  private disposeWeather(): void {
+    this.rainPoints.geometry.dispose();
+    this.rainPoints.material.dispose();
+    this.weatherRoot.clear();
+  }
+
   private readonly resize = (): void => {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
@@ -440,6 +647,24 @@ export class SceneManager {
 
   private collectCityLightMeshes(object: THREE.Object3D): void {
     object.traverse((child) => {
+      const pointLight = child as THREE.PointLight;
+      const pointLightData = child.userData.cityPointLight as {
+        dayIntensity?: number;
+        nightIntensity?: number;
+        priority?: number;
+      } | undefined;
+      if (pointLight.isPointLight && pointLightData) {
+        pointLight.visible = false;
+        this.cityPointLights.push({
+          light: pointLight,
+          dayIntensity: pointLightData.dayIntensity ?? 0,
+          nightIntensity: pointLightData.nightIntensity ?? 0.4,
+          priority: pointLightData.priority ?? 0,
+          active: false
+        });
+        return;
+      }
+
       const mesh = child as THREE.Mesh;
       if (!mesh.isMesh) {
         return;
@@ -452,6 +677,57 @@ export class SceneManager {
         this.trafficSignalLamps.push({ mesh, signalId: lamp.signalId, state: lamp.state });
       }
     });
+  }
+
+  private cityPointLightLimit(): number {
+    if (this.currentGraphicsQuality === 'performance') {
+      return 0;
+    }
+    if (this.currentGraphicsQuality === 'quality') {
+      return 16;
+    }
+    return 6;
+  }
+
+  private applyRendererPixelRatio(): void {
+    const qualityBase = this.currentGraphicsQuality === 'performance'
+      ? 0.95
+      : this.currentGraphicsQuality === 'quality'
+        ? 1.45
+        : 1.08;
+    const lowPowerCap = isLikelyLowPowerDevice() ? 1 : 1.45;
+    const pixelRatio = Math.min(window.devicePixelRatio, lowPowerCap, qualityBase) * this.adaptivePixelRatioScale;
+    this.renderer.setPixelRatio(Math.max(0.58, pixelRatio));
+  }
+
+  private updateCityPointLightSelection(): void {
+    const limit = this.cityPointLightLimit();
+    if (limit <= 0 || !this.cityPointLights.length) {
+      for (const entry of this.cityPointLights) {
+        entry.active = false;
+      }
+      return;
+    }
+
+    const cameraX = this.camera.position.x;
+    const cameraZ = this.camera.position.z;
+    const scored = this.cityPointLights.map((entry) => {
+      entry.light.getWorldPosition(this.tempLightPosition);
+      const dx = this.tempLightPosition.x - cameraX;
+      const dz = this.tempLightPosition.z - cameraZ;
+      const distanceSq = dx * dx + dz * dz;
+      return {
+        entry,
+        score: entry.priority * 9000 - distanceSq
+      };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    for (const entry of this.cityPointLights) {
+      entry.active = false;
+    }
+    for (let index = 0; index < Math.min(limit, scored.length); index += 1) {
+      scored[index].entry.active = true;
+    }
   }
 
   private updateTrafficSignalLamps(world: World): void {

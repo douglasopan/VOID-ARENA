@@ -96,6 +96,7 @@ export interface SurfaceSegment {
   length: number;
   rotationY: number;
   kind: 'sidewalk' | 'lane-marking' | 'crosswalk' | 'plaza';
+  roadSideSign?: -1 | 1;
 }
 
 export interface RoutePoint {

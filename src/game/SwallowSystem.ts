@@ -2,7 +2,7 @@ import type { MatchConfig } from './MatchConfig';
 import { MatchMode } from './MatchMode';
 import type { Player } from './Player';
 import type { PlayerManager } from './PlayerManager';
-import { canHoleSwallow, canObjectFit } from './BalanceConfig';
+import { BOT_ATTACK_GRACE_SECONDS, canHoleSwallow, canObjectFit } from './BalanceConfig';
 import type { World } from './World';
 import type { WorldObject } from './WorldObject';
 
@@ -12,6 +12,8 @@ export type SwallowEvent =
   | { type: 'holeSwallowCompleted'; attacker: Player | null; victim: Player };
 
 export class SwallowSystem {
+  private matchStartedAt: number | null = null;
+
   constructor(
     private readonly world: World,
     private readonly playerManager: PlayerManager,
@@ -19,6 +21,7 @@ export class SwallowSystem {
   ) {}
 
   update(deltaSeconds: number, now: number): SwallowEvent[] {
+    this.matchStartedAt ??= now;
     const events: SwallowEvent[] = [];
     this.world.rebuildObjectGrid();
     this.tryStartObjectSwallows();
@@ -86,6 +89,7 @@ export class SwallowSystem {
           attacker.id === victim.id ||
           !victim.alive ||
           victim.hasPowerUp('shield') ||
+          this.isBotAttackGraceActive(attacker, now) ||
           !canHoleSwallow(attacker.radius, victim.radius)
         ) {
           continue;
@@ -112,5 +116,13 @@ export class SwallowSystem {
         }
       }
     }
+  }
+
+  private isBotAttackGraceActive(attacker: Player, now: number): boolean {
+    if (!attacker.isBot || this.matchStartedAt === null) {
+      return false;
+    }
+
+    return now - this.matchStartedAt < BOT_ATTACK_GRACE_SECONDS;
   }
 }

@@ -22,6 +22,9 @@ interface OccupiedFootprint {
   x: number;
   z: number;
   radius: number;
+  halfWidth?: number;
+  halfDepth?: number;
+  rotationY?: number;
 }
 
 interface SpawnCandidate {
@@ -37,6 +40,52 @@ interface RoadNetwork {
   trafficSignals: TrafficSignalDefinition[];
   pedestrianPaths: PedestrianPath[];
 }
+
+const ROAD_LAYOUT_GUIDELINES: Record<MapSize, {
+  avenueCount: number;
+  sideStreetCount: number;
+  minBlockScale: number;
+  axisJitterScale: number;
+  usableHalfScale: number;
+  crosswalkClusterScale: number;
+}> = {
+  small: {
+    avenueCount: 2,
+    sideStreetCount: 0,
+    minBlockScale: 0.98,
+    axisJitterScale: 0.08,
+    usableHalfScale: 0.68,
+    crosswalkClusterScale: 0.72
+  },
+  medium: {
+    avenueCount: 3,
+    sideStreetCount: 0,
+    minBlockScale: 1.04,
+    axisJitterScale: 0.075,
+    usableHalfScale: 0.72,
+    crosswalkClusterScale: 0.78
+  },
+  large: {
+    avenueCount: 5,
+    sideStreetCount: 1,
+    minBlockScale: 1.08,
+    axisJitterScale: 0.065,
+    usableHalfScale: 0.75,
+    crosswalkClusterScale: 0.84
+  },
+  huge: {
+    avenueCount: 6,
+    sideStreetCount: 2,
+    minBlockScale: 1.12,
+    axisJitterScale: 0.055,
+    usableHalfScale: 0.76,
+    crosswalkClusterScale: 0.88
+  }
+};
+
+const STREETLIGHT_SPACING = 14;
+const STREETLIGHT_MIN_SEGMENT_LENGTH = 5.5;
+const CROSSWALK_OBJECT_CLEARANCE = 0.9;
 
 class SeededRandom {
   private state: number;
@@ -99,12 +148,14 @@ export class ProceduralMapGenerator {
     const adManager = new AdManager();
     const occupied: OccupiedFootprint[] = [];
 
+    this.reserveCrosswalkFootprints(occupied, network.surfaces);
+    this.addStreetlights(objects, occupied, network.surfaces, rng);
     this.addPlazas(objects, occupied, network.surfaces, network.roads, spawnPoints, rng, options.size);
     this.addBuildings(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
     this.addTrafficSignalObjects(objects, occupied, network.trafficSignals, rng);
     this.addRoadsideObjects(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
-    this.addTraffic(objects, occupied, network.trafficRoutes, rng, objectBudget);
-    this.addParkedVehicles(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
+    this.addTraffic(objects, occupied, network.trafficRoutes, network.surfaces, rng, objectBudget);
+    this.addParkedVehicles(objects, occupied, network.roads, network.surfaces, spawnPoints, rng, objectBudget);
     this.addPedestrians(objects, occupied, network.pedestrianPaths, rng, objectBudget);
     this.addLooseCityObjects(objects, occupied, network.roads, spawnPoints, rng, options.size, objectBudget);
     this.addPowerUps(powerUps, occupied, network.roads, spawnPoints, rng, options.size, options.powerUpCount);
@@ -131,13 +182,14 @@ export class ProceduralMapGenerator {
 
   private createRoadNetwork(size: MapSize, rng: SeededRandom): RoadNetwork {
     const settings = MAP_SIZE_SETTINGS[size];
+    const guidelines = ROAD_LAYOUT_GUIDELINES[size];
     const roads: RoadSegment[] = [];
     const surfaces: SurfaceSegment[] = [];
     const trafficRoutes: TrafficRoute[] = [];
     const trafficSignals: TrafficSignalDefinition[] = [];
     const pedestrianPaths: PedestrianPath[] = [];
     const half = settings.halfExtent;
-    const majorCount = Math.max(3, Math.floor(half / (settings.blockSize * 1.18)) + 1);
+    const majorCount = guidelines.avenueCount;
 
     const addRoad = (
       id: string,
@@ -166,19 +218,31 @@ export class ProceduralMapGenerator {
       pedestrianPaths.push(...this.createPedestrianPathsForRoad(road));
     };
 
-    const verticalPositions = this.cityAxisPositions(majorCount, half, settings.blockSize, rng);
-    const horizontalPositions = this.cityAxisPositions(majorCount, half, settings.blockSize, rng);
+    const verticalPositions = this.cityAxisPositions(
+      majorCount,
+      half,
+      settings.blockSize,
+      rng,
+      guidelines
+    );
+    const horizontalPositions = this.cityAxisPositions(
+      majorCount,
+      half,
+      settings.blockSize,
+      rng,
+      guidelines
+    );
 
     verticalPositions.forEach((x, index) => addRoad(`avenue-v-${index}`, x, 0, half * 1.9, 0));
     horizontalPositions.forEach((z, index) => addRoad(`avenue-h-${index}`, 0, z, half * 1.9, Math.PI / 2));
 
-    const sideStreetCount = Math.floor(majorCount * 0.42);
+    const sideStreetCount = guidelines.sideStreetCount;
     for (let i = 0; i < sideStreetCount; i += 1) {
       const vertical = rng.chance(0.5);
       const base = rng.pick(vertical ? verticalPositions : horizontalPositions);
-      const offset = rng.pick([-1, 1]) * rng.range(settings.blockSize * 0.38, settings.blockSize * 0.7);
+      const offset = rng.pick([-1, 1]) * rng.range(settings.blockSize * 1.05, settings.blockSize * 1.36);
       const center = rng.range(-half * 0.45, half * 0.45);
-      const length = rng.range(half * 0.34, half * 0.68);
+      const length = rng.range(half * 0.28, half * 0.52);
       if (vertical) {
         addRoad(`side-v-${i}`, base + offset, center, length, 0, settings.roadWidth * 0.72);
       } else {
@@ -191,20 +255,45 @@ export class ProceduralMapGenerator {
     for (const road of roads) {
       this.addRoadSurfaces(road, roads, surfaces);
     }
-    this.addCrosswalks(roads, surfaces, settings.roadWidth);
+    this.addCrosswalks(roads, surfaces, settings.roadWidth, settings.blockSize * guidelines.crosswalkClusterScale);
     this.addTrafficSignals(roads, trafficRoutes, trafficSignals);
 
     return { roads, surfaces, trafficRoutes, trafficSignals, pedestrianPaths };
   }
 
-  private cityAxisPositions(count: number, half: number, blockSize: number, rng: SeededRandom): number[] {
+  private cityAxisPositions(
+    count: number,
+    half: number,
+    blockSize: number,
+    rng: SeededRandom,
+    guidelines: typeof ROAD_LAYOUT_GUIDELINES[MapSize]
+  ): number[] {
+    const target = Math.max(1, count);
+    if (target === 1) {
+      return [0];
+    }
+
     const positions = new Set<number>([0]);
-    const start = -half * 0.7;
-    const span = half * 1.4;
-    const minGap = blockSize * 0.62;
-    for (let i = 0; i < count; i += 1) {
-      const base = start + (span * i) / Math.max(1, count - 1);
-      const candidate = Math.round((base + rng.range(-blockSize * 0.26, blockSize * 0.26)) * 10) / 10;
+    const minGap = blockSize * guidelines.minBlockScale;
+    const usableHalf = half * guidelines.usableHalfScale;
+    const rings = Math.max(1, Math.ceil((target - 1) / 2));
+
+    for (let ring = 1; positions.size < target && ring <= rings + 1; ring += 1) {
+      for (const side of [-1, 1]) {
+        if (positions.size >= target) {
+          break;
+        }
+        const baseDistance = Math.min(usableHalf, (usableHalf * ring) / rings);
+        const candidate = Math.round((side * baseDistance + rng.range(-blockSize * guidelines.axisJitterScale, blockSize * guidelines.axisJitterScale)) * 10) / 10;
+        if ([...positions].some((position) => Math.abs(position - candidate) < minGap)) {
+          continue;
+        }
+        positions.add(candidate);
+      }
+    }
+
+    for (let attempt = 0; positions.size < target && attempt < target * 12; attempt += 1) {
+      const candidate = Math.round(rng.range(-usableHalf, usableHalf) * 10) / 10;
       if ([...positions].some((position) => Math.abs(position - candidate) < minGap)) {
         continue;
       }
@@ -233,7 +322,8 @@ export class ProceduralMapGenerator {
           width: road.sidewalkWidth,
           length: run.end - run.start,
           rotationY: road.rotationY,
-          kind: 'sidewalk'
+          kind: 'sidewalk',
+          roadSideSign: side as -1 | 1
         });
       });
     }
@@ -263,21 +353,33 @@ export class ProceduralMapGenerator {
     }
   }
 
-  private addCrosswalks(roads: RoadSegment[], surfaces: SurfaceSegment[], roadWidth: number): void {
+  private addCrosswalks(
+    roads: RoadSegment[],
+    surfaces: SurfaceSegment[],
+    roadWidth: number,
+    minIntersectionGap: number
+  ): void {
     let id = 0;
     const placed: RoutePoint[] = [];
+    const placedIntersections: RoutePoint[] = [];
     for (const a of roads) {
       for (const b of roads) {
         if (a.id >= b.id || Math.abs(Math.sin(a.rotationY - b.rotationY)) < 0.8) {
           continue;
         }
 
-        if (!a.id.startsWith('avenue') && !b.id.startsWith('avenue')) {
+        const aIsAvenue = a.id.startsWith('avenue');
+        const bIsAvenue = b.id.startsWith('avenue');
+        if (!aIsAvenue || !bIsAvenue) {
           continue;
         }
 
         const vertical = Math.abs(Math.sin(a.rotationY)) < 0.5 ? a : b;
         const horizontal = vertical === a ? b : a;
+        const center = { x: vertical.x, z: horizontal.z };
+        if (placedIntersections.some((point) => Math.hypot(point.x - center.x, point.z - center.z) < minIntersectionGap)) {
+          continue;
+        }
         const inVertical = Math.abs(horizontal.z - vertical.z) <= vertical.length * 0.5;
         const inHorizontal = Math.abs(vertical.x - horizontal.x) <= horizontal.length * 0.5;
         if (!inVertical || !inHorizontal) {
@@ -288,7 +390,7 @@ export class ProceduralMapGenerator {
         const horizontalForward = this.forwardVector(horizontal.rotationY);
         const verticalApproach = horizontal.width * 0.5 + 2.05;
         const horizontalApproach = vertical.width * 0.5 + 2.05;
-        const crosswalkDepth = (road: RoadSegment): number => Math.max(2.8, Math.min(4.2, road.width * 0.5));
+        const crosswalkDepth = (road: RoadSegment): number => Math.max(2.4, Math.min(3.5, road.width * 0.42));
         const candidates: SurfaceSegment[] = [];
         for (const sign of [-1, 1]) {
           candidates.push(
@@ -322,6 +424,7 @@ export class ProceduralMapGenerator {
           placed.push({ x: crosswalk.x, z: crosswalk.z });
           id += 1;
         }
+        placedIntersections.push(center);
       }
     }
   }
@@ -714,13 +817,13 @@ export class ProceduralMapGenerator {
     rng: SeededRandom,
     objectBudget: number
   ): void {
-    const target = Math.floor(objectBudget * 0.36);
+    const target = Math.floor(objectBudget * 0.42);
     let placed = 0;
     let attempts = 0;
-    while (placed < target && attempts < target * 8) {
+    while (placed < target && attempts < target * 14) {
       attempts += 1;
       const road = rng.pick(roads);
-      const candidate = rng.chance(0.68)
+      const candidate = rng.chance(0.48)
         ? this.roadsideCandidate(road, rng, rng.range(2.8, 6.8), spawnPoints)
         : this.blockInteriorBuildingCandidate(roads, rng, spawnPoints);
       if (!candidate || this.overlapsOccupied(candidate.x, candidate.z, 2.35, occupied)) {
@@ -728,7 +831,7 @@ export class ProceduralMapGenerator {
       }
       const object = this.createObjectDefinition('building', objects.length, candidate, rng);
       const spacingRadius = this.buildingSpacingRadius(object);
-      const roadClearRadius = Math.min(4.2, Math.max(1.6, object.boundingRadius * 0.44));
+      const roadClearRadius = Math.min(3.6, Math.max(1.35, object.boundingRadius * 0.34));
       if (
         this.overlapsOccupied(candidate.x, candidate.z, spacingRadius, occupied) ||
         this.pointConflictsRoads(object.position.x, object.position.z, roadClearRadius, roads)
@@ -736,7 +839,14 @@ export class ProceduralMapGenerator {
         continue;
       }
       objects.push(object);
-      occupied.push({ x: candidate.x, z: candidate.z, radius: spacingRadius });
+      occupied.push({
+        x: candidate.x,
+        z: candidate.z,
+        radius: spacingRadius,
+        halfWidth: object.size.x * 0.5 + 0.38,
+        halfDepth: object.size.z * 0.5 + 0.38,
+        rotationY: object.rotationY
+      });
       placed += 1;
     }
   }
@@ -856,12 +966,12 @@ export class ProceduralMapGenerator {
     spawnPoints: Vec3Data[]
   ): SpawnCandidate | null {
     const halfExtent = Math.max(...roads.map((road) => road.length)) * 0.53;
-    for (let attempt = 0; attempt < 44; attempt += 1) {
+    for (let attempt = 0; attempt < 88; attempt += 1) {
       const x = rng.range(-halfExtent * 0.78, halfExtent * 0.78);
       const z = rng.range(-halfExtent * 0.78, halfExtent * 0.78);
       const nearest = this.nearestRoad(x, z, roads);
-      const minRoadDistance = nearest.road.width * 0.5 + nearest.road.sidewalkWidth + 4.6;
-      const maxRoadDistance = Math.max(16, minRoadDistance + 15);
+      const minRoadDistance = nearest.road.width * 0.5 + nearest.road.sidewalkWidth + 2.7;
+      const maxRoadDistance = Math.max(18, minRoadDistance + 22);
       if (nearest.distance < minRoadDistance || nearest.distance > maxRoadDistance) {
         continue;
       }
@@ -874,8 +984,9 @@ export class ProceduralMapGenerator {
   }
 
   private buildingSpacingRadius(object: ObjectSpawnDefinition): number {
-    const compactness = object.label === 'Factory Block' || object.label === 'Warehouse' ? 0.64 : 0.54;
-    return Math.max(1.9, object.boundingRadius * compactness);
+    const largestSide = Math.max(object.size.x, object.size.z) * 0.5;
+    const zonePadding = object.label === 'Factory Block' || object.label === 'Warehouse' ? 0.86 : 0.62;
+    return largestSide + zonePadding;
   }
 
   private addTrafficSignalObjects(
@@ -884,7 +995,14 @@ export class ProceduralMapGenerator {
     signals: TrafficSignalDefinition[],
     rng: SeededRandom
   ): void {
+    const renderedApproaches = new Set<string>();
     for (const signal of signals) {
+      const approachKey = `${signal.groupId}:${signal.axis}`;
+      if (renderedApproaches.has(approachKey)) {
+        continue;
+      }
+      renderedApproaches.add(approachKey);
+
       if (this.overlapsOccupied(signal.position.x, signal.position.z, 0.48, occupied)) {
         continue;
       }
@@ -925,13 +1043,74 @@ export class ProceduralMapGenerator {
     }
   }
 
+  private addStreetlights(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    surfaces: SurfaceSegment[],
+    rng: SeededRandom
+  ): void {
+    for (const surface of surfaces) {
+      if (surface.kind !== 'sidewalk' || surface.length < STREETLIGHT_MIN_SEGMENT_LENGTH) {
+        continue;
+      }
+
+      const lightCount = surface.length < STREETLIGHT_SPACING * 1.78
+        ? 1
+        : Math.ceil(surface.length / STREETLIGHT_SPACING);
+      const margin = Math.min(STREETLIGHT_SPACING * 0.5, surface.length * 0.42);
+      const usableLength = Math.max(0, surface.length - margin * 2);
+      let placedOnSurface = false;
+
+      for (let index = 0; index < lightCount; index += 1) {
+        const along = lightCount === 1
+          ? 0
+          : -usableLength * 0.5 + (usableLength * index) / (lightCount - 1);
+        placedOnSurface = this.placeStreetlightOnSidewalk(surface, along, objects, occupied, rng) || placedOnSurface;
+      }
+
+      if (!placedOnSurface) {
+        const fallbackCount = 5;
+        for (let index = 0; index < fallbackCount && !placedOnSurface; index += 1) {
+          const t = index / (fallbackCount - 1);
+          const along = -usableLength * 0.5 + usableLength * t;
+          placedOnSurface = this.placeStreetlightOnSidewalk(surface, along, objects, occupied, rng);
+        }
+      }
+    }
+  }
+
+  private placeStreetlightOnSidewalk(
+    surface: SurfaceSegment,
+    along: number,
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    rng: SeededRandom
+  ): boolean {
+    const forward = this.forwardVector(surface.rotationY);
+    const side = this.sideVector(surface.rotationY);
+    const roadSideSign = surface.roadSideSign ?? -1;
+    const curbOffset = -roadSideSign * Math.min(surface.width * 0.32, 0.8);
+    const x = surface.x + forward.x * along + side.x * curbOffset;
+    const z = surface.z + forward.z * along + side.z * curbOffset;
+    const rotationY = surface.rotationY + (roadSideSign === 1 ? Math.PI : 0);
+    const object = this.createObjectDefinition('post', objects.length, { x, z, rotationY }, rng);
+    object.label = 'Streetlight';
+    const radius = Math.max(0.62, object.boundingRadius);
+    if (this.overlapsOccupied(x, z, radius, occupied)) {
+      return false;
+    }
+    objects.push(object);
+    occupied.push({ x, z, radius });
+    return true;
+  }
+
   private roadsideKindForZone(x: number, z: number, rng: SeededRandom): WorldObjectKind {
     const zone = this.zoneForPosition(x, z);
     const pools: Record<ReturnType<ProceduralMapGenerator['zoneForPosition']>, WorldObjectKind[]> = {
-      industrial: ['post', 'cone', 'trash', 'crate', 'hydrant', 'structure', 'bike'],
-      commercial: ['post', 'bench', 'trash', 'bike', 'planter', 'kiosk', 'hydrant'],
-      highResidential: ['post', 'tree', 'bench', 'trash', 'bike', 'planter', 'mailbox'],
-      lowResidential: ['post', 'tree', 'bench', 'mailbox', 'planter', 'hydrant']
+      industrial: ['cone', 'trash', 'crate', 'hydrant', 'structure', 'bike'],
+      commercial: ['bench', 'trash', 'bike', 'planter', 'kiosk', 'hydrant'],
+      highResidential: ['tree', 'bench', 'trash', 'bike', 'planter', 'mailbox'],
+      lowResidential: ['tree', 'bench', 'mailbox', 'planter', 'hydrant']
     };
     return rng.pick(pools[zone]);
   }
@@ -940,6 +1119,7 @@ export class ProceduralMapGenerator {
     objects: ObjectSpawnDefinition[],
     occupied: OccupiedFootprint[],
     routes: TrafficRoute[],
+    surfaces: SurfaceSegment[],
     rng: SeededRandom,
     objectBudget: number
   ): void {
@@ -957,6 +1137,13 @@ export class ProceduralMapGenerator {
       object.routeId = route.id;
       object.routeT = t;
       object.routeSpeed = rng.range(3.5, 7.5) * this.vehicleSpeedMultiplier(kind);
+      const spawnRadius = Math.max(1.35, object.boundingRadius * 0.76);
+      if (
+        this.overlapsOccupied(object.position.x, object.position.z, spawnRadius, occupied) ||
+        this.pointConflictsCrosswalks(object.position.x, object.position.z, spawnRadius + 0.45, surfaces)
+      ) {
+        continue;
+      }
       objects.push(object);
       occupied.push({ x: object.position.x, z: object.position.z, radius: object.boundingRadius });
     }
@@ -983,6 +1170,7 @@ export class ProceduralMapGenerator {
     objects: ObjectSpawnDefinition[],
     occupied: OccupiedFootprint[],
     roads: RoadSegment[],
+    surfaces: SurfaceSegment[],
     spawnPoints: Vec3Data[],
     rng: SeededRandom,
     objectBudget: number
@@ -991,7 +1179,11 @@ export class ProceduralMapGenerator {
     for (let i = 0; i < target; i += 1) {
       const road = rng.pick(roads);
       const candidate = this.parkingCandidate(road, rng, spawnPoints);
-      if (!candidate || this.overlapsOccupied(candidate.x, candidate.z, 1.75, occupied)) {
+      if (
+        !candidate ||
+        this.overlapsOccupied(candidate.x, candidate.z, 1.75, occupied) ||
+        this.pointConflictsCrosswalks(candidate.x, candidate.z, 2.35, surfaces)
+      ) {
         continue;
       }
       const kind: WorldObjectKind = rng.chance(0.08)
@@ -999,7 +1191,10 @@ export class ProceduralMapGenerator {
         : rng.chance(0.16) ? 'truck' : 'car';
       const object = this.createObjectDefinition(kind, objects.length, candidate, rng);
       object.label = `Parked ${object.label}`;
-      if (this.overlapsOccupied(candidate.x, candidate.z, object.boundingRadius, occupied)) {
+      if (
+        this.overlapsOccupied(candidate.x, candidate.z, object.boundingRadius, occupied) ||
+        this.pointConflictsCrosswalks(candidate.x, candidate.z, Math.max(2.35, object.boundingRadius * 0.72), surfaces)
+      ) {
         continue;
       }
       objects.push(object);
@@ -1027,6 +1222,9 @@ export class ProceduralMapGenerator {
       object.pedestrianPathId = path.id;
       object.routeT = t;
       object.routeSpeed = rng.range(0.65, 1.35);
+      if (this.overlapsOccupied(object.position.x, object.position.z, object.boundingRadius, occupied)) {
+        continue;
+      }
       objects.push(object);
       occupied.push({ x: object.position.x, z: object.position.z, radius: object.boundingRadius });
     }
@@ -1196,8 +1394,8 @@ export class ProceduralMapGenerator {
         return this.withSize(base, 'Supply Crate', { x: box, y: box, z: box }, '#b6783c', box * 0.66, 3.8, 6);
       }
       case 'post': {
-        const height = rng.range(1.8, 2.8);
-        return this.withSize(base, 'Sidewalk Post', { x: 0.3, y: height, z: 0.3 }, '#c9d2df', 0.28, 1.2, 4);
+        const height = rng.range(3.6, 5.2);
+        return this.withSize(base, 'Streetlight', { x: 0.36, y: height, z: 0.36 }, '#c9d2df', 0.36, 2.2, 6);
       }
       case 'bench':
         return this.withSize(base, 'Bench', { x: 1.7, y: 0.55, z: 0.58 }, '#8b5e3c', 0.9, 2.2, 7);
@@ -1378,6 +1576,12 @@ export class ProceduralMapGenerator {
       const kind: WorldObjectKind = rng.chance(0.45) ? 'screen' : 'billboard';
       const adObject = this.createObjectDefinition(kind, objects.length, candidate, rng);
       adObject.isAd = true;
+      if (
+        this.overlapsOccupied(candidate.x, candidate.z, adObject.boundingRadius, occupied) ||
+        this.pointConflictsRoads(candidate.x, candidate.z, adObject.boundingRadius, roads)
+      ) {
+        continue;
+      }
       objects.push(adObject);
       occupied.push({ x: candidate.x, z: candidate.z, radius: adObject.boundingRadius });
       const surfacePosition = { x: candidate.x, y: adObject.position.y + 0.28, z: candidate.z };
@@ -1398,6 +1602,9 @@ export class ProceduralMapGenerator {
       const kind: WorldObjectKind = rng.chance(0.48) ? 'screen' : 'billboard';
       const adObject = this.createObjectDefinition(kind, objects.length, candidate, rng);
       adObject.isAd = true;
+      if (this.overlapsOccupied(candidate.x, candidate.z, adObject.boundingRadius, occupied)) {
+        continue;
+      }
       objects.push(adObject);
       occupied.push({ x: candidate.x, z: candidate.z, radius: adObject.boundingRadius });
       const surfacePosition = { x: candidate.x, y: adObject.position.y + 0.4, z: candidate.z };
@@ -1523,6 +1730,45 @@ export class ProceduralMapGenerator {
     return false;
   }
 
+  private pointConflictsCrosswalks(x: number, z: number, radius: number, surfaces: SurfaceSegment[]): boolean {
+    for (const surface of surfaces) {
+      if (surface.kind !== 'crosswalk') {
+        continue;
+      }
+
+      const dx = x - surface.x;
+      const dz = z - surface.z;
+      const cos = Math.cos(-surface.rotationY);
+      const sin = Math.sin(-surface.rotationY);
+      const localX = dx * cos - dz * sin;
+      const localZ = dx * sin + dz * cos;
+      const protectedHalfWidth = surface.width * 0.5 + radius;
+      const protectedHalfLength = surface.length * 0.5 + radius;
+      if (Math.abs(localX) <= protectedHalfWidth && Math.abs(localZ) <= protectedHalfLength) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private reserveCrosswalkFootprints(occupied: OccupiedFootprint[], surfaces: SurfaceSegment[]): void {
+    for (const surface of surfaces) {
+      if (surface.kind !== 'crosswalk') {
+        continue;
+      }
+
+      occupied.push({
+        x: surface.x,
+        z: surface.z,
+        radius: Math.hypot(surface.width, surface.length) * 0.5 + CROSSWALK_OBJECT_CLEARANCE,
+        halfWidth: surface.width * 0.5 + CROSSWALK_OBJECT_CLEARANCE,
+        halfDepth: surface.length * 0.5 + CROSSWALK_OBJECT_CLEARANCE,
+        rotationY: surface.rotationY
+      });
+    }
+  }
+
   private routePoint(route: TrafficRoute | PedestrianPath, t: number): { position: RoutePoint; rotationY: number } {
     const segmentIndex = Math.min(route.points.length - 2, Math.max(0, Math.floor(t)));
     const localT = Math.max(0, Math.min(1, t - segmentIndex));
@@ -1541,6 +1787,25 @@ export class ProceduralMapGenerator {
     for (const footprint of occupied) {
       const dx = x - footprint.x;
       const dz = z - footprint.z;
+      if (
+        typeof footprint.halfWidth === 'number' &&
+        typeof footprint.halfDepth === 'number' &&
+        typeof footprint.rotationY === 'number'
+      ) {
+        const cos = Math.cos(-footprint.rotationY);
+        const sin = Math.sin(-footprint.rotationY);
+        const localX = dx * cos - dz * sin;
+        const localZ = dx * sin + dz * cos;
+        const closestX = Math.max(-footprint.halfWidth, Math.min(footprint.halfWidth, localX));
+        const closestZ = Math.max(-footprint.halfDepth, Math.min(footprint.halfDepth, localZ));
+        const boxDx = localX - closestX;
+        const boxDz = localZ - closestZ;
+        const minDistance = radius + 0.45;
+        if (boxDx * boxDx + boxDz * boxDz < minDistance * minDistance) {
+          return true;
+        }
+        continue;
+      }
       const minDistance = radius + footprint.radius + 0.55;
       if (dx * dx + dz * dz < minDistance * minDistance) {
         return true;

@@ -13,8 +13,9 @@ import type { CityObjectCategory, MapSize, PowerUpType, WorldObjectKind } from '
 export class AudioManager {
   private context: AudioContext | null = null;
   private sfxVolume = 0.55;
-  private musicVolume = 0.22;
+  private musicVolume = 0.3;
   private muted = false;
+  private unlocked = false;
   private musicOscillator: OscillatorNode | null = null;
   private musicGain: GainNode | null = null;
   private musicElement: HTMLAudioElement | null = null;
@@ -147,10 +148,12 @@ export class AudioManager {
   }
 
   unlock(): void {
+    this.unlocked = true;
     const context = this.getContext();
-    if (context?.state === 'suspended') {
-      void context.resume();
-    }
+    const resume = context?.state === 'suspended'
+      ? context.resume().catch(() => undefined)
+      : Promise.resolve();
+    this.primeContext(context);
 
     if (this.musicElement?.paused && this.activeMusicKey) {
       void this.musicElement.play().catch(() => undefined);
@@ -162,7 +165,10 @@ export class AudioManager {
       this.playMusicAsset(pending.key, pending.assets, pending.index, pending.forceOriginalAsset);
     }
 
-    this.preloadSfxAssets();
+    void resume.then(() => {
+      this.primeContext(context);
+      this.preloadSfxAssets();
+    });
   }
 
   startMenuMusic(): void {
@@ -211,21 +217,27 @@ export class AudioManager {
     const requestedAsset = assets[this.activeMusicIndex];
     const sourceAsset = forceOriginalAsset ? requestedAsset : this.getPreferredAudioPath(requestedAsset);
     const audio = new Audio(sourceAsset);
-    audio.loop = true;
-    audio.preload = 'auto';
-    audio.volume = this.muted ? 0 : this.musicVolume;
-    audio.muted = this.muted;
-    this.musicElement = audio;
-    this.activeMusicKey = key;
-    void audio.play().catch(() => {
+    let failed = false;
+    const handleFailure = (): void => {
+      if (failed || this.musicElement !== audio) {
+        return;
+      }
+      failed = true;
+      audio.removeEventListener('error', handleFailure);
       if (!forceOriginalAsset && sourceAsset !== requestedAsset) {
         this.playMusicAsset(key, assets, index, true);
         return;
       }
-      if (this.musicElement === audio) {
-        this.pendingMusicRequest = { key, assets: [...assets], index, forceOriginalAsset };
-      }
-    });
+      this.pendingMusicRequest = { key, assets: [...assets], index, forceOriginalAsset };
+    };
+    audio.loop = true;
+    audio.preload = 'auto';
+    audio.volume = this.muted ? 0 : this.musicVolume;
+    audio.muted = this.muted;
+    audio.addEventListener('error', handleFailure, { once: true });
+    this.musicElement = audio;
+    this.activeMusicKey = key;
+    void audio.play().catch(handleFailure);
   }
 
   private startGeneratedMusic(): void {
@@ -327,7 +339,7 @@ export class AudioManager {
       return;
     }
 
-    const sourcePath = path;
+    const sourcePath = forceOriginalAsset ? path : this.getPreferredAudioPath(path);
     const context = this.getContext();
     if (!context) {
       this.playHtmlSfx(sourcePath, path, gain, playbackRate, onError, fade, forceOriginalAsset);
@@ -574,6 +586,29 @@ export class AudioManager {
       void this.context.resume();
     }
     return this.context;
+  }
+
+  private primeContext(context: AudioContext | null): void {
+    if (!context || !this.unlocked || this.muted) {
+      return;
+    }
+
+    try {
+      const buffer = context.createBuffer(1, 1, 22050);
+      const source = context.createBufferSource();
+      const gain = context.createGain();
+      gain.gain.value = 0.0001;
+      source.buffer = buffer;
+      source.connect(gain);
+      gain.connect(context.destination);
+      source.start(0);
+      source.onended = (): void => {
+        source.disconnect();
+        gain.disconnect();
+      };
+    } catch {
+      // Some mobile browsers reject silent priming; normal playback can still work.
+    }
   }
 
   private randomRate(min: number, max: number): number {
