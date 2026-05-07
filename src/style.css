@@ -102,6 +102,7 @@ select:focus {
 .scene-layer {
   position: absolute;
   inset: 0;
+  z-index: 0;
 }
 
 .scene-layer canvas {
@@ -113,6 +114,7 @@ select:focus {
 .ui-layer {
   position: absolute;
   inset: 0;
+  z-index: 2;
   pointer-events: none;
 }
 
@@ -291,17 +293,21 @@ label {
   pointer-events: none;
 }
 
+.hud > * {
+  pointer-events: auto;
+}
+
 .hud-panel {
   position: absolute;
   top: 14px;
   left: 14px;
   z-index: 9;
-  min-width: 260px;
+  min-width: 210px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
-  background: rgba(6, 10, 18, 0.72);
-  backdrop-filter: blur(10px);
+  background: rgba(6, 10, 18, 0.48);
+  backdrop-filter: blur(8px);
 }
 
 .hud-row {
@@ -342,15 +348,38 @@ label {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
-  background: rgba(6, 10, 18, 0.72);
-  backdrop-filter: blur(10px);
+  background: rgba(6, 10, 18, 0.5);
+  backdrop-filter: blur(8px);
 }
 
 .leaderboard h3,
 .hud-panel h3,
-.chat h3 {
+.chat h3,
+.hud-settings h3 {
   margin: 0 0 8px;
   font-size: 0.93rem;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-title h3 {
+  margin-bottom: 0;
+}
+
+.panel-close {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .leader-row {
@@ -376,7 +405,7 @@ label {
 .help {
   position: absolute;
   left: 14px;
-  bottom: 14px;
+  bottom: 72px;
   color: rgba(255, 255, 255, 0.62);
   font-size: 0.83rem;
 }
@@ -384,10 +413,10 @@ label {
 .zoom-controls {
   position: absolute;
   left: 14px;
-  bottom: 46px;
+  bottom: 14px;
   z-index: 15;
   display: grid;
-  grid-template-columns: 46px minmax(58px, auto) 46px;
+  grid-template-columns: 46px 46px;
   align-items: center;
   gap: 8px;
   pointer-events: auto;
@@ -404,18 +433,50 @@ label {
   backdrop-filter: blur(10px);
 }
 
-.zoom-value {
+.hud-settings-toggle {
+  position: absolute;
+  left: 122px;
+  bottom: 14px;
+  z-index: 18;
   min-width: 58px;
-  padding: 9px 10px;
+  min-height: 46px;
+  padding: 0 12px;
+  background: rgba(6, 10, 18, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.hud-settings {
+  position: absolute;
+  left: 14px;
+  bottom: 72px;
+  z-index: 19;
+  width: min(260px, calc(100vw - 28px));
   border: 1px solid var(--line);
   border-radius: 8px;
-  color: #f7fbff;
-  background: rgba(6, 10, 18, 0.76);
-  text-align: center;
-  font-family: "Orbitron", "Open Sans", sans-serif;
-  font-size: 0.82rem;
-  font-weight: 800;
+  padding: 12px;
+  background: rgba(6, 10, 18, 0.74);
   backdrop-filter: blur(10px);
+}
+
+.hud-toggle-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.hud-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #f6f8ff;
+  font-size: 0.86rem;
+}
+
+.hud-toggle-row input {
+  width: 20px;
+  min-height: 20px;
+  accent-color: #5eead4;
 }
 
 .death-notice {
@@ -457,8 +518,8 @@ label {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
-  background: rgba(6, 10, 18, 0.72);
-  backdrop-filter: blur(10px);
+  background: rgba(6, 10, 18, 0.44);
+  backdrop-filter: blur(8px);
   pointer-events: auto;
 }
 
@@ -472,7 +533,7 @@ label {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  margin-bottom: 8px;
+  margin: 8px 0;
   color: var(--text-soft);
   font-size: 0.84rem;
 }
@@ -483,6 +544,116 @@ label {
 
 .chat-input {
   min-height: 36px;
+}
+
+.powerup-tray {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 14;
+  display: flex;
+  max-width: min(640px, calc(100vw - 220px));
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.powerup-card {
+  --powerup-color: #5eead4;
+  --powerup-progress: 100%;
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(76px, 1fr);
+  align-items: center;
+  min-width: 126px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--powerup-color), white 15%);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: rgba(6, 10, 18, 0.58);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--powerup-color), transparent 72%);
+  backdrop-filter: blur(8px);
+}
+
+.powerup-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #041018;
+  background: var(--powerup-color);
+  font-family: "Orbitron", "Open Sans", sans-serif;
+  font-weight: 900;
+}
+
+.powerup-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.powerup-text strong,
+.powerup-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.powerup-text strong {
+  font-size: 0.82rem;
+}
+
+.powerup-text span {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.powerup-meter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.powerup-meter span {
+  display: block;
+  width: var(--powerup-progress);
+  height: 100%;
+  background: var(--powerup-color);
+  transition: width 90ms linear;
+}
+
+.account-summary,
+.history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-soft);
+  font-size: 0.85rem;
+}
+
+.account-summary strong,
+.history-row strong {
+  color: #ffffff;
+}
+
+.history-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
 }
 
 .pause-screen {
@@ -576,7 +747,8 @@ label {
 
   .leaderboard h3,
   .hud-panel h3,
-  .chat h3 {
+  .chat h3,
+  .hud-settings h3 {
     font-size: 0.82rem;
   }
 
@@ -587,8 +759,9 @@ label {
 
   .zoom-controls {
     top: auto;
-    bottom: 208px;
-    grid-template-columns: 42px minmax(50px, auto) 42px;
+    left: 12px;
+    bottom: 12px;
+    grid-template-columns: 42px 42px;
   }
 
   .zoom-controls button {
@@ -597,13 +770,34 @@ label {
     min-height: 42px;
   }
 
-  .zoom-value {
-    min-width: 50px;
-    padding-inline: 8px;
+  .hud-settings-toggle {
+    left: 104px;
+    bottom: 12px;
+    min-height: 42px;
+  }
+
+  .hud-settings {
+    left: 12px;
+    bottom: 62px;
+    width: min(248px, calc(100vw - 24px));
   }
 
   .chat-log {
     height: 96px;
+  }
+
+  .powerup-tray {
+    left: 50%;
+    right: auto;
+    bottom: 62px;
+    max-width: calc(100vw - 24px);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .powerup-card {
+    min-width: 118px;
+    grid-template-columns: 34px minmax(70px, 1fr);
   }
 
   .help {

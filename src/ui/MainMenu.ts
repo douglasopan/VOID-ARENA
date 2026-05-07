@@ -1,5 +1,6 @@
 import { GAME_VERSION } from '../shared/constants';
 import { generatePlayerName } from '../game/MatchConfig';
+import type { PlayerProfile } from '../shared/types';
 
 export interface MainMenuCallbacks {
   onStartSolo: (playerName: string) => void;
@@ -13,18 +14,23 @@ export class MainMenu {
 
   constructor(private readonly root: HTMLElement) {}
 
-  show(callbacks: MainMenuCallbacks, initialName = ''): void {
+  show(callbacks: MainMenuCallbacks, initialName = '', profile: PlayerProfile | null = null): void {
     this.hide();
     const element = document.createElement('div');
     element.className = 'screen main-screen';
+    const bestScore = Math.max(0, ...((profile?.matchHistory ?? []).map((entry) => entry.finalScore)));
+    const accountSummary = profile
+      ? `<div class="account-summary"><span>Account saved</span><strong>${profile.matchHistory.length} matches</strong><strong>${bestScore} best</strong></div>`
+      : '<div class="account-summary"><span>Create your account by choosing a name.</span></div>';
     element.innerHTML = `
       <section class="menu-panel narrow main-menu-panel">
         <h1 class="title neon-title">VOID ARENA</h1>
         <p class="subtitle">Swallow the city, grow the void, and outlast every rival hole in the arena.</p>
         <label class="field">
-          Player name
+          Account name
           <input class="player-name" maxlength="18" autocomplete="off" placeholder="Player_1234" />
         </label>
+        ${accountSummary}
         <div class="button-grid">
           <button class="primary start-solo">Start Solo Match</button>
           <button class="find-games">Find Games</button>

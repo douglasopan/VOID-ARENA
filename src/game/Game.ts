@@ -4,6 +4,7 @@ import { BOT_NAMES, MAGNET_PULL_STRENGTH } from '../shared/constants';
 import type { ChatMessage, MatchResult, MockRoomSummary } from '../shared/types';
 import { InputManager } from '../input/InputManager';
 import { NetworkClient } from '../network/NetworkClient';
+import { PlayerProfileStore } from '../player/PlayerProfileStore';
 import { SceneManager } from '../render/SceneManager';
 import { ChatUI } from '../ui/ChatUI';
 import { EndScreen } from '../ui/EndScreen';
@@ -38,6 +39,7 @@ export class Game {
   private sceneManager!: SceneManager;
   private inputManager!: InputManager;
   private readonly audioManager = new AudioManager();
+  private readonly profileStore = new PlayerProfileStore();
   private readonly mapGenerator = new ProceduralMapGenerator();
   private readonly networkClient = new NetworkClient();
   private readonly playerManager = new PlayerManager();
@@ -164,14 +166,19 @@ export class Game {
     this.hideMenus();
     this.hud.hide();
     this.chatUI.hide();
+    const profile = this.profileStore.load();
+    if (!this.playerName && profile?.playerName) {
+      this.playerName = profile.playerName;
+    }
     this.mainMenu.show(
       {
-        onStartSolo: (name) => this.showSoloSetup(name),
-        onFindGames: (name) => void this.showFindGames(name),
-        onHostMatch: (name) => this.showHostMatch(name),
+        onStartSolo: (name) => this.showSoloSetup(this.activateProfile(name)),
+        onFindGames: (name) => void this.showFindGames(this.activateProfile(name)),
+        onHostMatch: (name) => this.showHostMatch(this.activateProfile(name)),
         onSettings: () => this.showSettingsOverlay(false)
       },
-      this.playerName
+      this.playerName,
+      profile
     );
   }
 
@@ -358,11 +365,16 @@ export class Game {
 
     this.hud.show({
       onZoomIn: () => this.adjustCameraZoom(-0.08),
-      onZoomOut: () => this.adjustCameraZoom(0.08)
+      onZoomOut: () => this.adjustCameraZoom(0.08),
+      onChatVisibilityChange: (visible) => this.chatUI.setVisible(visible)
     });
-    this.chatUI.show({ onSend: (text) => this.addPlayerChat(text) });
+    this.chatUI.show({
+      onSend: (text) => this.addPlayerChat(text),
+      onVisibilityChange: (visible) => this.hud.setDisplaySetting('chat', visible)
+    });
     this.chatUI.clear();
     this.chatUI.setEnabled(this.chatEnabled);
+    this.chatUI.setVisible(this.hud.getDisplaySetting('chat'));
     this.addSystemMessage('Match started');
     if (this.currentConfig.roomName) {
       this.addSystemMessage(`${this.currentConfig.multiplayer ? 'Multiplayer room' : 'Local room preview'}: ${this.currentConfig.roomName}`);
@@ -539,8 +551,7 @@ export class Game {
       local,
       this.playerManager.getLeaderboard(mode),
       this.timer,
-      this.playerManager.alivePlayers().length,
-      this.cameraZoom
+      this.playerManager.alivePlayers().length
     );
   }
 
@@ -566,6 +577,7 @@ export class Game {
 
     this.state = 'ended';
     const result = this.createMatchResult();
+    this.recordMatchHistory(result);
     this.addSystemMessage(`${result.winnerName} won the match`);
     this.audioManager.playMatchEnd();
     this.pauseMenu.hide();
@@ -576,7 +588,7 @@ export class Game {
         }
       },
       onMainMenu: () => this.showMainMenu()
-    });
+    }, this.profileStore.recent());
   }
 
   private createMatchResult(): MatchResult {
@@ -594,6 +606,36 @@ export class Game {
       objectsSwallowed: local?.swallowedObjects ?? 0,
       eliminations: local?.eliminations ?? 0
     };
+  }
+
+  private recordMatchHistory(result: MatchResult): void {
+    if (!this.currentConfig) {
+      return;
+    }
+
+    const mode = this.currentConfig.matchMode;
+    const leaderboard = this.playerManager.getLeaderboard(mode);
+    const local = this.playerManager.getLocalPlayer();
+    const playerName = (local?.name ?? this.playerName) || 'Player';
+    this.profileStore.getOrCreate(playerName);
+    this.profileStore.recordMatch({
+      ...result,
+      playerName,
+      playedAt: new Date().toISOString(),
+      mapSize: this.currentConfig.mapSize,
+      matchMode: mode,
+      multiplayer: this.currentConfig.multiplayer,
+      roomName: this.currentConfig.roomName,
+      durationSeconds: this.currentConfig.durationSeconds,
+      leaderboard
+    });
+  }
+
+  private activateProfile(playerName: string): string {
+    const safeName = playerName.trim() || `Player_${Math.floor(1000 + Math.random() * 9000)}`;
+    const profile = this.profileStore.getOrCreate(safeName);
+    this.playerName = profile.playerName;
+    return profile.playerName;
   }
 
   private bindNetworkHooks(): void {

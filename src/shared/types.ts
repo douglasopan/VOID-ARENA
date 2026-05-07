@@ -190,3 +190,24 @@ export interface MatchResult {
   objectsSwallowed: number;
   eliminations: number;
 }
+
+export interface MatchHistoryEntry extends MatchResult {
+  id: string;
+  accountId: string;
+  playerName: string;
+  playedAt: string;
+  mapSize: MapSize;
+  matchMode: MatchMode;
+  multiplayer: boolean;
+  roomName?: string;
+  durationSeconds: number;
+  leaderboard: LeaderboardEntry[];
+}
+
+export interface PlayerProfile {
+  accountId: string;
+  playerName: string;
+  createdAt: string;
+  updatedAt: string;
+  matchHistory: MatchHistoryEntry[];
+}

@@ -1,4 +1,4 @@
-import type { MatchResult } from '../shared/types';
+import type { MatchHistoryEntry, MatchResult } from '../shared/types';
 
 export interface EndScreenCallbacks {
   onPlayAgain: () => void;
@@ -10,14 +10,28 @@ export class EndScreen {
 
   constructor(private readonly root: HTMLElement) {}
 
-  show(result: MatchResult, callbacks: EndScreenCallbacks): void {
+  show(result: MatchResult, callbacks: EndScreenCallbacks, history: MatchHistoryEntry[] = []): void {
     this.hide();
     const element = document.createElement('div');
     element.className = 'screen';
+    const historyRows = history
+      .slice(0, 6)
+      .map((entry) => {
+        const date = new Date(entry.playedAt).toLocaleString();
+        return `
+          <div class="history-row">
+            <span>${this.escapeHtml(date)}</span>
+            <strong>#${entry.placement}</strong>
+            <span>${entry.finalScore} pts</span>
+            <span>${entry.multiplayer ? 'Online' : 'Solo'}</span>
+          </div>
+        `;
+      })
+      .join('');
     element.innerHTML = `
       <section class="menu-panel narrow">
         <h2>Match Complete</h2>
-        <p class="subtitle">Winner: <strong>${result.winnerName}</strong></p>
+        <p class="subtitle">Winner: <strong>${this.escapeHtml(result.winnerName)}</strong></p>
         <div class="form-grid">
           <div class="hud-row"><span>Your placement</span><strong>#${result.placement}</strong></div>
           <div class="hud-row"><span>Final score</span><strong>${result.finalScore}</strong></div>
@@ -25,6 +39,7 @@ export class EndScreen {
           <div class="hud-row"><span>Objects swallowed</span><strong>${result.objectsSwallowed}</strong></div>
           <div class="hud-row"><span>Eliminations</span><strong>${result.eliminations}</strong></div>
         </div>
+        ${historyRows ? `<h3>Match History</h3><div class="history-list">${historyRows}</div>` : ''}
         <div class="button-grid">
           <button class="primary play-again">Play Again</button>
           <button class="main-menu">Back to Main Menu</button>
@@ -40,5 +55,14 @@ export class EndScreen {
   hide(): void {
     this.element?.remove();
     this.element = null;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }

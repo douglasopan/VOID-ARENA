@@ -2,6 +2,7 @@ import type { ChatMessage } from '../shared/types';
 
 export interface ChatCallbacks {
   onSend: (text: string) => void;
+  onVisibilityChange?: (visible: boolean) => void;
 }
 
 export class ChatUI {
@@ -9,6 +10,7 @@ export class ChatUI {
   private log: HTMLDivElement | null = null;
   private input: HTMLInputElement | null = null;
   private enabled = true;
+  private visible = true;
   private callbacks: ChatCallbacks | null = null;
 
   constructor(private readonly root: HTMLElement) {}
@@ -23,7 +25,10 @@ export class ChatUI {
     const element = document.createElement('div');
     element.className = 'chat';
     element.innerHTML = `
-      <h3>Chat</h3>
+      <div class="panel-title">
+        <h3>Chat</h3>
+        <button class="panel-close close-chat" type="button" aria-label="Close chat">X</button>
+      </div>
       <div class="chat-log"></div>
       <input class="chat-input" maxlength="120" placeholder="Press Enter to chat" />
     `;
@@ -38,6 +43,10 @@ export class ChatUI {
         this.sendCurrentMessage();
       }
     });
+    element.querySelector<HTMLButtonElement>('.close-chat')?.addEventListener('click', () => {
+      this.setVisible(false);
+      this.callbacks?.onVisibilityChange?.(false);
+    });
     this.setEnabled(this.enabled);
   }
 
@@ -49,7 +58,16 @@ export class ChatUI {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    this.element?.classList.toggle('disabled', !enabled);
+    this.applyVisibility();
+  }
+
+  setVisible(visible: boolean): void {
+    this.visible = visible;
+    this.applyVisibility();
+  }
+
+  isVisible(): boolean {
+    return this.visible;
   }
 
   isInputFocused(): boolean {
@@ -59,6 +77,11 @@ export class ChatUI {
   handleEnter(): void {
     if (!this.enabled || !this.input) {
       return;
+    }
+
+    if (!this.visible) {
+      this.setVisible(true);
+      this.callbacks?.onVisibilityChange?.(true);
     }
 
     if (this.isInputFocused()) {
@@ -95,6 +118,11 @@ export class ChatUI {
     this.element = null;
     this.log = null;
     this.input = null;
+  }
+
+  private applyVisibility(): void {
+    this.element?.classList.toggle('disabled', !this.enabled);
+    this.element?.classList.toggle('hidden', this.enabled && !this.visible);
   }
 
   private sendCurrentMessage(): void {

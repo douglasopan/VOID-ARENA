@@ -80,7 +80,7 @@ export class SceneManager {
       this.powerUpMeshes.set(powerUp.id, mesh);
       this.worldRoot.add(mesh);
       const label = this.labelRenderer.createLabel(powerUp.label, powerUp.color);
-      label.scale.set(5.25, 1.32, 1);
+      label.scale.set(6.65, 1.68, 1);
       this.powerUpLabels.set(powerUp.id, label);
       this.scene.add(label);
     }
@@ -121,16 +121,16 @@ export class SceneManager {
     this.adSurfaceRenderer.update(deltaSeconds, this.objectById);
     this.holeRenderer.update(playerManager.all());
 
-    const t = THREE.MathUtils.clamp(elapsedSeconds / 1.35, 0, 1);
+    const t = THREE.MathUtils.clamp(elapsedSeconds / 1.55, 0, 1);
     const ease = 1 - Math.pow(1 - t, 3);
     const orbit = Math.sin(elapsedSeconds * 5.2) * (1 - ease) * Math.max(0.8, attacker.radius * 0.45);
-    const y = THREE.MathUtils.lerp(12 + attacker.radius * 1.4, -1.1 - attacker.radius * 0.48, Math.pow(t, 1.45));
-    const zOffset = (1 - ease) * (12 + attacker.radius * 1.2);
+    const y = THREE.MathUtils.lerp(13 + attacker.radius * 1.45, -3.8 - attacker.radius * 0.58, Math.pow(t, 1.32));
+    const zOffset = (1 - ease) * (13 + attacker.radius * 1.25);
     this.camera.position.lerp(
       new THREE.Vector3(attacker.position.x + orbit, y, attacker.position.z + zOffset),
       1 - Math.pow(0.0006, deltaSeconds)
     );
-    this.camera.lookAt(attacker.position.x, -2.2 - attacker.radius * 0.3, attacker.position.z);
+    this.camera.lookAt(attacker.position.x, -3.6 - attacker.radius * 0.42, attacker.position.z);
   }
 
   updateMenuPreview(world: World, deltaSeconds: number, elapsedSeconds: number): void {
@@ -224,7 +224,7 @@ export class SceneManager {
       const label = this.powerUpLabels.get(powerUp.id);
       if (label) {
         label.visible = powerUp.active;
-        label.position.set(powerUp.position.x, powerUp.position.y + 1.35, powerUp.position.z);
+        label.position.set(powerUp.position.x, powerUp.position.y + 1.58, powerUp.position.z);
       }
     }
   }
