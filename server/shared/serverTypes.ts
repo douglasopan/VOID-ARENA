@@ -1,4 +1,4 @@
-import type { MapSize } from '../../src/shared/types';
+import type { HoleRimStyle, MapSize } from '../../src/shared/types';
 import type { BotDifficultyMix } from '../../src/game/BotDifficulty';
 import { MatchMode } from '../../src/game/MatchMode';
 
@@ -51,6 +51,7 @@ export interface ServerPlayerState {
   score: number;
   mass: number;
   rimColor: string;
+  rimStyle: HoleRimStyle;
   alive: boolean;
   stamina: number;
   eliminations: number;

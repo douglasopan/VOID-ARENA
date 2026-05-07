@@ -83,12 +83,12 @@ export class ObjectFactory {
   private createCrosswalk(surface: SurfaceSegment): THREE.Group {
     const group = new THREE.Group();
     const material = this.getMaterial('#e7edf1', 0.58, 0.02);
-    const stripeCount = Math.max(5, Math.floor(surface.width / 0.72));
-    const stripeWidth = surface.width / (stripeCount * 1.75);
-    const spacing = surface.width / stripeCount;
+    const stripeCount = Math.max(4, Math.floor(surface.length / 0.74));
+    const stripeLength = surface.length / (stripeCount * 2.1);
+    const spacing = surface.length / stripeCount;
     for (let i = 0; i < stripeCount; i += 1) {
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(stripeWidth, 0.05, surface.length), material);
-      stripe.position.x = -surface.width * 0.5 + spacing * (i + 0.5);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(surface.width, 0.05, stripeLength), material);
+      stripe.position.z = -surface.length * 0.5 + spacing * (i + 0.5);
       stripe.receiveShadow = true;
       group.add(stripe);
     }

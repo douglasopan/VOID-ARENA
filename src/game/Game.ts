@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { AudioManager } from '../audio/AudioManager';
-import { BOT_NAMES, MAGNET_PULL_STRENGTH } from '../shared/constants';
-import type { ChatMessage, MatchResult, MockRoomSummary } from '../shared/types';
+import { BOT_NAMES, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
+import type { ChatMessage, HoleRimStyle, MatchResult, MockRoomSummary } from '../shared/types';
 import { InputManager } from '../input/InputManager';
 import { NetworkClient } from '../network/NetworkClient';
 import { PlayerProfileStore } from '../player/PlayerProfileStore';
@@ -68,6 +68,8 @@ export class Game {
   private chatEnabled = true;
   private cameraZoom = 1;
   private deathCameraEnabled = true;
+  private holeRimColor = RIM_COLORS[0];
+  private holeRimStyle: HoleRimStyle = 'neon';
   private deathCameraTargetId: string | null = null;
   private deathCameraElapsed = 0;
   private messageId = 1;
@@ -104,7 +106,8 @@ export class Game {
     this.inputManager = new InputManager({
       onEscape: () => this.handleEscape(),
       onEnter: () => this.handleEnter()
-    });
+    }, this.uiLayer);
+    this.inputManager.setTouchControlsVisible(false);
     this.mainMenu = new MainMenu(this.uiLayer);
     this.matchSetupMenu = new MatchSetupMenu(this.uiLayer);
     this.findGamesMenu = new FindGamesMenu(this.uiLayer);
@@ -176,6 +179,10 @@ export class Game {
     if (!this.playerName && profile?.playerName) {
       this.playerName = profile.playerName;
     }
+    if (profile) {
+      this.holeRimColor = profile.holeRimColor || RIM_COLORS[0];
+      this.holeRimStyle = profile.holeRimStyle || 'neon';
+    }
     this.mainMenu.show(
       {
         onStartSolo: (name) => this.showSoloSetup(this.activateProfile(name)),
@@ -198,7 +205,9 @@ export class Game {
       onBack: () => this.showMainMenu()
     }, {
       cameraZoom: this.cameraZoom,
-      deathCameraEnabled: this.deathCameraEnabled
+      deathCameraEnabled: this.deathCameraEnabled,
+      holeRimColor: this.holeRimColor,
+      holeRimStyle: this.holeRimStyle
     });
   }
 
@@ -228,6 +237,8 @@ export class Game {
         config.maxPlayers = room.maxPlayers;
         config.roomName = room.roomName;
         config.fillBots = room.botsEnabled;
+        config.holeRimColor = this.holeRimColor;
+        config.holeRimStyle = this.holeRimStyle;
         this.startMatch(config);
       },
       onBack: () => this.showMainMenu()
@@ -244,7 +255,9 @@ export class Game {
       onBack: () => this.showMainMenu()
     }, {
       cameraZoom: this.cameraZoom,
-      deathCameraEnabled: this.deathCameraEnabled
+      deathCameraEnabled: this.deathCameraEnabled,
+      holeRimColor: this.holeRimColor,
+      holeRimStyle: this.holeRimStyle
     });
   }
 
@@ -270,14 +283,21 @@ export class Game {
       await this.joinMultiplayerRoom(room, config.playerName, config);
     } catch (error) {
       console.error(error);
-      window.alert('Could not reach the Void Arena multiplayer server. Run npm run dev to start client and server together.');
+      window.alert(
+        `Could not reach the Void Arena multiplayer server at ${this.networkClient.serverUrl}.\n\n` +
+          'For production, set VITE_MULTIPLAYER_SERVER_URL on Vercel to a public Socket.IO server hosted on a realtime Node/WebSocket platform.'
+      );
     }
   }
 
   private async joinMultiplayerRoom(
     room: ServerRoomSummary,
     playerName: string,
-    baseConfig = createDefaultMatchConfig(playerName)
+    baseConfig: MatchConfig = {
+      ...createDefaultMatchConfig(playerName),
+      holeRimColor: this.holeRimColor,
+      holeRimStyle: this.holeRimStyle
+    }
   ): Promise<void> {
     try {
       await this.networkClient.connect();
@@ -329,6 +349,8 @@ export class Game {
     this.chatEnabled = preparedConfig.enableChat;
     this.cameraZoom = preparedConfig.cameraZoom;
     this.deathCameraEnabled = preparedConfig.deathCameraEnabled;
+    this.holeRimColor = preparedConfig.holeRimColor;
+    this.holeRimStyle = preparedConfig.holeRimStyle;
     this.clearDeathCamera();
     this.sizeAnnouncements.clear();
 
@@ -344,7 +366,10 @@ export class Game {
     this.sceneManager.setGraphicsQuality(preparedConfig.graphicsQuality);
     const localSpawn = this.world.getSpawnPoint(0);
     const localId = preparedConfig.multiplayer && this.networkClient.socketId ? this.networkClient.socketId : 'local-player';
-    this.playerManager.createLocalPlayer(this.currentConfig.playerName, localSpawn, localId);
+    this.playerManager.createLocalPlayer(this.currentConfig.playerName, localSpawn, localId, {
+      rimColor: this.holeRimColor,
+      rimStyle: this.holeRimStyle
+    });
 
     for (let i = 0; i < this.currentConfig.botCount; i += 1) {
       const nameBase = BOT_NAMES[i % BOT_NAMES.length];
@@ -389,6 +414,7 @@ export class Game {
     this.audioManager.playMatchStart();
     this.audioManager.startMusic(preparedConfig.mapSize);
     this.state = 'playing';
+    this.inputManager.setTouchControlsVisible(true);
     this.lastFrame = performance.now();
   }
 
@@ -452,8 +478,6 @@ export class Game {
             this.audioManager.playDeath();
             this.showDeathNotice(event.attacker.name);
             this.startDeathCamera(event.attacker.id);
-          } else {
-            this.audioManager.playHoleSwallow();
           }
           if (event.attacker.id === this.playerManager.localPlayerId && event.victim.id !== this.playerManager.localPlayerId) {
             this.showKillNotice(event.victim.name);
@@ -643,6 +667,7 @@ export class Game {
   private activateProfile(playerName: string): string {
     const safeName = playerName.trim() || `Player_${Math.floor(1000 + Math.random() * 9000)}`;
     const profile = this.profileStore.getOrCreate(safeName);
+    this.profileStore.updateAppearance(profile.playerName, this.holeRimColor, this.holeRimStyle);
     this.playerName = profile.playerName;
     return profile.playerName;
   }
@@ -737,6 +762,7 @@ export class Game {
       score: local.score,
       mass: local.mass,
       rimColor: local.rimColor,
+      rimStyle: local.rimStyle,
       alive: local.alive,
       stamina: local.stamina,
       eliminations: local.eliminations,
@@ -761,10 +787,16 @@ export class Game {
           state.id,
           state.name,
           new THREE.Vector3(state.x, 0, state.z),
-          index + 3
+          index + 3,
+          {
+            rimColor: state.rimColor,
+            rimStyle: state.rimStyle
+          }
         );
       }
       player.name = state.name;
+      player.rimColor = state.rimColor || player.rimColor;
+      player.rimStyle = state.rimStyle || player.rimStyle;
       player.position.lerp(new THREE.Vector3(state.x, 0, state.z), 0.45);
       player.radius = state.radius;
       player.mass = state.mass;
@@ -790,6 +822,7 @@ export class Game {
 
     this.state = 'paused';
     this.inputManager.clear();
+    this.inputManager.setTouchControlsVisible(false);
     this.pauseMenu.show(
       {
         onResume: () => this.resumeMatch(),
@@ -816,13 +849,16 @@ export class Game {
             this.chatUI.setVisible(visible);
           }
         },
-        onNextMusic: () => this.audioManager.nextMusicTrack()
+        onNextMusic: () => this.audioManager.nextMusicTrack(),
+        onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle)
       },
       {
         chatEnabled: this.chatEnabled,
         inMatch: true,
         deathCameraEnabled: this.deathCameraEnabled,
-        hudDisplaySettings: this.hud.getDisplaySettings()
+        hudDisplaySettings: this.hud.getDisplaySettings(),
+        holeRimColor: this.holeRimColor,
+        holeRimStyle: this.holeRimStyle
       }
     );
   }
@@ -831,6 +867,7 @@ export class Game {
     this.pauseMenu.hide();
     if (this.currentConfig) {
       this.state = 'playing';
+      this.inputManager.setTouchControlsVisible(true);
       this.lastFrame = performance.now();
     } else {
       this.state = 'menu';
@@ -861,15 +898,36 @@ export class Game {
             this.chatUI.setVisible(visible);
           }
         },
-        onNextMusic: () => this.audioManager.nextMusicTrack()
+        onNextMusic: () => this.audioManager.nextMusicTrack(),
+        onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle)
       },
       {
         chatEnabled: this.chatEnabled,
         inMatch,
         deathCameraEnabled: this.deathCameraEnabled,
-        hudDisplaySettings: this.hud.getDisplaySettings()
+        hudDisplaySettings: this.hud.getDisplaySettings(),
+        holeRimColor: this.holeRimColor,
+        holeRimStyle: this.holeRimStyle
       }
     );
+  }
+
+  private applyHoleAppearance(rimColor: string, rimStyle: HoleRimStyle): void {
+    this.holeRimColor = rimColor;
+    this.holeRimStyle = rimStyle;
+    const local = this.playerManager.getLocalPlayer();
+    if (local) {
+      local.rimColor = rimColor;
+      local.rimStyle = rimStyle;
+    }
+    if (this.currentConfig) {
+      this.currentConfig.holeRimColor = rimColor;
+      this.currentConfig.holeRimStyle = rimStyle;
+    }
+    const name = this.playerName || this.profileStore.load()?.playerName;
+    if (name) {
+      this.profileStore.updateAppearance(name, rimColor, rimStyle);
+    }
   }
 
   private handleEscape(): void {
@@ -983,6 +1041,7 @@ export class Game {
     this.lastLocalHoleKillAt = 0;
     this.sceneManager?.clearWorld();
     this.audioManager.stopMusic();
+    this.inputManager?.setTouchControlsVisible(false);
     this.hideDeathNotice();
     this.hideKillNotice();
     if (wasMultiplayer) {

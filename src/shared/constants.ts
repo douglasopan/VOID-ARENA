@@ -79,6 +79,13 @@ export const RIM_COLORS = [
   '#facc15'
 ];
 
+export const HOLE_RIM_STYLE_OPTIONS = [
+  { value: 'neon', label: 'Neon' },
+  { value: 'classic', label: 'Classic' },
+  { value: 'double', label: 'Double' },
+  { value: 'clean', label: 'Clean' }
+] as const;
+
 export const POWERUP_SETTINGS = {
   magnet: {
     label: 'Magnet Field',

@@ -1,4 +1,6 @@
 import type { AudioManager } from '../audio/AudioManager';
+import { HOLE_RIM_STYLE_OPTIONS, RIM_COLORS } from '../shared/constants';
+import type { HoleRimStyle } from '../shared/types';
 import type { HudDisplayKey, HudDisplaySettings } from './HUD';
 
 export interface PauseCallbacks {
@@ -8,6 +10,7 @@ export interface PauseCallbacks {
   onDeathCameraToggle?: (enabled: boolean) => void;
   onHudDisplayToggle?: (key: HudDisplayKey, visible: boolean) => void;
   onNextMusic?: () => void;
+  onHoleAppearanceChange?: (rimColor: string, rimStyle: HoleRimStyle) => void;
 }
 
 export class PauseMenu {
@@ -25,6 +28,8 @@ export class PauseMenu {
       inMatch: boolean;
       deathCameraEnabled?: boolean;
       hudDisplaySettings?: HudDisplaySettings;
+      holeRimColor?: string;
+      holeRimStyle?: HoleRimStyle;
     }
   ): void {
     this.hide();
@@ -52,6 +57,29 @@ export class PauseMenu {
           <div class="field">
             <label>Death camera</label>
             <button class="toggle death-camera-toggle ${options.deathCameraEnabled !== false ? 'active' : ''}">${options.deathCameraEnabled !== false ? 'Enabled' : 'Disabled'}</button>
+          </div>
+          <div class="field hole-appearance-field">
+            <label>Hole border</label>
+            <div class="rim-swatch-grid">
+              ${RIM_COLORS.map((color) => `
+                <button
+                  class="rim-swatch ${color === (options.holeRimColor ?? RIM_COLORS[0]) ? 'active' : ''}"
+                  type="button"
+                  data-rim-color="${color}"
+                  aria-label="Hole border color ${color}"
+                  style="--rim-color: ${color}"
+                ></button>
+              `).join('')}
+            </div>
+            <div class="segmented rim-style-segment">
+              ${HOLE_RIM_STYLE_OPTIONS.map((style) => `
+                <button
+                  class="${style.value === (options.holeRimStyle ?? 'neon') ? 'active' : ''}"
+                  type="button"
+                  data-rim-style="${style.value}"
+                >${style.label}</button>
+              `).join('')}
+            </div>
           </div>
           ${hudSettings ? `
             <div class="field hud-options-field">
@@ -108,6 +136,25 @@ export class PauseMenu {
       deathCameraToggle.classList.toggle('active', deathCameraEnabled);
       deathCameraToggle.textContent = deathCameraEnabled ? 'Enabled' : 'Disabled';
       callbacks.onDeathCameraToggle?.(deathCameraEnabled);
+    });
+    let rimColor = options.holeRimColor ?? RIM_COLORS[0];
+    let rimStyle: HoleRimStyle = options.holeRimStyle ?? 'neon';
+    const emitHoleAppearance = (): void => callbacks.onHoleAppearanceChange?.(rimColor, rimStyle);
+    element.querySelectorAll<HTMLButtonElement>('.rim-swatch').forEach((button) => {
+      button.addEventListener('click', () => {
+        rimColor = button.dataset.rimColor || RIM_COLORS[0];
+        element.querySelectorAll('.rim-swatch').forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+        emitHoleAppearance();
+      });
+    });
+    element.querySelectorAll<HTMLButtonElement>('.rim-style-segment button').forEach((button) => {
+      button.addEventListener('click', () => {
+        rimStyle = (button.dataset.rimStyle as HoleRimStyle | undefined) ?? 'neon';
+        element.querySelectorAll('.rim-style-segment button').forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+        emitHoleAppearance();
+      });
     });
     element.querySelectorAll<HTMLButtonElement>('.hud-toggle-row').forEach((button) => {
       button.addEventListener('click', () => {

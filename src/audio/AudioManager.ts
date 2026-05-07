@@ -483,7 +483,7 @@ export class AudioManager {
   } {
     if (kind === 'pedestrian' || category === 'pedestrian') {
       return {
-        gain: 0.035,
+        gain: 0.052,
         rateMin: 0.9,
         rateMax: 1.02,
         fadeInSeconds: 0.06,
@@ -494,7 +494,7 @@ export class AudioManager {
 
     if (kind === 'car' || kind === 'truck' || category === 'traffic') {
       return {
-        gain: 0.15,
+        gain: 0.22,
         rateMin: 0.9,
         rateMax: 1.02,
         fadeInSeconds: 0.045,
@@ -505,7 +505,7 @@ export class AudioManager {
 
     if (kind === 'tree' || kind === 'planter' || category === 'nature') {
       return {
-        gain: 0.12,
+        gain: 0.18,
         rateMin: 0.9,
         rateMax: 1.02,
         fadeInSeconds: 0.045,
@@ -515,7 +515,7 @@ export class AudioManager {
     }
 
     return {
-      gain: 0.12,
+      gain: 0.17,
       rateMin: 0.9,
       rateMax: 1.02,
       fadeInSeconds: 0.045,

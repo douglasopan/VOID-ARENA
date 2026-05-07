@@ -8,7 +8,7 @@ import {
   STAMINA_REGEN_PER_SECOND,
   START_RADIUS
 } from '../shared/constants';
-import type { PowerUpType } from '../shared/types';
+import type { HoleRimStyle, PowerUpType } from '../shared/types';
 import { calculateRadius, calculateSpeed } from './BalanceConfig';
 import type { BotDifficulty } from './BotDifficulty';
 
@@ -24,6 +24,7 @@ export class Player {
   name: string;
   isBot: boolean;
   rimColor: string;
+  rimStyle: HoleRimStyle;
   radius = START_RADIUS;
   mass = 0;
   score = 0;
@@ -48,6 +49,7 @@ export class Player {
     name: string;
     isBot: boolean;
     rimColor: string;
+    rimStyle?: HoleRimStyle;
     position: THREE.Vector3;
     botDifficulty?: BotDifficulty;
   }) {
@@ -55,6 +57,7 @@ export class Player {
     this.name = options.name;
     this.isBot = options.isBot;
     this.rimColor = options.rimColor;
+    this.rimStyle = options.rimStyle ?? 'neon';
     this.position = options.position.clone();
     this.botDifficulty = options.botDifficulty;
   }

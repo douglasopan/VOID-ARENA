@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RIM_COLORS } from '../shared/constants';
-import type { LeaderboardEntry } from '../shared/types';
+import type { HoleRimStyle, LeaderboardEntry } from '../shared/types';
 import type { BotDifficulty } from './BotDifficulty';
 import { MatchMode } from './MatchMode';
 import { Player } from './Player';
@@ -9,12 +9,18 @@ export class PlayerManager {
   private readonly players = new Map<string, Player>();
   localPlayerId = '';
 
-  createLocalPlayer(name: string, position: THREE.Vector3, id = 'local-player'): Player {
+  createLocalPlayer(
+    name: string,
+    position: THREE.Vector3,
+    id = 'local-player',
+    appearance: { rimColor?: string; rimStyle?: HoleRimStyle } = {}
+  ): Player {
     const player = new Player({
       id,
       name,
       isBot: false,
-      rimColor: RIM_COLORS[0],
+      rimColor: appearance.rimColor ?? RIM_COLORS[0],
+      rimStyle: appearance.rimStyle ?? 'neon',
       position
     });
     this.localPlayerId = player.id;
@@ -22,12 +28,19 @@ export class PlayerManager {
     return player;
   }
 
-  createRemotePlayer(id: string, name: string, position: THREE.Vector3, colorIndex: number): Player {
+  createRemotePlayer(
+    id: string,
+    name: string,
+    position: THREE.Vector3,
+    colorIndex: number,
+    appearance: { rimColor?: string; rimStyle?: HoleRimStyle } = {}
+  ): Player {
     const player = new Player({
       id,
       name,
       isBot: false,
-      rimColor: RIM_COLORS[colorIndex % RIM_COLORS.length],
+      rimColor: appearance.rimColor ?? RIM_COLORS[colorIndex % RIM_COLORS.length],
+      rimStyle: appearance.rimStyle ?? 'neon',
       position
     });
     this.players.set(player.id, player);
@@ -46,6 +59,7 @@ export class PlayerManager {
       name,
       isBot: true,
       rimColor: RIM_COLORS[colorIndex % RIM_COLORS.length],
+      rimStyle: colorIndex % 3 === 0 ? 'double' : colorIndex % 2 === 0 ? 'classic' : 'neon',
       position,
       botDifficulty
     });

@@ -23,6 +23,10 @@ export class NetworkClient {
     return this.socket?.id ?? null;
   }
 
+  get serverUrl(): string {
+    return this.baseUrl;
+  }
+
   async connect(): Promise<void> {
     if (this.socket?.connected) {
       return;

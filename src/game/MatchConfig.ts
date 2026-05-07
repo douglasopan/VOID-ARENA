@@ -1,5 +1,5 @@
 import { MATCH_DURATION_SECONDS } from '../shared/constants';
-import type { GraphicsQuality, MapSize } from '../shared/types';
+import type { GraphicsQuality, HoleRimStyle, MapSize } from '../shared/types';
 import type { BotDifficultyMix } from './BotDifficulty';
 import { MatchMode } from './MatchMode';
 
@@ -15,6 +15,8 @@ export interface MatchConfig {
   graphicsQuality: GraphicsQuality;
   cameraZoom: number;
   deathCameraEnabled: boolean;
+  holeRimColor: string;
+  holeRimStyle: HoleRimStyle;
   multiplayer: boolean;
   objectDensityMultiplier: number;
   powerUpCount: number;
@@ -39,6 +41,8 @@ export function createDefaultMatchConfig(playerName = ''): MatchConfig {
     graphicsQuality: 'balanced',
     cameraZoom: 1,
     deathCameraEnabled: true,
+    holeRimColor: '#5eead4',
+    holeRimStyle: 'neon',
     multiplayer: false,
     objectDensityMultiplier: 1,
     powerUpCount: 14,

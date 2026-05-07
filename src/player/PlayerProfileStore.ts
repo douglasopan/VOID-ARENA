@@ -1,4 +1,6 @@
 import type { MatchHistoryEntry, PlayerProfile } from '../shared/types';
+import type { HoleRimStyle } from '../shared/types';
+import { RIM_COLORS } from '../shared/constants';
 
 const PROFILE_STORAGE_KEY = 'void-arena-profile-v1';
 const MAX_HISTORY_ENTRIES = 60;
@@ -11,12 +13,16 @@ export class PlayerProfileStore {
         return null;
       }
 
-      const parsed = JSON.parse(raw) as PlayerProfile;
+      const parsed = JSON.parse(raw) as Partial<PlayerProfile>;
       if (!parsed.accountId || !parsed.playerName || !Array.isArray(parsed.matchHistory)) {
         return null;
       }
 
-      return parsed;
+      return {
+        ...parsed,
+        holeRimColor: parsed.holeRimColor || RIM_COLORS[0],
+        holeRimStyle: parsed.holeRimStyle || 'neon'
+      } as PlayerProfile;
     } catch {
       return null;
     }
@@ -38,6 +44,8 @@ export class PlayerProfileStore {
     const profile: PlayerProfile = {
       accountId: this.createId(),
       playerName,
+      holeRimColor: RIM_COLORS[0],
+      holeRimStyle: 'neon',
       createdAt: now,
       updatedAt: now,
       matchHistory: []
@@ -68,6 +76,18 @@ export class PlayerProfileStore {
 
   recent(limit = 8): MatchHistoryEntry[] {
     return this.load()?.matchHistory.slice(0, limit) ?? [];
+  }
+
+  updateAppearance(playerName: string, holeRimColor: string, holeRimStyle: HoleRimStyle): PlayerProfile {
+    const profile = this.getOrCreate(playerName);
+    const next: PlayerProfile = {
+      ...profile,
+      holeRimColor,
+      holeRimStyle,
+      updatedAt: new Date().toISOString()
+    };
+    this.save(next);
+    return next;
   }
 
   private save(profile: PlayerProfile): void {
