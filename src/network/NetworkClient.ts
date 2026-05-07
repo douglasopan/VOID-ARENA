@@ -9,7 +9,7 @@ import type { ChatMessage } from '../shared/types';
 
 export class NetworkClient {
   private socket: Socket | null = null;
-  private readonly baseUrl: string;
+  private baseUrl: string;
 
   constructor(baseUrl = resolveMultiplayerServerUrl()) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
@@ -25,6 +25,16 @@ export class NetworkClient {
 
   get serverUrl(): string {
     return this.baseUrl;
+  }
+
+  setServerUrl(url: string): void {
+    const nextUrl = url.trim().replace(/\/+$/, '');
+    if (!nextUrl) {
+      return;
+    }
+    this.disconnect();
+    this.baseUrl = nextUrl;
+    window.localStorage.setItem(MULTIPLAYER_SERVER_STORAGE_KEY, nextUrl);
   }
 
   async connect(): Promise<void> {
@@ -120,14 +130,16 @@ export class NetworkClient {
   }
 }
 
+const MULTIPLAYER_SERVER_STORAGE_KEY = 'void-arena-multiplayer-server-url';
+
 function resolveMultiplayerServerUrl(): string {
   const urlParam = new URLSearchParams(window.location.search).get('server')?.trim();
   if (urlParam) {
-    window.localStorage.setItem('void-arena-multiplayer-server-url', urlParam);
+    window.localStorage.setItem(MULTIPLAYER_SERVER_STORAGE_KEY, urlParam);
     return urlParam;
   }
 
-  const saved = window.localStorage.getItem('void-arena-multiplayer-server-url')?.trim();
+  const saved = window.localStorage.getItem(MULTIPLAYER_SERVER_STORAGE_KEY)?.trim();
   if (saved) {
     return saved;
   }

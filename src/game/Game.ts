@@ -291,10 +291,17 @@ export class Game {
       await this.joinMultiplayerRoom(room, config.playerName, config);
     } catch (error) {
       console.error(error);
-      window.alert(
-        `Could not reach the Void Arena multiplayer server at ${this.networkClient.serverUrl}.\n\n` +
-          'For production, set VITE_MULTIPLAYER_SERVER_URL on Vercel to a public Socket.IO server hosted on a realtime Node/WebSocket platform.'
+      const serverUrl = window.prompt(
+        `Servidor multiplayer indisponivel em:\n${this.networkClient.serverUrl}\n\n` +
+          'Para o multiplayer online funcionar na Vercel, cole aqui a URL publica do servidor Socket.IO. ' +
+          'Exemplo: https://void-arena-realtime.seudominio.com\n\n' +
+          'Deixe vazio para voltar ao menu.',
+        this.networkClient.serverUrl === window.location.origin ? '' : this.networkClient.serverUrl
       );
+      if (serverUrl?.trim()) {
+        this.networkClient.setServerUrl(serverUrl);
+        await this.hostMultiplayerMatch(config);
+      }
     }
   }
 

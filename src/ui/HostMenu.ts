@@ -29,7 +29,7 @@ export class HostMenu {
     element.innerHTML = `
       <section class="menu-panel">
         <h2>Host Match</h2>
-        <p class="subtitle">This creates a local room preview now and matches the data model intended for the server room manager.</p>
+        <p class="subtitle">Creates an online room when a public Socket.IO server is configured. On Vercel, the frontend must point to that realtime server URL.</p>
         <div class="form-grid">
           <label class="field">Room name<input class="room-name-input" maxlength="28" value="${state.roomName}" /></label>
           ${this.segment('Max players', 'maxPlayers', [
