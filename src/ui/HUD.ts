@@ -105,6 +105,7 @@ export class HUD {
     element.querySelector<HTMLButtonElement>('.settings-close')?.addEventListener('click', () => {
       this.settingsPanel?.classList.add('hidden');
     });
+    element.addEventListener('pointerup', (event) => this.handleHudPointer(event));
     element.querySelectorAll<HTMLButtonElement>('[data-display-toggle]').forEach((button) => {
       button.addEventListener('click', () => {
         const key = button.dataset.displayToggle as HudDisplayKey | undefined;
@@ -113,11 +114,11 @@ export class HUD {
         }
       });
     });
-    element.querySelectorAll<HTMLInputElement>('.hud-toggle').forEach((input) => {
-      input.addEventListener('change', () => {
-        const key = input.dataset.displayKey as HudDisplayKey | undefined;
+    element.querySelectorAll<HTMLButtonElement>('.hud-toggle-row').forEach((button) => {
+      button.addEventListener('click', () => {
+        const key = button.dataset.displayKey as HudDisplayKey | undefined;
         if (key) {
-          this.setDisplaySetting(key, input.checked);
+          this.setDisplaySetting(key, !this.displaySettings[key]);
         }
       });
     });
@@ -225,10 +226,10 @@ export class HUD {
 
   private toggleMarkup(key: HudDisplayKey, label: string): string {
     return `
-      <label class="hud-toggle-row">
+      <button class="hud-toggle-row" type="button" data-display-key="${key}" aria-pressed="${this.displaySettings[key]}">
         <span>${label}</span>
-        <input class="hud-toggle" type="checkbox" data-display-key="${key}" ${this.displaySettings[key] ? 'checked' : ''} />
-      </label>
+        <strong>${this.displaySettings[key] ? 'Hide' : 'Show'}</strong>
+      </button>
     `;
   }
 
@@ -243,12 +244,34 @@ export class HUD {
       const isEmptyPowerUpTray = key === 'powerups' && item.classList.contains('empty');
       item.classList.toggle('hidden', !visible || isEmptyPowerUpTray);
     });
-    this.element.querySelectorAll<HTMLInputElement>('.hud-toggle').forEach((input) => {
-      const key = input.dataset.displayKey as HudDisplayKey | undefined;
+    this.element.querySelectorAll<HTMLButtonElement>('.hud-toggle-row').forEach((button) => {
+      const key = button.dataset.displayKey as HudDisplayKey | undefined;
       if (key) {
-        input.checked = this.displaySettings[key];
+        button.classList.toggle('active', this.displaySettings[key]);
+        button.setAttribute('aria-pressed', String(this.displaySettings[key]));
+        const value = button.querySelector('strong');
+        if (value) {
+          value.textContent = this.displaySettings[key] ? 'Hide' : 'Show';
+        }
       }
     });
+  }
+
+  private handleHudPointer(event: PointerEvent): void {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const closeButton = target.closest<HTMLElement>('[data-display-toggle]');
+    if (closeButton && this.element?.contains(closeButton)) {
+      const key = closeButton.dataset.displayToggle as HudDisplayKey | undefined;
+      if (key) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.setDisplaySetting(key, false);
+      }
+    }
   }
 
   private loadDisplaySettings(): HudDisplaySettings {

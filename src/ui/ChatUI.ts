@@ -43,11 +43,17 @@ export class ChatUI {
         this.sendCurrentMessage();
       }
     });
-    element.querySelector<HTMLButtonElement>('.close-chat')?.addEventListener('click', () => {
+    const closeChat = (): void => {
       this.setVisible(false);
       this.callbacks?.onVisibilityChange?.(false);
+    };
+    element.querySelector<HTMLButtonElement>('.close-chat')?.addEventListener('click', closeChat);
+    element.querySelector<HTMLButtonElement>('.close-chat')?.addEventListener('pointerup', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeChat();
     });
-    this.setEnabled(this.enabled);
+    this.applyVisibility();
   }
 
   clear(): void {

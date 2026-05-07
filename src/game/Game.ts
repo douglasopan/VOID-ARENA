@@ -36,6 +36,7 @@ export class Game {
   private sceneLayer!: HTMLDivElement;
   private uiLayer!: HTMLDivElement;
   private deathNotice!: HTMLDivElement;
+  private killNotice!: HTMLDivElement;
   private sceneManager!: SceneManager;
   private inputManager!: InputManager;
   private readonly audioManager = new AudioManager();
@@ -75,6 +76,9 @@ export class Game {
   private networkSendAccumulator = 0;
   private readonly appliedNetworkSwallows = new Set<string>();
   private deathNoticeTimer = 0;
+  private killNoticeTimer = 0;
+  private localHoleCombo = 0;
+  private lastLocalHoleKillAt = 0;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -88,7 +92,9 @@ export class Game {
     this.uiLayer.className = 'ui-layer';
     this.deathNotice = document.createElement('div');
     this.deathNotice.className = 'death-notice hidden';
-    this.uiLayer.appendChild(this.deathNotice);
+    this.killNotice = document.createElement('div');
+    this.killNotice.className = 'kill-notice hidden';
+    this.uiLayer.append(this.deathNotice, this.killNotice);
     this.shell.append(this.sceneLayer, this.uiLayer);
     this.root.appendChild(this.shell);
     this.bindUiButtonSounds();
@@ -448,6 +454,9 @@ export class Game {
             this.startDeathCamera(event.attacker.id);
           } else {
             this.audioManager.playHoleSwallow();
+          }
+          if (event.attacker.id === this.playerManager.localPlayerId && event.victim.id !== this.playerManager.localPlayerId) {
+            this.showKillNotice(event.victim.name);
           }
           this.addSystemMessage(`${event.victim.name} was swallowed by ${event.attacker.name}`);
           this.broadcastHoleSwallow(event.attacker.id, event.victim.id);
@@ -946,9 +955,12 @@ export class Game {
     this.playerManager.clear();
     this.botManager.clear();
     this.appliedNetworkSwallows.clear();
+    this.localHoleCombo = 0;
+    this.lastLocalHoleKillAt = 0;
     this.sceneManager?.clearWorld();
     this.audioManager.stopMusic();
     this.hideDeathNotice();
+    this.hideKillNotice();
     if (wasMultiplayer) {
       this.networkClient.disconnect();
       this.networkHooksBound = false;
@@ -1018,6 +1030,41 @@ export class Game {
     window.clearTimeout(this.deathNoticeTimer);
     this.deathNotice?.classList.remove('show');
     this.deathNotice?.classList.add('hidden');
+  }
+
+  private showKillNotice(victimName: string): void {
+    window.clearTimeout(this.killNoticeTimer);
+    const now = performance.now() / 1000;
+    this.localHoleCombo = now - this.lastLocalHoleKillAt <= 3 ? this.localHoleCombo + 1 : 1;
+    this.lastLocalHoleKillAt = now;
+
+    const main = document.createElement('div');
+    main.className = 'kill-notice-main';
+    main.textContent = `VOCE ENGOLIU ${victimName}`;
+
+    const combo = document.createElement('div');
+    combo.className = 'kill-notice-combo';
+    combo.textContent = this.localHoleCombo > 1 ? `${this.localHoleCombo}x COMBO` : 'VOID FEED';
+
+    const sub = document.createElement('div');
+    sub.className = 'kill-notice-sub';
+    sub.textContent =
+      this.localHoleCombo > 1
+        ? 'Continue matando em ate 3s para aumentar a sequencia'
+        : 'Mate outro void em ate 3s para ativar combo';
+
+    this.killNotice.replaceChildren(main, combo, sub);
+    this.killNotice.classList.remove('hidden');
+    this.killNotice.classList.remove('show');
+    void this.killNotice.offsetWidth;
+    this.killNotice.classList.add('show');
+    this.killNoticeTimer = window.setTimeout(() => this.hideKillNotice(), 1850);
+  }
+
+  private hideKillNotice(): void {
+    window.clearTimeout(this.killNoticeTimer);
+    this.killNotice?.classList.remove('show');
+    this.killNotice?.classList.add('hidden');
   }
 
   private bindCameraZoomControls(): void {
