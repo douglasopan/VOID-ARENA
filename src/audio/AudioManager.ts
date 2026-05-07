@@ -21,6 +21,7 @@ export class AudioManager {
   private activeMusicKey: string | null = null;
   private activeMusicAssets: string[] = [];
   private activeMusicIndex = 0;
+  private supportsOggOpus: boolean | null = null;
   private readonly activeSfx = new Set<HTMLAudioElement>();
   private lastHoverSfxAt = 0;
 
@@ -182,11 +183,13 @@ export class AudioManager {
     this.playMusicAsset(key, assets, Math.floor(Math.random() * assets.length));
   }
 
-  private playMusicAsset(key: string, assets: string[], index: number): void {
+  private playMusicAsset(key: string, assets: string[], index: number, forceOriginalAsset = false): void {
     this.stopMusic();
     this.activeMusicAssets = [...assets];
     this.activeMusicIndex = Math.max(0, Math.min(assets.length - 1, index));
-    const audio = new Audio(assets[this.activeMusicIndex]);
+    const requestedAsset = assets[this.activeMusicIndex];
+    const sourceAsset = forceOriginalAsset ? requestedAsset : this.getPreferredAudioPath(requestedAsset);
+    const audio = new Audio(sourceAsset);
     audio.loop = true;
     audio.preload = 'auto';
     audio.volume = this.muted ? 0 : this.musicVolume;
@@ -197,6 +200,9 @@ export class AudioManager {
       if (this.musicElement === audio) {
         this.musicElement = null;
         this.activeMusicKey = null;
+      }
+      if (!forceOriginalAsset && sourceAsset !== requestedAsset) {
+        this.playMusicAsset(key, assets, index, true);
       }
     });
   }
@@ -292,13 +298,15 @@ export class AudioManager {
       fadeOutSeconds?: number;
       fadeAway?: boolean;
       lowPassFrequency?: number;
-    }
+    },
+    forceOriginalAsset = false
   ): void {
     if (this.muted) {
       return;
     }
 
-    const audio = new Audio(path);
+    const sourcePath = forceOriginalAsset ? path : this.getPreferredAudioPath(path);
+    const audio = new Audio(sourcePath);
     const targetVolume = this.clamp01(this.sfxVolume * gain);
     audio.volume = fade?.fadeInSeconds ? 0 : targetVolume;
     audio.playbackRate = playbackRate;
@@ -342,6 +350,10 @@ export class AudioManager {
       }
     }).catch((error) => {
       release();
+      if (!forceOriginalAsset && sourcePath !== path) {
+        this.playSfxAsset(path, gain, playbackRate, onError, fade, true);
+        return;
+      }
       onError();
       void error;
     });
@@ -425,6 +437,25 @@ export class AudioManager {
 
   private randomRate(min: number, max: number): number {
     return min + Math.random() * (max - min);
+  }
+
+  private getPreferredAudioPath(path: string): string {
+    if (!path.toLowerCase().endsWith('.mp3') || !this.canPlayOggOpus()) {
+      return path;
+    }
+
+    return `${path.slice(0, -4)}.ogg`;
+  }
+
+  private canPlayOggOpus(): boolean {
+    if (this.supportsOggOpus !== null) {
+      return this.supportsOggOpus;
+    }
+
+    const audio = document.createElement('audio');
+    const support = audio.canPlayType('audio/ogg; codecs="opus"');
+    this.supportsOggOpus = support === 'probably' || support === 'maybe';
+    return this.supportsOggOpus;
   }
 
   private pickRandom<T>(items: T[]): T {
