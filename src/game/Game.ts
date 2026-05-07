@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { AudioManager } from '../audio/AudioManager';
-import { detectLanguage } from '../i18n/I18n';
+import { detectLanguage, powerUpLabelKey, t, tf } from '../i18n/I18n';
 import { BOT_NAMES, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
 import type { ChatMessage, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary } from '../shared/types';
 import { InputManager } from '../input/InputManager';
@@ -15,6 +15,7 @@ import { HUD } from '../ui/HUD';
 import { MainMenu } from '../ui/MainMenu';
 import { MatchSetupMenu } from '../ui/MatchSetupMenu';
 import { PauseMenu } from '../ui/PauseMenu';
+import { SoloPresetMenu, type SoloPreset } from '../ui/SoloPresetMenu';
 import { BotController } from './BotController';
 import { BotManager } from './BotManager';
 import { BOT_DIFFICULTY_PROFILES, getBotDifficultyForIndex } from './BotDifficulty';
@@ -50,6 +51,7 @@ export class Game {
   private matchSetupMenu!: MatchSetupMenu;
   private findGamesMenu!: FindGamesMenu;
   private hostMenu!: HostMenu;
+  private soloPresetMenu!: SoloPresetMenu;
   private pauseMenu!: PauseMenu;
   private chatUI!: ChatUI;
   private hud!: HUD;
@@ -114,6 +116,7 @@ export class Game {
     this.matchSetupMenu = new MatchSetupMenu(this.uiLayer);
     this.findGamesMenu = new FindGamesMenu(this.uiLayer);
     this.hostMenu = new HostMenu(this.uiLayer);
+    this.soloPresetMenu = new SoloPresetMenu(this.uiLayer);
     this.pauseMenu = new PauseMenu(this.uiLayer, this.audioManager);
     this.chatUI = new ChatUI(this.uiLayer);
     this.hud = new HUD(this.uiLayer);
@@ -188,7 +191,7 @@ export class Game {
     }
     this.mainMenu.show(
       {
-        onStartSolo: (name) => this.showSoloSetup(this.activateProfile(name)),
+        onStartSolo: (name) => this.showSoloPresets(this.activateProfile(name)),
         onFindGames: (name) => void this.showFindGames(this.activateProfile(name)),
         onHostMatch: (name) => this.showHostMatch(this.activateProfile(name)),
         onSettings: () => this.showSettingsOverlay(false),
@@ -203,20 +206,79 @@ export class Game {
     );
   }
 
-  private showSoloSetup(playerName: string): void {
+  private showSoloPresets(playerName: string): void {
+    this.playerName = playerName;
+    this.state = 'setup';
+    this.audioManager.startMenuMusic();
+    this.hideMenus();
+    this.soloPresetMenu.show({
+      onPreset: (preset) => this.startMatch(this.createSoloPresetConfig(playerName, preset)),
+      onCustom: () => this.showCustomSoloSetup(playerName),
+      onBack: () => this.showMainMenu()
+    }, this.language);
+  }
+
+  private showCustomSoloSetup(playerName: string): void {
     this.playerName = playerName;
     this.state = 'setup';
     this.audioManager.startMenuMusic();
     this.hideMenus();
     this.matchSetupMenu.show(playerName, {
       onStart: (config) => this.startMatch(config),
-      onBack: () => this.showMainMenu()
+      onBack: () => this.showSoloPresets(playerName)
     }, {
       cameraZoom: this.cameraZoom,
       deathCameraEnabled: this.deathCameraEnabled,
       holeRimColor: this.holeRimColor,
       holeRimStyle: this.holeRimStyle
-    });
+    }, this.language);
+  }
+
+  private createSoloPresetConfig(playerName: string, preset: SoloPreset): MatchConfig {
+    const config = {
+      ...createDefaultMatchConfig(playerName),
+      holeRimColor: this.holeRimColor,
+      holeRimStyle: this.holeRimStyle,
+      cameraZoom: this.cameraZoom,
+      deathCameraEnabled: this.deathCameraEnabled
+    };
+
+    switch (preset) {
+      case 'easy':
+        return {
+          ...config,
+          mapSize: 'small',
+          durationSeconds: 120,
+          botCount: 5,
+          botDifficultyMix: 'relaxed',
+          objectDensityMultiplier: 0.82,
+          powerUpCount: 18,
+          respawnSafeRadius: 14
+        };
+      case 'hard':
+        return {
+          ...config,
+          mapSize: 'large',
+          durationSeconds: 300,
+          botCount: 35,
+          botDifficultyMix: 'competitive',
+          objectDensityMultiplier: 1.35,
+          powerUpCount: 72,
+          respawnSafeRadius: 10
+        };
+      case 'medium':
+      default:
+        return {
+          ...config,
+          mapSize: 'medium',
+          durationSeconds: 180,
+          botCount: 14,
+          botDifficultyMix: 'balanced',
+          objectDensityMultiplier: 1,
+          powerUpCount: 36,
+          respawnSafeRadius: 12
+        };
+    }
   }
 
   private async showFindGames(playerName: string): Promise<void> {
@@ -250,7 +312,7 @@ export class Game {
         this.startMatch(config);
       },
       onBack: () => this.showMainMenu()
-    });
+    }, this.language);
   }
 
   private showHostMatch(playerName: string): void {
@@ -266,7 +328,7 @@ export class Game {
       deathCameraEnabled: this.deathCameraEnabled,
       holeRimColor: this.holeRimColor,
       holeRimStyle: this.holeRimStyle
-    });
+    }, this.language);
   }
 
   private async hostMultiplayerMatch(config: MatchConfig): Promise<void> {
@@ -292,10 +354,7 @@ export class Game {
     } catch (error) {
       console.error(error);
       const serverUrl = window.prompt(
-        `Servidor multiplayer indisponivel em:\n${this.networkClient.serverUrl}\n\n` +
-          'Para o multiplayer online funcionar na Vercel, cole aqui a URL publica do servidor Socket.IO. ' +
-          'Exemplo: https://void-arena-realtime.seudominio.com\n\n' +
-          'Deixe vazio para voltar ao menu.',
+        tf(this.language, 'serverUnavailablePrompt', { url: this.networkClient.serverUrl }),
         this.networkClient.serverUrl === window.location.origin ? '' : this.networkClient.serverUrl
       );
       if (serverUrl?.trim()) {
@@ -319,7 +378,7 @@ export class Game {
       this.bindNetworkHooks();
       const joined = await this.networkClient.joinRoom(room.id, playerName);
       if (!joined.ok) {
-        window.alert(joined.reason || 'Could not join room');
+        window.alert(joined.reason || t(this.language, 'couldNotJoinRoom'));
         return;
       }
 
@@ -346,7 +405,7 @@ export class Game {
       this.startMatch(config);
     } catch (error) {
       console.error(error);
-      window.alert('Could not join the multiplayer room.');
+      window.alert(t(this.language, 'couldNotJoinRoom'));
     }
   }
 
@@ -401,7 +460,7 @@ export class Game {
       this.botManager.addBotController(new BotController(bot, difficulty));
     }
 
-    this.sceneManager.loadWorld(this.world);
+    this.sceneManager.loadWorld(this.world, this.language);
     this.swallowSystem = new SwallowSystem(this.world, this.playerManager, this.currentConfig);
     this.respawnSystem = new RespawnSystem(this.world, this.playerManager, this.currentConfig);
     this.timer =
@@ -413,17 +472,17 @@ export class Game {
       onZoomIn: () => this.adjustCameraZoom(-0.08),
       onZoomOut: () => this.adjustCameraZoom(0.08),
       onChatVisibilityChange: (visible) => this.chatUI.setVisible(visible)
-    });
+    }, this.language);
     this.chatUI.show({
       onSend: (text) => this.addPlayerChat(text),
       onVisibilityChange: (visible) => this.hud.setDisplaySetting('chat', visible)
-    });
+    }, this.language);
     this.chatUI.clear();
     this.chatUI.setEnabled(this.chatEnabled);
     this.chatUI.setVisible(this.hud.getDisplaySetting('chat'));
-    this.addSystemMessage('Match started');
+    this.addSystemMessage(t(this.language, 'matchStarted'));
     if (this.currentConfig.roomName) {
-      this.addSystemMessage(`${this.currentConfig.multiplayer ? 'Multiplayer room' : 'Local room preview'}: ${this.currentConfig.roomName}`);
+      this.addSystemMessage(`${this.currentConfig.multiplayer ? t(this.language, 'multiplayerRoom') : t(this.language, 'localRoomPreview')}: ${this.currentConfig.roomName}`);
     }
 
     this.audioManager.playMatchStart();
@@ -466,12 +525,12 @@ export class Game {
     const swallowEvents = this.swallowSystem.update(deltaSeconds, now);
     const respawnEvents = this.respawnSystem.update(now);
     this.world.updateRespawns(now, this.playerManager, this.currentConfig.respawnSafeRadius);
-    this.world.updatePowerUps(deltaSeconds, now);
+    this.world.updatePowerUps(deltaSeconds, now, this.playerManager, this.currentConfig.respawnSafeRadius);
     this.timer?.update(deltaSeconds);
 
     this.processSwallowEvents(swallowEvents);
     for (const event of respawnEvents) {
-      this.addSystemMessage(`${event.player.name} respawned`);
+      this.addSystemMessage(tf(this.language, 'respawned', { player: event.player.name }));
     }
 
     this.updateHud();
@@ -497,13 +556,13 @@ export class Game {
           if (event.attacker.id === this.playerManager.localPlayerId && event.victim.id !== this.playerManager.localPlayerId) {
             this.showKillNotice(event.victim.name);
           }
-          this.addSystemMessage(`${event.victim.name} was swallowed by ${event.attacker.name}`);
+          this.addSystemMessage(tf(this.language, 'swallowedBy', { victim: event.victim.name, attacker: event.attacker.name }));
           this.broadcastHoleSwallow(event.attacker.id, event.victim.id);
           this.maybeAnnounceSize(event.attacker.id);
           break;
         case 'holeSwallowCompleted':
           if (this.currentConfig?.matchMode === MatchMode.LastHoleStanding) {
-            this.addSystemMessage(`${event.victim.name} was eliminated`);
+            this.addSystemMessage(tf(this.language, 'eliminated', { player: event.victim.name }));
           }
           break;
       }
@@ -528,7 +587,10 @@ export class Game {
         if (distance > player.radius + powerUp.radius + 0.45) continue;
         powerUp.collect(now);
         player.addPowerUp(powerUp.type, powerUp.durationSeconds, now);
-        this.addSystemMessage(`${player.name} picked up ${powerUp.label}`);
+        this.addSystemMessage(tf(this.language, 'pickedUp', {
+          player: player.name,
+          powerup: t(this.language, powerUpLabelKey(powerUp.type))
+        }));
         if (player.id === this.playerManager.localPlayerId) {
           this.audioManager.playPowerUp(powerUp.type);
         }
@@ -585,7 +647,7 @@ export class Game {
     const previous = this.sizeAnnouncements.get(player.id) ?? 1;
     if (milestone > previous && milestone >= 2) {
       this.sizeAnnouncements.set(player.id, milestone);
-      this.addSystemMessage(`${player.name} reached size ${milestone.toFixed(1)}`);
+      this.addSystemMessage(tf(this.language, 'reachedSize', { player: player.name, size: milestone.toFixed(1) }));
     }
   }
 
@@ -626,7 +688,7 @@ export class Game {
     this.state = 'ended';
     const result = this.createMatchResult();
     this.recordMatchHistory(result);
-    this.addSystemMessage(`${result.winnerName} won the match`);
+    this.addSystemMessage(tf(this.language, 'wonMatch', { winner: result.winnerName }));
     this.audioManager.playMatchEnd();
     this.pauseMenu.hide();
     this.endScreen.show(result, {
@@ -636,7 +698,7 @@ export class Game {
         }
       },
       onMainMenu: () => this.showMainMenu()
-    }, this.profileStore.recent());
+    }, this.profileStore.recent(), this.language);
   }
 
   private createMatchResult(): MatchResult {
@@ -647,7 +709,7 @@ export class Game {
     const placement = Math.max(1, leaderboard.findIndex((entry) => entry.id === local?.id) + 1);
 
     return {
-      winnerName: winner?.name ?? 'No winner',
+      winnerName: winner?.name ?? t(this.language, 'noWinner'),
       placement,
       finalScore: local?.score ?? 0,
       finalRadius: local?.radius ?? 1,
@@ -664,7 +726,7 @@ export class Game {
     const mode = this.currentConfig.matchMode;
     const leaderboard = this.playerManager.getLeaderboard(mode);
     const local = this.playerManager.getLocalPlayer();
-    const playerName = (local?.name ?? this.playerName) || 'Player';
+    const playerName = (local?.name ?? this.playerName) || t(this.language, 'playerFallback');
     this.profileStore.getOrCreate(playerName);
     this.profileStore.recordMatch({
       ...result,
@@ -743,7 +805,7 @@ export class Game {
       attacker.addMass(Math.max(6, victim.mass * 0.28 + victim.radius * 5));
       attacker.addScore(150 + victim.score * 0.2 + victim.radius * 45);
       attacker.eliminations += 1;
-      this.addSystemMessage(`${victim.name} was swallowed by ${attacker.name}`);
+      this.addSystemMessage(tf(this.language, 'swallowedBy', { victim: victim.name, attacker: attacker.name }));
       if (victim.id === this.playerManager.localPlayerId) {
         this.audioManager.playDeath();
         this.showDeathNotice(attacker.name);
@@ -751,7 +813,7 @@ export class Game {
       }
     } else if (victim.id === this.playerManager.localPlayerId) {
       this.audioManager.playDeath();
-      this.showDeathNotice('the void');
+      this.showDeathNotice(t(this.language, 'voidFallback'));
       this.clearDeathCamera();
     }
   }
@@ -955,6 +1017,8 @@ export class Game {
 
   private applyLanguage(language: LanguageCode, playerName = this.playerName): void {
     this.language = language;
+    this.hud?.setLanguage(language);
+    this.chatUI?.setLanguage(language);
     const name = playerName || this.profileStore.load()?.playerName;
     if (name) {
       this.profileStore.updateLanguage(name, language);
@@ -1086,6 +1150,7 @@ export class Game {
     this.matchSetupMenu?.hide();
     this.findGamesMenu?.hide();
     this.hostMenu?.hide();
+    this.soloPresetMenu?.hide();
     this.pauseMenu?.hide();
   }
 
@@ -1120,17 +1185,17 @@ export class Game {
     });
     this.menuWorld = new World(mapData);
     this.sceneManager.setGraphicsQuality('balanced');
-    this.sceneManager.loadWorld(this.menuWorld);
+    this.sceneManager.loadWorld(this.menuWorld, this.language);
   }
 
   private showDeathNotice(attackerName: string): void {
     window.clearTimeout(this.deathNoticeTimer);
     const phrases = [
-      `Void ${attackerName} got you`,
-      `${attackerName} pulled you into the void`,
-      `You slipped into ${attackerName}'s void`,
-      `${attackerName} swallowed your arena`,
-      `The void belongs to ${attackerName}`
+      tf(this.language, 'deathPhrase1', { attacker: attackerName }),
+      tf(this.language, 'deathPhrase2', { attacker: attackerName }),
+      tf(this.language, 'deathPhrase3', { attacker: attackerName }),
+      tf(this.language, 'deathPhrase4', { attacker: attackerName }),
+      tf(this.language, 'deathPhrase5', { attacker: attackerName })
     ];
     this.deathNotice.textContent = phrases[Math.floor(Math.random() * phrases.length)];
     this.deathNotice.classList.remove('hidden');
@@ -1154,18 +1219,20 @@ export class Game {
 
     const main = document.createElement('div');
     main.className = 'kill-notice-main';
-    main.textContent = `VOCE ENGOLIU ${victimName}`;
+    main.textContent = tf(this.language, 'killNoticeMain', { victim: victimName });
 
     const combo = document.createElement('div');
     combo.className = 'kill-notice-combo';
-    combo.textContent = this.localHoleCombo > 1 ? `${this.localHoleCombo}x COMBO` : 'VOID FEED';
+    combo.textContent = this.localHoleCombo > 1
+      ? tf(this.language, 'killNoticeCombo', { count: this.localHoleCombo })
+      : t(this.language, 'killNoticeFeed');
 
     const sub = document.createElement('div');
     sub.className = 'kill-notice-sub';
     sub.textContent =
       this.localHoleCombo > 1
-        ? 'Continue matando em ate 3s para aumentar a sequencia'
-        : 'Mate outro void em ate 3s para ativar combo';
+        ? t(this.language, 'killNoticeContinue')
+        : t(this.language, 'killNoticeNext');
 
     this.killNotice.replaceChildren(main, combo, sub);
     this.killNotice.classList.remove('hidden');
@@ -1222,6 +1289,12 @@ export class Game {
   }
 
   private bindUiButtonSounds(): void {
+    this.uiLayer.addEventListener(
+      'pointerdown',
+      () => this.audioManager.unlock(),
+      { capture: true }
+    );
+
     this.uiLayer.addEventListener('pointerover', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) {

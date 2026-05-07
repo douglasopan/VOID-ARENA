@@ -4,6 +4,8 @@ import type { PlayerManager } from '../game/PlayerManager';
 import type { World } from '../game/World';
 import type { WorldObject } from '../game/WorldObject';
 import type { GraphicsQuality } from '../shared/types';
+import type { LanguageCode } from '../shared/types';
+import { powerUpLabelKey, t } from '../i18n/I18n';
 import { AdSurfaceRenderer } from './AdSurfaceRenderer';
 import { CameraController } from './CameraController';
 import { HoleRenderer } from './HoleRenderer';
@@ -35,6 +37,7 @@ export class SceneManager {
   }> = [];
   private skyElapsed = 0;
   private firstCameraFrame = true;
+  private language: LanguageCode = 'en';
 
   constructor(private readonly container: HTMLElement) {
     this.scene.background = new THREE.Color('#0b2330');
@@ -51,8 +54,9 @@ export class SceneManager {
     window.addEventListener('resize', this.resize);
   }
 
-  loadWorld(world: World): void {
+  loadWorld(world: World, language: LanguageCode = this.language): void {
     this.clearWorld();
+    this.language = language;
     this.firstCameraFrame = true;
     this.scene.fog = new THREE.Fog('#0b2330', world.halfExtent * 1.2, world.halfExtent * 3.0);
 
@@ -91,7 +95,7 @@ export class SceneManager {
       powerUp.mesh = mesh;
       this.powerUpMeshes.set(powerUp.id, mesh);
       this.worldRoot.add(mesh);
-      const label = this.labelRenderer.createLabel(powerUp.label, powerUp.color);
+      const label = this.labelRenderer.createLabel(t(this.language, powerUpLabelKey(powerUp.type)), powerUp.color);
       label.scale.set(6.65, 1.68, 1);
       this.powerUpLabels.set(powerUp.id, label);
       this.scene.add(label);

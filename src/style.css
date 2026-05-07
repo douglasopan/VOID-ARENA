@@ -236,6 +236,75 @@ label {
   gap: 7px;
 }
 
+.field-label {
+  color: var(--text-soft);
+}
+
+.language-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.language-flag {
+  width: 62px;
+  min-height: 44px;
+  padding: 5px 6px;
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: 1px;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.language-flag .flag-icon {
+  font-size: 1.2rem;
+}
+
+.language-flag.active {
+  border-color: rgba(94, 234, 212, 0.92);
+  background: rgba(94, 234, 212, 0.2);
+  box-shadow: 0 0 18px rgba(94, 234, 212, 0.18);
+}
+
+.preset-panel {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.preset-card {
+  min-height: 118px;
+  padding: 16px;
+  align-content: start;
+  justify-items: start;
+  text-align: left;
+  gap: 8px;
+  white-space: normal;
+}
+
+.preset-card strong {
+  display: block;
+  font-size: 1.08rem;
+}
+
+.preset-card span {
+  color: var(--text-soft);
+  font-family: "Open Sans", sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.custom-preset {
+  border-color: rgba(246, 196, 83, 0.52);
+}
+
 .button-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
@@ -885,6 +954,15 @@ label {
 
   .room-row {
     grid-template-columns: 1fr;
+  }
+
+  .language-flag {
+    width: 52px;
+    min-height: 40px;
+  }
+
+  .preset-card {
+    min-height: 98px;
   }
 
   .hud-panel {

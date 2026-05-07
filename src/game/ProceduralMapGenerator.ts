@@ -851,19 +851,22 @@ export class ProceduralMapGenerator {
   ): void {
     const countBySize = { small: 8, medium: 14, large: 28, huge: 44 } satisfies Record<MapSize, number>;
     const types: PowerUpType[] = ['magnet', 'shrink', 'haste', 'shield', 'stamina', 'mass'];
-    for (let i = 0; i < (explicitCount ?? countBySize[size]); i += 1) {
-      const candidate = this.looseCandidate(roads, rng, spawnPoints, size);
+    const targetCount = explicitCount ?? countBySize[size];
+    let attempts = 0;
+    while (powerUps.length < targetCount && attempts < targetCount * 80) {
+      attempts += 1;
+      const candidate = this.powerUpCandidate(rng, spawnPoints, size);
       if (
         !candidate ||
-        this.overlapsOccupied(candidate.x, candidate.z, 1.6, occupied) ||
-        this.pointConflictsRoads(candidate.x, candidate.z, 1.6, roads)
+        this.overlapsOccupied(candidate.x, candidate.z, 0.82, occupied)
       ) {
         continue;
       }
       const type = rng.pick(types);
       const settings = POWERUP_SETTINGS[type];
+      const index = powerUps.length;
       powerUps.push({
-        id: `powerup-${i}`,
+        id: `powerup-${index}`,
         type,
         label: settings.label,
         position: { x: candidate.x, y: 0.55, z: candidate.z },
@@ -872,7 +875,7 @@ export class ProceduralMapGenerator {
         durationSeconds: settings.durationSeconds,
         respawnDelay: POWERUP_RESPAWN_SECONDS
       });
-      occupied.push({ x: candidate.x, z: candidate.z, radius: 1.6 });
+      occupied.push({ x: candidate.x, z: candidate.z, radius: 0.82 });
     }
   }
 
@@ -929,6 +932,23 @@ export class ProceduralMapGenerator {
       const road = this.nearestRoad(x, z, roads);
       if (road.distance < road.road.width * 0.5 + road.road.sidewalkWidth + 1.2) continue;
       if (this.isTooCloseToAnySpawn(x, z, spawnPoints.slice(0, 5), settings.spawnClearRadius)) continue;
+      return { x, z, rotationY: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) };
+    }
+    return null;
+  }
+
+  private powerUpCandidate(
+    rng: SeededRandom,
+    spawnPoints: Vec3Data[],
+    size: MapSize
+  ): SpawnCandidate | null {
+    const settings = MAP_SIZE_SETTINGS[size];
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const x = rng.range(-settings.halfExtent + 4, settings.halfExtent - 4);
+      const z = rng.range(-settings.halfExtent + 4, settings.halfExtent - 4);
+      if (this.isTooCloseToAnySpawn(x, z, spawnPoints.slice(0, 5), settings.spawnClearRadius * 0.55)) {
+        continue;
+      }
       return { x, z, rotationY: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) };
     }
     return null;

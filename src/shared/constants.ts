@@ -87,14 +87,14 @@ export const HOLE_RIM_STYLE_OPTIONS = [
 ] as const;
 
 export const LANGUAGE_OPTIONS = [
-  { value: 'en', label: 'English' },
-  { value: 'es', label: 'Español' },
-  { value: 'pt', label: 'Português' },
-  { value: 'fr', label: 'Français' },
-  { value: 'de', label: 'Deutsch' },
-  { value: 'ru', label: 'Русский' },
-  { value: 'ja', label: '日本語' },
-  { value: 'zh', label: '中文' }
+  { value: 'en', label: 'English', flag: '🇺🇸', short: 'EN' },
+  { value: 'es', label: 'Español', flag: '🇪🇸', short: 'ES' },
+  { value: 'pt', label: 'Português', flag: '🇧🇷', short: 'PT' },
+  { value: 'fr', label: 'Français', flag: '🇫🇷', short: 'FR' },
+  { value: 'de', label: 'Deutsch', flag: '🇩🇪', short: 'DE' },
+  { value: 'ru', label: 'Русский', flag: '🇷🇺', short: 'RU' },
+  { value: 'ja', label: '日本語', flag: '🇯🇵', short: 'JA' },
+  { value: 'zh', label: '中文', flag: '🇨🇳', short: 'ZH' }
 ] as const;
 
 export const POWERUP_SETTINGS = {

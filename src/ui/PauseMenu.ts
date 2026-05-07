@@ -64,12 +64,23 @@ export class PauseMenu {
             <label>${t(language, 'deathCamera')}</label>
             <button class="toggle death-camera-toggle ${options.deathCameraEnabled !== false ? 'active' : ''}">${options.deathCameraEnabled !== false ? enabledText : disabledText}</button>
           </div>
-          <label class="field">
-            ${t(language, 'language')}
-            <select class="language-select">
-              ${LANGUAGE_OPTIONS.map((option) => `<option value="${option.value}" ${option.value === language ? 'selected' : ''}>${option.label}</option>`).join('')}
-            </select>
-          </label>
+          <div class="field language-field">
+            <span class="field-label">${t(language, 'language')}</span>
+            <div class="language-flags" role="group" aria-label="${t(language, 'language')}">
+              ${LANGUAGE_OPTIONS.map((option) => `
+                <button
+                  class="language-flag ${option.value === language ? 'active' : ''}"
+                  type="button"
+                  data-language="${option.value}"
+                  aria-label="${option.label}"
+                  title="${option.label}"
+                >
+                  <span class="flag-icon">${option.flag}</span>
+                  <span>${option.short}</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>
           <div class="field hole-appearance-field">
             <label>${t(language, 'holeBorder')}</label>
             <div class="rim-swatch-grid">
@@ -97,12 +108,12 @@ export class PauseMenu {
             <div class="field hud-options-field">
               <label>${t(language, 'hudDisplay')}</label>
               <div class="hud-toggle-list pause-hud-toggle-list">
-                ${this.hudToggleMarkup('stats', 'Stats', hudSettings.stats)}
-                ${this.hudToggleMarkup('leaderboard', 'Leaderboard', hudSettings.leaderboard)}
-                ${this.hudToggleMarkup('chat', 'Chat window', hudSettings.chat)}
-                ${this.hudToggleMarkup('powerups', 'Powerups', hudSettings.powerups)}
-                ${this.hudToggleMarkup('zoom', 'Zoom buttons', hudSettings.zoom)}
-                ${this.hudToggleMarkup('help', 'Controls hint', hudSettings.help)}
+                ${this.hudToggleMarkup('stats', t(language, 'stats'), hudSettings.stats, language)}
+                ${this.hudToggleMarkup('leaderboard', t(language, 'leaderboard'), hudSettings.leaderboard, language)}
+                ${this.hudToggleMarkup('chat', t(language, 'chatWindow'), hudSettings.chat, language)}
+                ${this.hudToggleMarkup('powerups', t(language, 'powerups'), hudSettings.powerups, language)}
+                ${this.hudToggleMarkup('zoom', t(language, 'zoomButtons'), hudSettings.zoom, language)}
+                ${this.hudToggleMarkup('help', t(language, 'controlsHint'), hudSettings.help, language)}
               </div>
             </div>
           ` : ''}
@@ -149,9 +160,13 @@ export class PauseMenu {
       deathCameraToggle.textContent = deathCameraEnabled ? enabledText : disabledText;
       callbacks.onDeathCameraToggle?.(deathCameraEnabled);
     });
-    const languageSelect = element.querySelector<HTMLSelectElement>('.language-select');
-    languageSelect?.addEventListener('change', () => {
-      callbacks.onLanguageChange?.(languageSelect.value as LanguageCode);
+    element.querySelectorAll<HTMLButtonElement>('.language-flag').forEach((button) => {
+      button.addEventListener('click', () => {
+        const value = button.dataset.language as LanguageCode | undefined;
+        if (value) {
+          callbacks.onLanguageChange?.(value);
+        }
+      });
     });
     let rimColor = options.holeRimColor ?? RIM_COLORS[0];
     let rimStyle: HoleRimStyle = options.holeRimStyle ?? 'neon';
@@ -184,7 +199,7 @@ export class PauseMenu {
         button.setAttribute('aria-pressed', String(visible));
         const value = button.querySelector('strong');
         if (value) {
-          value.textContent = visible ? 'Hide' : 'Show';
+          value.textContent = visible ? t(language, 'hide') : t(language, 'show');
         }
         callbacks.onHudDisplayToggle?.(key, visible);
       });
@@ -200,11 +215,11 @@ export class PauseMenu {
     this.element = null;
   }
 
-  private hudToggleMarkup(key: HudDisplayKey, label: string, visible: boolean): string {
+  private hudToggleMarkup(key: HudDisplayKey, label: string, visible: boolean, language: LanguageCode): string {
     return `
       <button class="hud-toggle-row ${visible ? 'active' : ''}" type="button" data-display-key="${key}" aria-pressed="${visible}">
         <span>${label}</span>
-        <strong>${visible ? 'Hide' : 'Show'}</strong>
+        <strong>${visible ? t(language, 'hide') : t(language, 'show')}</strong>
       </button>
     `;
   }

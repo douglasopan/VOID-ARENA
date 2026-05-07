@@ -1,7 +1,8 @@
 import type { MatchTimer } from '../game/MatchTimer';
 import type { Player } from '../game/Player';
 import { POWERUP_SETTINGS } from '../shared/constants';
-import type { LeaderboardEntry, PowerUpType } from '../shared/types';
+import { powerUpLabelKey, t } from '../i18n/I18n';
+import type { LanguageCode, LeaderboardEntry, PowerUpType } from '../shared/types';
 
 export type HudDisplayKey = 'stats' | 'leaderboard' | 'chat' | 'powerups' | 'help' | 'zoom';
 
@@ -46,11 +47,13 @@ export class HUD {
   private powerUpTray: HTMLDivElement | null = null;
   private callbacks: HudCallbacks | null = null;
   private displaySettings = this.loadDisplaySettings();
+  private language: LanguageCode = 'en';
 
   constructor(private readonly root: HTMLElement) {}
 
-  show(callbacks?: HudCallbacks): void {
+  show(callbacks?: HudCallbacks, language: LanguageCode = this.language): void {
     this.hide();
+    this.language = language;
     this.callbacks = callbacks ?? null;
     const element = document.createElement('div');
     element.className = 'hud';
@@ -60,17 +63,17 @@ export class HUD {
       </section>
       <section class="leaderboard" data-display="leaderboard">
         <div class="panel-title">
-          <h3>Leaderboard</h3>
-          <button class="panel-close" type="button" data-display-toggle="leaderboard" aria-label="Close leaderboard">X</button>
+          <h3>${t(this.language, 'leaderboard')}</h3>
+          <button class="panel-close" type="button" data-display-toggle="leaderboard" aria-label="${t(this.language, 'closeLeaderboard')}">X</button>
         </div>
         <div class="leaderboard-list"></div>
       </section>
-      <section class="powerup-tray" data-display="powerups" aria-label="Active powerups"></section>
-      <section class="zoom-controls" data-display="zoom" aria-label="Camera zoom">
-        <button class="zoom-out" type="button" aria-label="Zoom out">-</button>
-        <button class="zoom-in" type="button" aria-label="Zoom in">+</button>
+      <section class="powerup-tray" data-display="powerups" aria-label="${t(this.language, 'activePowerups')}"></section>
+      <section class="zoom-controls" data-display="zoom" aria-label="${t(this.language, 'cameraZoom')}">
+        <button class="zoom-out" type="button" aria-label="${t(this.language, 'zoomOut')}">-</button>
+        <button class="zoom-in" type="button" aria-label="${t(this.language, 'zoomIn')}">+</button>
       </section>
-      <div class="help" data-display="help">WASD / Arrows move - Shift boost - ESC menu - Enter chat - Wheel zoom</div>
+      <div class="help" data-display="help">${t(this.language, 'controlsHint')}</div>
     `;
     this.root.appendChild(element);
     this.element = element;
@@ -91,6 +94,13 @@ export class HUD {
     this.applyDisplaySettings();
   }
 
+  setLanguage(language: LanguageCode): void {
+    this.language = language;
+    if (this.element) {
+      this.show(this.callbacks ?? undefined, language);
+    }
+  }
+
   update(
     player: Player | undefined,
     leaderboardEntries: LeaderboardEntry[],
@@ -103,17 +113,17 @@ export class HUD {
 
     if (this.playerStats) {
       if (!player) {
-        this.playerStats.textContent = 'Waiting for player...';
+        this.playerStats.textContent = t(this.language, 'waitingForPlayer');
       } else {
         this.playerStats.innerHTML = `
           <div class="hud-row stamina-row">
-            <span>Stamina</span>
-            <div class="stamina-bar" aria-label="Stamina">
+            <span>${t(this.language, 'stamina')}</span>
+            <div class="stamina-bar" aria-label="${t(this.language, 'stamina')}">
               <div class="stamina-fill" style="width: ${Math.max(0, Math.min(100, player.stamina))}%"></div>
             </div>
           </div>
-          <div class="hud-row"><span>Score</span><strong>${player.score}</strong></div>
-          <div class="hud-row"><span>${timer ? 'Time' : 'Alive'}</span><strong>${timer ? timer.format() : remainingPlayers}</strong></div>
+          <div class="hud-row"><span>${t(this.language, 'score')}</span><strong>${player.score}</strong></div>
+          <div class="hud-row"><span>${timer ? t(this.language, 'time') : t(this.language, 'alive')}</span><strong>${timer ? timer.format() : remainingPlayers}</strong></div>
         `;
       }
     }
@@ -182,7 +192,7 @@ export class HUD {
           <div class="powerup-card" style="--powerup-color: ${meta.color}; --powerup-progress: ${percent}%">
             <div class="powerup-icon">${meta.icon}</div>
             <div class="powerup-text">
-              <strong>${meta.label}</strong>
+              <strong>${t(this.language, powerUpLabelKey(type))}</strong>
               <span>${remaining.toFixed(1)}s</span>
             </div>
             <div class="powerup-meter"><span></span></div>

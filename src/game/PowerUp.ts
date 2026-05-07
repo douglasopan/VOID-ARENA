@@ -5,7 +5,6 @@ export class PowerUp {
   readonly id: string;
   readonly type: PowerUpType;
   readonly label: string;
-  readonly homePosition: THREE.Vector3;
   readonly radius: number;
   readonly color: string;
   readonly durationSeconds: number;
@@ -25,7 +24,6 @@ export class PowerUp {
       definition.position.y,
       definition.position.z
     );
-    this.homePosition = this.position.clone();
     this.radius = definition.radius;
     this.color = definition.color;
     this.durationSeconds = definition.durationSeconds;
@@ -37,8 +35,10 @@ export class PowerUp {
     this.respawnAt = now + this.respawnDelay;
   }
 
-  respawn(): void {
-    this.position.copy(this.homePosition);
+  respawn(position?: THREE.Vector3): void {
+    if (position) {
+      this.position.copy(position);
+    }
     this.active = true;
     this.rotation = 0;
   }

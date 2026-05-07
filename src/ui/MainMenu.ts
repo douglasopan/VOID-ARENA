@@ -38,12 +38,23 @@ export class MainMenu {
           ${t(language, 'accountName')}
           <input class="player-name" maxlength="18" autocomplete="off" placeholder="Player_1234" />
         </label>
-        <label class="field">
-          ${t(language, 'language')}
-          <select class="language-select">
-            ${LANGUAGE_OPTIONS.map((option) => `<option value="${option.value}" ${option.value === language ? 'selected' : ''}>${option.label}</option>`).join('')}
-          </select>
-        </label>
+        <div class="field language-field">
+          <span class="field-label">${t(language, 'language')}</span>
+          <div class="language-flags" role="group" aria-label="${t(language, 'language')}">
+            ${LANGUAGE_OPTIONS.map((option) => `
+              <button
+                class="language-flag ${option.value === language ? 'active' : ''}"
+                type="button"
+                data-language="${option.value}"
+                aria-label="${option.label}"
+                title="${option.label}"
+              >
+                <span class="flag-icon">${option.flag}</span>
+                <span>${option.short}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
         ${accountSummary}
         <div class="button-grid">
           <button class="primary start-solo">${t(language, 'startSolo')}</button>
@@ -73,10 +84,12 @@ export class MainMenu {
     element.querySelector('.find-games')?.addEventListener('click', () => callbacks.onFindGames(readName()));
     element.querySelector('.host-match')?.addEventListener('click', () => callbacks.onHostMatch(readName()));
     element.querySelector('.settings')?.addEventListener('click', () => callbacks.onSettings());
-    const languageSelect = element.querySelector<HTMLSelectElement>('.language-select');
-    languageSelect?.addEventListener('change', () => {
-      const value = languageSelect.value as LanguageCode;
-      callbacks.onLanguageChange(value, input?.value.trim() || profile?.playerName);
+    element.querySelectorAll<HTMLButtonElement>('.language-flag').forEach((button) => {
+      button.addEventListener('click', () => {
+        const value = button.dataset.language as LanguageCode | undefined;
+        if (!value) return;
+        callbacks.onLanguageChange(value, input?.value.trim() || profile?.playerName);
+      });
     });
     this.root.appendChild(element);
     this.element = element;

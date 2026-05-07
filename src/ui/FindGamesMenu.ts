@@ -1,5 +1,6 @@
-import { getMatchModeLabel } from '../game/MatchMode';
-import type { MockRoomSummary } from '../shared/types';
+import { MatchMode } from '../game/MatchMode';
+import { t } from '../i18n/I18n';
+import type { LanguageCode, MockRoomSummary } from '../shared/types';
 import type { ServerRoomSummary } from '../../server/shared/serverTypes';
 
 export interface FindGamesCallbacks {
@@ -12,14 +13,14 @@ export class FindGamesMenu {
 
   constructor(private readonly root: HTMLElement) {}
 
-  show(rooms: Array<MockRoomSummary | ServerRoomSummary>, callbacks: FindGamesCallbacks): void {
+  show(rooms: Array<MockRoomSummary | ServerRoomSummary>, callbacks: FindGamesCallbacks, language: LanguageCode = 'en'): void {
     this.hide();
     const element = document.createElement('div');
     element.className = 'screen';
     element.innerHTML = `
       <section class="menu-panel">
-        <h2>Find Games</h2>
-        <p class="subtitle">Rooms come from the local Socket.IO server when it is running; mock rooms appear only as an offline fallback.</p>
+        <h2>${t(language, 'findGames')}</h2>
+        <p class="subtitle">${t(language, 'findGamesSubtitle')}</p>
         <div class="rooms">
           ${rooms
             .map(
@@ -27,19 +28,19 @@ export class FindGamesMenu {
                 <div class="room-row" data-room-id="${room.id}">
                   <div>
                     <div class="room-name">${room.roomName}</div>
-                    <div class="muted">${room.mapSize.toUpperCase()} map</div>
+                    <div class="muted">${room.mapSize.toUpperCase()} ${t(language, 'map')}</div>
                   </div>
                   <div>${room.players}/${room.maxPlayers}</div>
-                  <div>${room.botsEnabled ? `Bots ${'bots' in room ? room.bots : 'on'}` : 'Bots off'}</div>
-                  <div>${getMatchModeLabel(room.matchMode)}</div>
+                  <div>${room.botsEnabled ? ('bots' in room ? `${t(language, 'bots')} ${room.bots}` : t(language, 'botsOn')) : t(language, 'botsOff')}</div>
+                  <div>${room.matchMode === MatchMode.Timed ? t(language, 'timedMatch') : t(language, 'lastHoleStanding')}</div>
                   <div>${room.mapSize}</div>
-                  <button class="join">Join</button>
+                  <button class="join">${t(language, 'join')}</button>
                 </div>`
             )
             .join('')}
         </div>
         <div class="button-grid">
-          <button class="back">Back</button>
+          <button class="back">${t(language, 'back')}</button>
         </div>
       </section>
     `;

@@ -1,4 +1,6 @@
+import { t } from '../i18n/I18n';
 import type { ChatMessage } from '../shared/types';
+import type { LanguageCode } from '../shared/types';
 
 export interface ChatCallbacks {
   onSend: (text: string) => void;
@@ -12,12 +14,15 @@ export class ChatUI {
   private enabled = true;
   private visible = true;
   private callbacks: ChatCallbacks | null = null;
+  private language: LanguageCode = 'en';
 
   constructor(private readonly root: HTMLElement) {}
 
-  show(callbacks: ChatCallbacks): void {
+  show(callbacks: ChatCallbacks, language: LanguageCode = this.language): void {
     this.callbacks = callbacks;
+    this.language = language;
     if (this.element) {
+      this.syncLanguage();
       this.setEnabled(this.enabled);
       return;
     }
@@ -26,11 +31,11 @@ export class ChatUI {
     element.className = 'chat';
     element.innerHTML = `
       <div class="panel-title">
-        <h3>Chat</h3>
-        <button class="panel-close close-chat" type="button" aria-label="Close chat">X</button>
+        <h3>${t(this.language, 'chat')}</h3>
+        <button class="panel-close close-chat" type="button" aria-label="${t(this.language, 'closeChat')}">X</button>
       </div>
       <div class="chat-log"></div>
-      <input class="chat-input" maxlength="120" placeholder="Press Enter to chat" />
+      <input class="chat-input" maxlength="120" placeholder="${t(this.language, 'pressEnterToChat')}" />
     `;
     this.root.appendChild(element);
     this.element = element;
@@ -54,6 +59,11 @@ export class ChatUI {
       closeChat();
     });
     this.applyVisibility();
+  }
+
+  setLanguage(language: LanguageCode): void {
+    this.language = language;
+    this.syncLanguage();
   }
 
   clear(): void {
@@ -129,6 +139,16 @@ export class ChatUI {
   private applyVisibility(): void {
     this.element?.classList.toggle('disabled', !this.enabled);
     this.element?.classList.toggle('hidden', this.enabled && !this.visible);
+  }
+
+  private syncLanguage(): void {
+    const title = this.element?.querySelector('h3');
+    if (title) title.textContent = t(this.language, 'chat');
+    const close = this.element?.querySelector<HTMLButtonElement>('.close-chat');
+    close?.setAttribute('aria-label', t(this.language, 'closeChat'));
+    if (this.input) {
+      this.input.placeholder = t(this.language, 'pressEnterToChat');
+    }
   }
 
   private sendCurrentMessage(): void {

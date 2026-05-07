@@ -106,16 +106,79 @@ export class World {
     return respawned;
   }
 
-  updatePowerUps(deltaSeconds: number, now: number): PowerUp[] {
+  updatePowerUps(deltaSeconds: number, now: number, playerManager?: PlayerManager, safeRadius = 7): PowerUp[] {
     const respawned: PowerUp[] = [];
     for (const powerUp of this.powerUps) {
       powerUp.rotation += deltaSeconds * 2.5;
       if (!powerUp.active && now >= powerUp.respawnAt) {
-        powerUp.respawn();
+        const position = this.randomPowerUpPosition(powerUp, playerManager, safeRadius);
+        if (!position) {
+          powerUp.respawnAt = now + 1.5;
+          continue;
+        }
+        powerUp.respawn(position);
         respawned.push(powerUp);
       }
     }
     return respawned;
+  }
+
+  private randomPowerUpPosition(
+    powerUp: PowerUp,
+    playerManager?: PlayerManager,
+    safeRadius = 7
+  ): THREE.Vector3 | null {
+    const margin = Math.max(4, powerUp.radius + 3);
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      const x = THREE.MathUtils.lerp(-this.halfExtent + margin, this.halfExtent - margin, Math.random());
+      const z = THREE.MathUtils.lerp(-this.halfExtent + margin, this.halfExtent - margin, Math.random());
+      if (this.conflictsPowerUpSpawn(x, z, powerUp, playerManager, safeRadius)) {
+        continue;
+      }
+      return new THREE.Vector3(x, 0.55, z);
+    }
+    return null;
+  }
+
+  private conflictsPowerUpSpawn(
+    x: number,
+    z: number,
+    candidate: PowerUp,
+    playerManager?: PlayerManager,
+    safeRadius = 7
+  ): boolean {
+    for (const object of this.objects) {
+      if (!object.active) continue;
+      const dx = object.position.x - x;
+      const dz = object.position.z - z;
+      const minDistance = object.boundingRadius + candidate.radius + 1.2;
+      if (dx * dx + dz * dz < minDistance * minDistance) {
+        return true;
+      }
+    }
+
+    for (const powerUp of this.powerUps) {
+      if (powerUp === candidate || !powerUp.active) continue;
+      const dx = powerUp.position.x - x;
+      const dz = powerUp.position.z - z;
+      const minDistance = powerUp.radius + candidate.radius + 4;
+      if (dx * dx + dz * dz < minDistance * minDistance) {
+        return true;
+      }
+    }
+
+    if (playerManager) {
+      for (const player of playerManager.alivePlayers()) {
+        const dx = player.position.x - x;
+        const dz = player.position.z - z;
+        const minDistance = player.radius + candidate.radius + safeRadius;
+        if (dx * dx + dz * dz < minDistance * minDistance) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   queryPowerUps(position: THREE.Vector3, radius: number): PowerUp[] {

@@ -21,6 +21,12 @@ export class AudioManager {
   private activeMusicKey: string | null = null;
   private activeMusicAssets: string[] = [];
   private activeMusicIndex = 0;
+  private pendingMusicRequest: {
+    key: string;
+    assets: string[];
+    index: number;
+    forceOriginalAsset: boolean;
+  } | null = null;
   private supportsOggOpus: boolean | null = null;
   private readonly activeSfx = new Set<HTMLAudioElement>();
   private lastHoverSfxAt = 0;
@@ -147,6 +153,23 @@ export class AudioManager {
     this.playTone(360, 140, 0.45, 'sine', 0.22);
   }
 
+  unlock(): void {
+    const context = this.getContext();
+    if (context?.state === 'suspended') {
+      void context.resume();
+    }
+
+    if (this.musicElement?.paused && this.activeMusicKey) {
+      void this.musicElement.play().catch(() => undefined);
+    }
+
+    const pending = this.pendingMusicRequest;
+    if (pending) {
+      this.pendingMusicRequest = null;
+      this.playMusicAsset(pending.key, pending.assets, pending.index, pending.forceOriginalAsset);
+    }
+  }
+
   startMenuMusic(): void {
     this.startTrackGroup('menu', MENU_MUSIC_ASSETS);
   }
@@ -174,6 +197,9 @@ export class AudioManager {
     if (this.musicElement && this.activeMusicKey === key && !this.musicElement.paused) {
       return;
     }
+    if (this.pendingMusicRequest?.key === key) {
+      return;
+    }
 
     if (assets.length === 0) {
       this.startGeneratedMusic();
@@ -197,12 +223,12 @@ export class AudioManager {
     this.musicElement = audio;
     this.activeMusicKey = key;
     void audio.play().catch(() => {
-      if (this.musicElement === audio) {
-        this.musicElement = null;
-        this.activeMusicKey = null;
-      }
       if (!forceOriginalAsset && sourceAsset !== requestedAsset) {
         this.playMusicAsset(key, assets, index, true);
+        return;
+      }
+      if (this.musicElement === audio) {
+        this.pendingMusicRequest = { key, assets: [...assets], index, forceOriginalAsset };
       }
     });
   }
@@ -234,6 +260,7 @@ export class AudioManager {
     this.activeMusicKey = null;
     this.activeMusicAssets = [];
     this.activeMusicIndex = 0;
+    this.pendingMusicRequest = null;
   }
 
   private playGeneratedSwallow(category: CityObjectCategory, mass: number): void {

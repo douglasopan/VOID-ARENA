@@ -1,8 +1,9 @@
 import type { MatchConfig } from '../game/MatchConfig';
 import { createDefaultMatchConfig } from '../game/MatchConfig';
-import { getMatchModeLabel, MatchMode } from '../game/MatchMode';
+import { MatchMode } from '../game/MatchMode';
 import type { BotDifficultyMix } from '../game/BotDifficulty';
-import type { GraphicsQuality, MapSize } from '../shared/types';
+import { t } from '../i18n/I18n';
+import type { GraphicsQuality, LanguageCode, MapSize } from '../shared/types';
 
 export interface HostCallbacks {
   onHost: (config: MatchConfig) => void;
@@ -14,7 +15,7 @@ export class HostMenu {
 
   constructor(private readonly root: HTMLElement) {}
 
-  show(playerName: string, callbacks: HostCallbacks, initial?: Partial<MatchConfig>): void {
+  show(playerName: string, callbacks: HostCallbacks, initial?: Partial<MatchConfig>, language: LanguageCode = 'en'): void {
     this.hide();
     const state: MatchConfig = {
       ...createDefaultMatchConfig(playerName),
@@ -28,79 +29,82 @@ export class HostMenu {
     element.className = 'screen';
     element.innerHTML = `
       <section class="menu-panel">
-        <h2>Host Match</h2>
-        <p class="subtitle">Creates an online room when a public Socket.IO server is configured. On Vercel, the frontend must point to that realtime server URL.</p>
+        <h2>${t(language, 'hostTitle')}</h2>
+        <p class="subtitle">${t(language, 'hostSubtitle')}</p>
         <div class="form-grid">
-          <label class="field">Room name<input class="room-name-input" maxlength="28" value="${state.roomName}" /></label>
-          ${this.segment('Max players', 'maxPlayers', [
+          <label class="field">${t(language, 'roomName')}<input class="room-name-input" maxlength="28" value="${state.roomName}" /></label>
+          ${this.segment(t(language, 'maxPlayers'), 'maxPlayers', [
             ['8', '8'],
             ['16', '16'],
             ['32', '32'],
             ['64', '64'],
             ['100', '100']
           ], String(state.maxPlayers))}
-          ${this.segment('Fill empty slots', 'fillBots', [
-            ['true', 'On'],
-            ['false', 'Off']
+          ${this.segment(t(language, 'fillEmptySlots'), 'fillBots', [
+            ['true', t(language, 'on')],
+            ['false', t(language, 'off')]
           ], String(state.fillBots))}
-          ${this.segment('Bot skill', 'botDifficultyMix', [
-            ['relaxed', 'Relaxed'],
-            ['balanced', 'Balanced'],
-            ['competitive', 'Competitive'],
-            ['chaos', 'Chaos']
+          ${this.segment(t(language, 'botSkill'), 'botDifficultyMix', [
+            ['relaxed', t(language, 'relaxed')],
+            ['balanced', t(language, 'balanced')],
+            ['competitive', t(language, 'competitive')],
+            ['chaos', t(language, 'chaos')]
           ], state.botDifficultyMix)}
-          ${this.segment('Map size', 'mapSize', [
-            ['small', 'Small'],
-            ['medium', 'Medium'],
-            ['large', 'Large'],
-            ['huge', 'Huge']
+          ${this.segment(t(language, 'mapSize'), 'mapSize', [
+            ['small', t(language, 'small')],
+            ['medium', t(language, 'medium')],
+            ['large', t(language, 'large')],
+            ['huge', t(language, 'huge')]
           ], state.mapSize)}
-          ${this.segment('Match mode', 'matchMode', [
-            [MatchMode.Timed, getMatchModeLabel(MatchMode.Timed)],
-            [MatchMode.LastHoleStanding, 'Last Hole Standing']
+          ${this.segment(t(language, 'matchMode'), 'matchMode', [
+            [MatchMode.Timed, t(language, 'timedMatch')],
+            [MatchMode.LastHoleStanding, t(language, 'lastHoleStanding')]
           ], state.matchMode)}
-          ${this.segment('Duration', 'durationSeconds', [
-            ['120', '2 minutes'],
-            ['180', '3 minutes'],
-            ['300', '5 minutes'],
-            ['600', '10 minutes']
+          ${this.segment(t(language, 'duration'), 'durationSeconds', [
+            ['120', t(language, 'twoMinutes')],
+            ['180', t(language, 'threeMinutes')],
+            ['300', t(language, 'fiveMinutes')],
+            ['600', t(language, 'tenMinutes')]
           ], String(state.durationSeconds))}
-          ${this.segment('Chat', 'enableChat', [
-            ['true', 'On'],
-            ['false', 'Off']
+          ${this.segment(t(language, 'chat'), 'enableChat', [
+            ['true', t(language, 'on')],
+            ['false', t(language, 'off')]
           ], String(state.enableChat))}
-          ${this.segment('In-world ads', 'enableAds', [
-            ['true', 'On'],
-            ['false', 'Off']
+          ${this.segment(t(language, 'inWorldAds'), 'enableAds', [
+            ['true', t(language, 'on')],
+            ['false', t(language, 'off')]
           ], String(state.enableAds))}
-          ${this.segment('Graphics', 'graphicsQuality', [
-            ['performance', 'Fast'],
-            ['balanced', 'Balanced'],
-            ['quality', 'Quality']
+          ${this.segment(t(language, 'graphics'), 'graphicsQuality', [
+            ['performance', t(language, 'fast')],
+            ['balanced', t(language, 'balanced')],
+            ['quality', t(language, 'quality')]
           ], state.graphicsQuality)}
-          ${this.segment('Camera', 'cameraZoom', [
-            ['0.82', 'Close'],
-            ['1', 'Normal'],
-            ['1.18', 'Far']
+          ${this.segment(t(language, 'camera'), 'cameraZoom', [
+            ['0.82', t(language, 'close')],
+            ['1', t(language, 'normal')],
+            ['1.18', t(language, 'far')]
           ], String(state.cameraZoom))}
-          ${this.segment('Death camera', 'deathCameraEnabled', [
-            ['true', 'On'],
-            ['false', 'Off']
+          ${this.segment(t(language, 'deathCamera'), 'deathCameraEnabled', [
+            ['true', t(language, 'on')],
+            ['false', t(language, 'off')]
           ], String(state.deathCameraEnabled))}
-          ${this.segment('Map elements', 'objectDensityMultiplier', [
-            ['0.65', 'Light'],
-            ['1', 'Normal'],
-            ['1.35', 'Dense'],
-            ['1.7', 'Packed']
+          ${this.segment(t(language, 'mapElements'), 'objectDensityMultiplier', [
+            ['0.65', t(language, 'light')],
+            ['1', t(language, 'normal')],
+            ['1.35', t(language, 'dense')],
+            ['1.7', t(language, 'packed')]
           ], String(state.objectDensityMultiplier))}
-          ${this.segment('Powerups', 'powerUpCount', [
+          ${this.segment(t(language, 'powerups'), 'powerUpCount', [
             ['0', '0'],
             ['8', '8'],
             ['14', '14'],
             ['28', '28'],
-            ['48', '48']
+            ['48', '48'],
+            ['72', '72'],
+            ['96', '96'],
+            ['140', '140']
           ], String(state.powerUpCount))}
-          ${this.segment('Respawn range', 'respawnSafeRadius', [
+          ${this.segment(t(language, 'respawnRange'), 'respawnSafeRadius', [
             ['8', '8m'],
             ['12', '12m'],
             ['18', '18m'],
@@ -108,8 +112,8 @@ export class HostMenu {
           ], String(state.respawnSafeRadius))}
         </div>
         <div class="button-grid">
-          <button class="primary host">Host Multiplayer Match</button>
-          <button class="back">Back</button>
+          <button class="primary host">${t(language, 'hostMultiplayerMatch')}</button>
+          <button class="back">${t(language, 'back')}</button>
         </div>
       </section>
     `;
