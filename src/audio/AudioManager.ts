@@ -68,15 +68,18 @@ export class AudioManager {
   playObjectSwallow(kind: WorldObjectKind, category: CityObjectCategory, mass: number): void {
     const asset = this.pickAsset(OBJECT_SWALLOW_SFX_ASSETS[kind]);
     if (asset) {
-      const isPedestrian = kind === 'pedestrian' || category === 'pedestrian';
+      const fallMix = this.getDistantFallMix(kind, category);
       this.playSfxAsset(
         asset,
-        isPedestrian ? 0.18 : 0.95,
-        this.randomRate(isPedestrian ? 0.92 : 0.95, isPedestrian ? 1.04 : 1.06),
+        fallMix.gain,
+        this.randomRate(fallMix.rateMin, fallMix.rateMax),
         () => this.playGeneratedSwallow(category, mass),
-        isPedestrian
-          ? { fadeInSeconds: 0.035, fadeOutSeconds: 2.7, fadeAway: true }
-          : { fadeInSeconds: 0.025, fadeOutSeconds: 0.42 }
+        {
+          fadeInSeconds: fallMix.fadeInSeconds,
+          fadeOutSeconds: fallMix.fadeOutSeconds,
+          fadeAway: true,
+          lowPassFrequency: fallMix.lowPassFrequency
+        }
       );
       return;
     }
@@ -231,26 +234,26 @@ export class AudioManager {
     const heavy = mass >= 24;
     switch (category) {
       case 'traffic':
-        this.playTone(92, 32, heavy ? 0.28 : 0.2, 'sawtooth', heavy ? 0.36 : 0.28);
-        this.playTone(220, 74, 0.08, 'square', 0.12);
+        this.playTone(92, 32, heavy ? 0.24 : 0.18, 'sawtooth', heavy ? 0.16 : 0.12);
+        this.playTone(220, 74, 0.08, 'square', 0.045);
         break;
       case 'building':
       case 'ad':
-        this.playTone(74, 28, 0.34, 'sawtooth', 0.4);
-        this.playTone(138, 48, 0.16, 'triangle', 0.2);
+        this.playTone(74, 28, 0.32, 'sawtooth', 0.17);
+        this.playTone(138, 48, 0.16, 'triangle', 0.075);
         break;
       case 'nature':
-        this.playTone(160, 62, 0.18, 'triangle', 0.22);
+        this.playTone(160, 62, 0.18, 'triangle', 0.08);
         break;
       case 'utility':
       case 'sidewalk':
-        this.playTone(210, 58, 0.14, 'square', 0.18);
+        this.playTone(210, 58, 0.14, 'square', 0.075);
         break;
       case 'pedestrian':
-        this.playTone(260, 110, 0.12, 'triangle', 0.14);
+        this.playTone(260, 110, 0.12, 'triangle', 0.04);
         break;
       default:
-        this.playTone(120, 54, 0.16, 'sawtooth', 0.28);
+        this.playTone(120, 54, 0.16, 'sawtooth', 0.11);
         break;
     }
   }
@@ -284,7 +287,12 @@ export class AudioManager {
     gain: number,
     playbackRate: number,
     onError: () => void,
-    fade?: { fadeInSeconds?: number; fadeOutSeconds?: number; fadeAway?: boolean }
+    fade?: {
+      fadeInSeconds?: number;
+      fadeOutSeconds?: number;
+      fadeAway?: boolean;
+      lowPassFrequency?: number;
+    }
   ): void {
     if (this.muted) {
       return;
@@ -294,11 +302,14 @@ export class AudioManager {
     const targetVolume = this.clamp01(this.sfxVolume * gain);
     audio.volume = fade?.fadeInSeconds ? 0 : targetVolume;
     audio.playbackRate = playbackRate;
+    const audioGraph = this.createAssetAudioGraph(audio, fade?.lowPassFrequency);
     let fadeFrame = 0;
     const release = (): void => {
       if (fadeFrame) {
         window.cancelAnimationFrame(fadeFrame);
       }
+      audioGraph?.source.disconnect();
+      audioGraph?.filter.disconnect();
       audio.removeEventListener('ended', release);
       audio.removeEventListener('error', release);
       this.activeSfx.delete(audio);
@@ -334,6 +345,33 @@ export class AudioManager {
       onError();
       void error;
     });
+  }
+
+  private createAssetAudioGraph(
+    audio: HTMLAudioElement,
+    lowPassFrequency?: number
+  ): { source: MediaElementAudioSourceNode; filter: BiquadFilterNode } | null {
+    if (!lowPassFrequency) {
+      return null;
+    }
+
+    const context = this.getContext();
+    if (!context) {
+      return null;
+    }
+
+    try {
+      const source = context.createMediaElementSource(audio);
+      const filter = context.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = lowPassFrequency;
+      filter.Q.value = 0.45;
+      source.connect(filter);
+      filter.connect(context.destination);
+      return { source, filter };
+    } catch {
+      return null;
+    }
   }
 
   private playTone(
@@ -399,6 +437,60 @@ export class AudioManager {
     }
 
     return asset;
+  }
+
+  private getDistantFallMix(
+    kind: WorldObjectKind,
+    category: CityObjectCategory
+  ): {
+    gain: number;
+    rateMin: number;
+    rateMax: number;
+    fadeInSeconds: number;
+    fadeOutSeconds: number;
+    lowPassFrequency: number;
+  } {
+    if (kind === 'pedestrian' || category === 'pedestrian') {
+      return {
+        gain: 0.035,
+        rateMin: 0.9,
+        rateMax: 1.02,
+        fadeInSeconds: 0.06,
+        fadeOutSeconds: 3.6,
+        lowPassFrequency: 980
+      };
+    }
+
+    if (kind === 'car' || kind === 'truck' || category === 'traffic') {
+      return {
+        gain: 0.15,
+        rateMin: 0.9,
+        rateMax: 1.02,
+        fadeInSeconds: 0.045,
+        fadeOutSeconds: 2.75,
+        lowPassFrequency: 1450
+      };
+    }
+
+    if (kind === 'tree' || kind === 'planter' || category === 'nature') {
+      return {
+        gain: 0.12,
+        rateMin: 0.9,
+        rateMax: 1.02,
+        fadeInSeconds: 0.045,
+        fadeOutSeconds: 2.55,
+        lowPassFrequency: 1250
+      };
+    }
+
+    return {
+      gain: 0.12,
+      rateMin: 0.9,
+      rateMax: 1.02,
+      fadeInSeconds: 0.045,
+      fadeOutSeconds: 2.35,
+      lowPassFrequency: 1300
+    };
   }
 
   private clamp01(value: number): number {
