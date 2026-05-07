@@ -11,8 +11,8 @@ export class AdManager {
       text,
       position,
       rotationY,
-      width: 10.5,
-      height: 4.6,
+      width: 12.8,
+      height: 5.7,
       dynamic: false
     };
   }
@@ -62,8 +62,8 @@ export class AdManager {
       text: 'VIDEO AD SCREEN',
       position,
       rotationY,
-      width: 9.6,
-      height: 5.1,
+      width: 12.2,
+      height: 6.1,
       dynamic: true
     };
   }
@@ -75,8 +75,8 @@ export class AdManager {
       text,
       position,
       rotationY,
-      width: 7.8,
-      height: 2.1,
+      width: 9.8,
+      height: 2.7,
       dynamic: false
     };
   }

@@ -32,8 +32,10 @@ export class WorldObject {
   readonly category: CityObjectCategory;
   readonly routeId?: string;
   readonly pedestrianPathId?: string;
+  readonly trafficSignalId?: string;
   routeT: number;
   routeSpeed: number;
+  routeVelocity: number;
   readonly isAd: boolean;
   readonly adSurfaceId?: string;
   position: THREE.Vector3;
@@ -66,8 +68,10 @@ export class WorldObject {
     this.category = definition.category;
     this.routeId = definition.routeId;
     this.pedestrianPathId = definition.pedestrianPathId;
+    this.trafficSignalId = definition.trafficSignalId;
     this.routeT = definition.routeT ?? 0;
     this.routeSpeed = definition.routeSpeed ?? 0;
+    this.routeVelocity = this.routeSpeed;
     this.isAd = Boolean(definition.isAd);
     this.adSurfaceId = definition.adSurfaceId;
   }
@@ -167,6 +171,7 @@ export class WorldObject {
   respawn(): void {
     this.position.copy(this.homePosition);
     this.rotation.set(0, this.homeRotationY, 0);
+    this.routeVelocity = this.routeSpeed;
     this.active = true;
     this.swallowAnimation = null;
     this.swallowScale = 1;

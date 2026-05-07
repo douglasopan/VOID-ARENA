@@ -22,6 +22,10 @@ export type WorldObjectKind =
   | 'rock'
   | 'car'
   | 'truck'
+  | 'bus'
+  | 'emergency'
+  | 'trailerTruck'
+  | 'trafficLight'
   | 'building'
   | 'structure'
   | 'billboard'
@@ -68,6 +72,7 @@ export interface ObjectSpawnDefinition {
   routeT?: number;
   routeSpeed?: number;
   pedestrianPathId?: string;
+  trafficSignalId?: string;
   isAd?: boolean;
   adSurfaceId?: string;
 }
@@ -102,6 +107,19 @@ export interface TrafficRoute {
   id: string;
   points: RoutePoint[];
   loop: boolean;
+}
+
+export type TrafficSignalAxis = 'vertical' | 'horizontal';
+
+export interface TrafficSignalDefinition {
+  id: string;
+  routeId: string;
+  groupId: string;
+  axis: TrafficSignalAxis;
+  position: Vec3Data;
+  rotationY: number;
+  stopT: number;
+  phaseOffset: number;
 }
 
 export interface PedestrianPath {
@@ -147,6 +165,7 @@ export interface MapData {
   roads: RoadSegment[];
   surfaces: SurfaceSegment[];
   trafficRoutes: TrafficRoute[];
+  trafficSignals: TrafficSignalDefinition[];
   pedestrianPaths: PedestrianPath[];
   objects: ObjectSpawnDefinition[];
   powerUps: PowerUpSpawnDefinition[];

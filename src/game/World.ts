@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { MapData } from '../shared/types';
-import type { RoutePoint, TrafficRoute } from '../shared/types';
+import type { RoutePoint, TrafficRoute, TrafficSignalDefinition } from '../shared/types';
 import { PlayerManager } from './PlayerManager';
 import { PowerUp } from './PowerUp';
 import { SpatialGrid } from './SpatialGrid';
+import { trafficSignalState } from './TrafficSignalSystem';
 import { WorldObject } from './WorldObject';
 
 export interface CompletedObjectSwallow {
@@ -11,17 +12,39 @@ export interface CompletedObjectSwallow {
   targetPlayerId: string;
 }
 
+interface RouteMetrics {
+  segmentLengths: number[];
+  totalLength: number;
+}
+
 export class World {
   readonly halfExtent: number;
   readonly objects: WorldObject[];
   readonly powerUps: PowerUp[];
   private readonly grid = new SpatialGrid<WorldObject>(12);
+  private readonly routesById = new Map<string, TrafficRoute>();
+  private readonly routeMetrics = new Map<string, RouteMetrics>();
+  private readonly signalsByRoute = new Map<string, TrafficSignalDefinition[]>();
+  private trafficElapsedSeconds = 0;
 
   constructor(readonly mapData: MapData) {
     this.halfExtent = mapData.halfExtent;
     this.objects = mapData.objects.map((definition) => new WorldObject(definition));
     this.powerUps = mapData.powerUps.map((definition) => new PowerUp(definition));
+    for (const route of mapData.trafficRoutes) {
+      this.routesById.set(route.id, route);
+      this.routeMetrics.set(route.id, this.createRouteMetrics(route));
+    }
+    for (const signal of mapData.trafficSignals) {
+      const signals = this.signalsByRoute.get(signal.routeId) ?? [];
+      signals.push(signal);
+      this.signalsByRoute.set(signal.routeId, signals);
+    }
     this.rebuildObjectGrid();
+  }
+
+  get trafficTimeSeconds(): number {
+    return this.trafficElapsedSeconds;
   }
 
   rebuildObjectGrid(): void {
@@ -55,15 +78,23 @@ export class World {
   }
 
   updateDynamicObjects(deltaSeconds: number): void {
+    this.trafficElapsedSeconds += deltaSeconds;
+    const trafficByRoute = this.groupTrafficObjectsByRoute();
     for (const object of this.objects) {
       if (!object.active || object.swallowAnimation) {
         continue;
       }
 
       if (object.routeId) {
-        const route = this.mapData.trafficRoutes.find((candidate) => candidate.id === object.routeId);
+        const route = this.routesById.get(object.routeId);
         if (route) {
-          const result = this.advanceRoute(route, object.routeT, object.routeSpeed * deltaSeconds);
+          const desiredSpeed = this.desiredTrafficSpeed(object, route, trafficByRoute.get(route.id) ?? []);
+          object.routeVelocity = this.moveTowards(
+            object.routeVelocity,
+            desiredSpeed,
+            (desiredSpeed < object.routeVelocity ? 10.5 : 3.2) * deltaSeconds
+          );
+          const result = this.advanceRoute(route, object.routeT, object.routeVelocity * deltaSeconds);
           object.routeT = result.t;
           object.position.set(result.position.x, object.homePosition.y, result.position.z);
           object.rotation.y = this.smoothAngle(object.rotation.y, result.rotationY, Math.min(1, deltaSeconds * 5.4));
@@ -216,6 +247,127 @@ export class World {
       }
     }
     return false;
+  }
+
+  private groupTrafficObjectsByRoute(): Map<string, WorldObject[]> {
+    const grouped = new Map<string, WorldObject[]>();
+    for (const object of this.objects) {
+      if (!object.active || object.swallowAnimation || !object.routeId) {
+        continue;
+      }
+      const objects = grouped.get(object.routeId) ?? [];
+      objects.push(object);
+      grouped.set(object.routeId, objects);
+    }
+    return grouped;
+  }
+
+  private desiredTrafficSpeed(object: WorldObject, route: TrafficRoute, routeObjects: WorldObject[]): number {
+    let desiredSpeed = object.routeSpeed;
+    const signalDistance = this.distanceToNextStoppingSignal(object, route);
+    if (signalDistance !== null) {
+      const stopBuffer = Math.max(1.1, object.size.z * 0.32);
+      if (signalDistance <= stopBuffer) {
+        desiredSpeed = 0;
+      } else if (signalDistance < 18) {
+        desiredSpeed = Math.min(desiredSpeed, Math.max(0, (signalDistance - stopBuffer) * 0.78));
+      }
+    }
+
+    const vehicleAhead = this.distanceToVehicleAhead(object, route, routeObjects);
+    if (vehicleAhead) {
+      const gap = Math.max(2.4, object.size.z * 0.5 + vehicleAhead.object.size.z * 0.5 + 1.15);
+      if (vehicleAhead.distance <= gap) {
+        desiredSpeed = 0;
+      } else if (vehicleAhead.distance < gap + 10) {
+        desiredSpeed = Math.min(desiredSpeed, Math.max(0, (vehicleAhead.distance - gap) * 1.35));
+      }
+    }
+
+    return desiredSpeed;
+  }
+
+  private distanceToNextStoppingSignal(object: WorldObject, route: TrafficRoute): number | null {
+    const signals = object.routeId ? this.signalsByRoute.get(object.routeId) : undefined;
+    if (!signals?.length) {
+      return null;
+    }
+
+    let nearest: number | null = null;
+    for (const signal of signals) {
+      const state = trafficSignalState(signal, this.trafficElapsedSeconds);
+      if (state === 'green') {
+        continue;
+      }
+
+      const distance = this.distanceAheadOnRoute(route, object.routeT, signal.stopT);
+      if (distance > 0.05 && distance < 22 && (nearest === null || distance < nearest)) {
+        nearest = distance;
+      }
+    }
+    return nearest;
+  }
+
+  private distanceToVehicleAhead(
+    object: WorldObject,
+    route: TrafficRoute,
+    routeObjects: WorldObject[]
+  ): { object: WorldObject; distance: number } | null {
+    let nearest: { object: WorldObject; distance: number } | null = null;
+    for (const other of routeObjects) {
+      if (other === object) {
+        continue;
+      }
+      const distance = this.distanceAheadOnRoute(route, object.routeT, other.routeT);
+      if (distance > 0.05 && distance < 34 && (!nearest || distance < nearest.distance)) {
+        nearest = { object: other, distance };
+      }
+    }
+    return nearest;
+  }
+
+  private createRouteMetrics(route: TrafficRoute): RouteMetrics {
+    const segmentLengths: number[] = [];
+    let totalLength = 0;
+    for (let i = 0; i < route.points.length - 1; i += 1) {
+      const start = route.points[i];
+      const end = route.points[i + 1];
+      const length = Math.max(0.001, Math.hypot(end.x - start.x, end.z - start.z));
+      segmentLengths.push(length);
+      totalLength += length;
+    }
+    return { segmentLengths, totalLength: Math.max(0.001, totalLength) };
+  }
+
+  private routeDistanceAtT(route: TrafficRoute, t: number): number {
+    const metrics = this.routeMetrics.get(route.id) ?? this.createRouteMetrics(route);
+    const segmentIndex = Math.min(metrics.segmentLengths.length - 1, Math.max(0, Math.floor(t)));
+    const localT = Math.max(0, Math.min(1, t - segmentIndex));
+    let distance = 0;
+    for (let i = 0; i < segmentIndex; i += 1) {
+      distance += metrics.segmentLengths[i] ?? 0;
+    }
+    return distance + (metrics.segmentLengths[segmentIndex] ?? 0) * localT;
+  }
+
+  private distanceAheadOnRoute(route: TrafficRoute, fromT: number, toT: number): number {
+    const metrics = this.routeMetrics.get(route.id) ?? this.createRouteMetrics(route);
+    const fromDistance = this.routeDistanceAtT(route, fromT);
+    const toDistance = this.routeDistanceAtT(route, toT);
+    if (toDistance > fromDistance) {
+      return toDistance - fromDistance;
+    }
+    if (!route.loop) {
+      return Number.POSITIVE_INFINITY;
+    }
+    return metrics.totalLength - fromDistance + toDistance;
+  }
+
+  private moveTowards(current: number, target: number, maxDelta: number): number {
+    if (Math.abs(target - current) <= maxDelta) {
+      return target;
+    }
+    return current + Math.sign(target - current) * maxDelta;
   }
 
   private advanceRoute(

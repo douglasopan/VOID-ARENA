@@ -6,6 +6,7 @@ import type { WorldObject } from '../game/WorldObject';
 import type { GraphicsQuality } from '../shared/types';
 import type { LanguageCode } from '../shared/types';
 import { powerUpLabelKey, t } from '../i18n/I18n';
+import { trafficSignalState, type TrafficSignalState } from '../game/TrafficSignalSystem';
 import { AdSurfaceRenderer } from './AdSurfaceRenderer';
 import { CameraController } from './CameraController';
 import { HoleRenderer } from './HoleRenderer';
@@ -36,6 +37,11 @@ export class SceneManager {
     span: number;
   }> = [];
   private readonly cityLightMeshes: THREE.Mesh[] = [];
+  private readonly trafficSignalLamps: Array<{
+    mesh: THREE.Mesh;
+    signalId: string;
+    state: TrafficSignalState;
+  }> = [];
   private ambientLight!: THREE.HemisphereLight;
   private sunLight!: THREE.DirectionalLight;
   private skyElapsed = 0;
@@ -127,6 +133,7 @@ export class SceneManager {
     this.updateDayNight(deltaSeconds);
     if (world) {
       this.syncWorld(world, deltaSeconds);
+      this.updateTrafficSignalLamps(world);
       this.adSurfaceRenderer.update(deltaSeconds, this.objectById);
     }
 
@@ -142,6 +149,7 @@ export class SceneManager {
   updateDeathDive(world: World, playerManager: PlayerManager, attacker: Player, deltaSeconds: number, elapsedSeconds: number): void {
     this.updateDayNight(deltaSeconds);
     this.syncWorld(world, deltaSeconds);
+    this.updateTrafficSignalLamps(world);
     this.adSurfaceRenderer.update(deltaSeconds, this.objectById);
     this.holeRenderer.update(playerManager.all());
 
@@ -161,6 +169,7 @@ export class SceneManager {
   updateMenuPreview(world: World, deltaSeconds: number, elapsedSeconds: number): void {
     this.updateDayNight(deltaSeconds);
     this.syncWorld(world, deltaSeconds);
+    this.updateTrafficSignalLamps(world);
     this.adSurfaceRenderer.update(deltaSeconds, this.objectById);
     this.holeRenderer.update([]);
 
@@ -194,6 +203,7 @@ export class SceneManager {
     this.powerUpLabels.clear();
     this.objectById.clear();
     this.cityLightMeshes.length = 0;
+    this.trafficSignalLamps.length = 0;
   }
 
   dispose(): void {
@@ -437,7 +447,31 @@ export class SceneManager {
       if (mesh.userData.cityLight || this.materialCityLightData(mesh.material)) {
         this.cityLightMeshes.push(mesh);
       }
+      const lamp = mesh.userData.trafficLamp as { signalId?: string; state?: TrafficSignalState } | undefined;
+      if (lamp?.signalId && (lamp.state === 'red' || lamp.state === 'yellow' || lamp.state === 'green')) {
+        this.trafficSignalLamps.push({ mesh, signalId: lamp.signalId, state: lamp.state });
+      }
     });
+  }
+
+  private updateTrafficSignalLamps(world: World): void {
+    if (!this.trafficSignalLamps.length) {
+      return;
+    }
+
+    const signals = new Map(world.mapData.trafficSignals.map((signal) => [signal.id, signal]));
+    for (const lamp of this.trafficSignalLamps) {
+      const signal = signals.get(lamp.signalId);
+      if (!signal) {
+        continue;
+      }
+
+      const active = trafficSignalState(signal, world.trafficTimeSeconds) === lamp.state;
+      const material = lamp.mesh.material as THREE.Material;
+      material.transparent = true;
+      material.opacity = active ? 0.98 : 0.18;
+      lamp.mesh.scale.setScalar(active ? 1.16 : 0.92);
+    }
   }
 
   private materialCityLightData(

@@ -79,13 +79,12 @@ export class ObjectFactory {
   private createCrosswalk(surface: SurfaceSegment): THREE.Group {
     const group = new THREE.Group();
     const material = this.createTerrainCutoutMaterial('#e7edf1', 0.58, 0.02);
-    const stripeCount = Math.max(4, Math.floor(surface.width / 0.72));
-    const stripeWidth = surface.width / (stripeCount * 2.1);
-    const spacing = surface.width / stripeCount;
-    const stripeLength = surface.length * 0.92;
+    const stripeCount = Math.max(4, Math.floor(surface.length / 0.74));
+    const stripeLength = surface.length / (stripeCount * 2.1);
+    const spacing = surface.length / stripeCount;
     for (let i = 0; i < stripeCount; i += 1) {
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(stripeWidth, 0.05, stripeLength), material);
-      stripe.position.x = -surface.width * 0.5 + spacing * (i + 0.5);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(surface.width, 0.05, stripeLength), material);
+      stripe.position.z = -surface.length * 0.5 + spacing * (i + 0.5);
       stripe.receiveShadow = true;
       group.add(stripe);
     }
@@ -158,7 +157,12 @@ export class ObjectFactory {
         return this.createRock(object);
       case 'car':
       case 'truck':
+      case 'bus':
+      case 'emergency':
+      case 'trailerTruck':
         return this.createVehicle(object);
+      case 'trafficLight':
+        return this.createTrafficLight(object);
       case 'billboard':
       case 'screen':
         return this.createAdFrame(object);
@@ -503,6 +507,16 @@ export class ObjectFactory {
   }
 
   private createVehicle(object: WorldObject): THREE.Group {
+    if (object.kind === 'bus') {
+      return this.createBus(object);
+    }
+    if (object.kind === 'emergency') {
+      return this.createEmergencyVehicle(object);
+    }
+    if (object.kind === 'trailerTruck') {
+      return this.createTrailerTruck(object);
+    }
+
     const group = new THREE.Group();
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(object.size.x, object.size.y * 0.65, object.size.z),
@@ -544,22 +558,178 @@ export class ObjectFactory {
     return group;
   }
 
+  private createBus(object: WorldObject): THREE.Group {
+    const group = new THREE.Group();
+    const bodyMaterial = this.getMaterial(object.color, 0.58, 0.1);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(object.size.x, object.size.y * 0.72, object.size.z), bodyMaterial);
+    body.position.y = -object.size.y * 0.03;
+    const windowMaterial = this.getMaterial('#bde8f2', 0.28, 0.06);
+    const windowBand = new THREE.Mesh(new THREE.BoxGeometry(object.size.x * 1.02, object.size.y * 0.22, object.size.z * 0.68), windowMaterial);
+    windowBand.position.y = object.size.y * 0.2;
+    const routeSign = new THREE.Mesh(
+      new THREE.BoxGeometry(object.size.x * 0.55, object.size.y * 0.12, 0.05),
+      this.createCityLightMaterial('#facc15', 0.18, 0.9)
+    );
+    routeSign.position.set(0, object.size.y * 0.34, object.size.z * 0.51);
+    this.markCityLight(routeSign, 0.18, 0.9);
+    this.addVehicleWheels(group, object, [-object.size.z * 0.36, object.size.z * 0.36], 0.28);
+    this.addVehicleLights(group, object, object.size.x, object.size.y, object.size.z);
+    body.castShadow = true;
+    group.add(body, windowBand, routeSign);
+    return group;
+  }
+
+  private createEmergencyVehicle(object: WorldObject): THREE.Group {
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(object.size.x, object.size.y * 0.66, object.size.z),
+      this.getMaterial(object.color, 0.48, 0.12)
+    );
+    body.position.y = -object.size.y * 0.06;
+    const cabin = new THREE.Mesh(
+      new THREE.BoxGeometry(object.size.x * 0.72, object.size.y * 0.48, object.size.z * 0.38),
+      this.getMaterial('#dbeafe', 0.32, 0.08)
+    );
+    cabin.position.set(0, object.size.y * 0.28, object.size.z * 0.03);
+    const stripeColor = object.label === 'Police Car' ? '#2563eb' : '#ef4444';
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(object.size.x * 1.04, object.size.y * 0.12, object.size.z * 0.82),
+      this.getMaterial(stripeColor, 0.46, 0.08)
+    );
+    stripe.position.y = object.size.y * 0.02;
+    const lightbar = new THREE.Mesh(
+      new THREE.BoxGeometry(object.size.x * 0.48, 0.12, 0.18),
+      this.createCityLightMaterial('#60a5fa', 0.28, 1)
+    );
+    lightbar.position.set(0, object.size.y * 0.58, -object.size.z * 0.08);
+    this.markCityLight(lightbar, 0.28, 1);
+    this.addVehicleWheels(group, object, [-object.size.z * 0.32, object.size.z * 0.32], 0.23);
+    this.addVehicleLights(group, object, object.size.x, object.size.y, object.size.z);
+    body.castShadow = true;
+    cabin.castShadow = true;
+    group.add(body, cabin, stripe, lightbar);
+    return group;
+  }
+
+  private createTrailerTruck(object: WorldObject): THREE.Group {
+    const group = new THREE.Group();
+    const cabMaterial = this.getMaterial('#e56f40', 0.52, 0.1);
+    const trailerMaterial = this.getMaterial(object.color, 0.66, 0.08);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(object.size.x, object.size.y * 0.75, object.size.z * 0.34), cabMaterial);
+    cab.position.set(0, -object.size.y * 0.04, object.size.z * 0.29);
+    const trailer = new THREE.Mesh(new THREE.BoxGeometry(object.size.x * 0.94, object.size.y * 0.68, object.size.z * 0.58), trailerMaterial);
+    trailer.position.set(0, -object.size.y * 0.07, -object.size.z * 0.16);
+    const hitch = new THREE.Mesh(new THREE.BoxGeometry(object.size.x * 0.34, 0.12, object.size.z * 0.12), this.getMaterial('#202733', 0.7, 0.12));
+    hitch.position.set(0, -object.size.y * 0.28, object.size.z * 0.11);
+    this.addVehicleWheels(group, object, [-object.size.z * 0.38, -object.size.z * 0.08, object.size.z * 0.34], 0.26);
+    this.addVehicleLights(group, object, object.size.x, object.size.y, object.size.z);
+    cab.castShadow = true;
+    trailer.castShadow = true;
+    group.add(cab, trailer, hitch);
+    return group;
+  }
+
+  private createTrafficLight(object: WorldObject): THREE.Group {
+    const group = new THREE.Group();
+    const signalId = object.trafficSignalId ?? object.id;
+    const poleMaterial = this.getMaterial('#25313d', 0.56, 0.24);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, object.size.y, 8), poleMaterial);
+    pole.position.y = 0;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.07, 0.07), poleMaterial);
+    arm.position.set(0.36, object.size.y * 0.36, 0);
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.86, 0.2),
+      this.getMaterial('#101820', 0.5, 0.16)
+    );
+    box.position.set(0.78, object.size.y * 0.26, 0);
+
+    const lampData: Array<{ state: 'red' | 'yellow' | 'green'; color: string; y: number }> = [
+      { state: 'red', color: '#ef4444', y: 0.25 },
+      { state: 'yellow', color: '#facc15', y: 0 },
+      { state: 'green', color: '#22c55e', y: -0.25 }
+    ];
+    for (const lamp of lampData) {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.095, 10, 8),
+        new THREE.MeshBasicMaterial({ color: lamp.color, transparent: true, opacity: 0.28 })
+      );
+      mesh.position.set(0.78, object.size.y * 0.26 + lamp.y, -0.112);
+      mesh.userData.trafficLamp = { signalId, state: lamp.state };
+      group.add(mesh);
+    }
+    pole.castShadow = true;
+    arm.castShadow = true;
+    group.add(pole, arm, box);
+    return group;
+  }
+
+  private addVehicleWheels(group: THREE.Group, object: WorldObject, zPositions: number[], radius: number): void {
+    const wheelMaterial = this.getMaterial('#111318', 0.8, 0.1);
+    const wheelGeometry = new THREE.CylinderGeometry(radius, radius, 0.2, 10);
+    for (const x of [-object.size.x * 0.52, object.size.x * 0.52]) {
+      for (const z of zPositions) {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(x, -object.size.y * 0.36, z);
+        group.add(wheel);
+      }
+    }
+  }
+
+  private addVehicleLights(group: THREE.Group, object: WorldObject, width: number, height: number, length: number): void {
+    const headlightMaterial = this.createCityLightMaterial('#fff4bc', 0.12, 1);
+    const tailLightMaterial = this.createCityLightMaterial('#ff4c4c', 0.08, 0.82);
+    for (const x of [-width * 0.28, width * 0.28]) {
+      const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.05), headlightMaterial);
+      headlight.position.set(x, height * 0.06, length * 0.51);
+      this.markCityLight(headlight, 0.12, 1);
+      const tailLight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.05), tailLightMaterial);
+      tailLight.position.set(x, height * 0.02, -length * 0.51);
+      this.markCityLight(tailLight, 0.08, 0.82);
+      group.add(headlight, tailLight);
+    }
+  }
+
   private createAdFrame(object: WorldObject): THREE.Group {
     const group = new THREE.Group();
-    const panel = new THREE.Mesh(
-      new THREE.BoxGeometry(object.size.x, object.size.y, object.size.z),
-      this.getMaterial(object.color, 0.5, 0.08)
+    const frameMaterial = this.getMaterial(object.color, 0.5, 0.08);
+    const supportMaterial = this.getMaterial('#202733', 0.68, 0.05);
+    const railDepth = Math.max(0.24, object.size.z * 0.75);
+    const railThickness = Math.max(0.16, object.size.y * 0.035);
+    const sideThickness = Math.max(0.16, object.size.x * 0.018);
+    const frameZ = -object.size.z * 0.56;
+
+    const top = new THREE.Mesh(
+      new THREE.BoxGeometry(object.size.x + sideThickness * 2.4, railThickness, railDepth),
+      frameMaterial
     );
-    const postMaterial = this.getMaterial('#202733', 0.68, 0.05);
-    const postGeometry = new THREE.CylinderGeometry(0.12, 0.16, object.size.y * 1.1, 8);
-    const left = new THREE.Mesh(postGeometry, postMaterial);
-    const right = left.clone();
-    left.position.set(-object.size.x * 0.42, -object.size.y * 0.42, -0.08);
-    right.position.set(object.size.x * 0.42, -object.size.y * 0.42, -0.08);
-    panel.castShadow = true;
-    left.castShadow = true;
-    right.castShadow = true;
-    group.add(panel, left, right);
+    top.position.set(0, object.size.y * 0.5 + railThickness * 0.35, frameZ);
+    const bottom = top.clone();
+    bottom.position.y = -object.size.y * 0.5 - railThickness * 0.35;
+
+    const leftRail = new THREE.Mesh(
+      new THREE.BoxGeometry(sideThickness, object.size.y + railThickness * 2.4, railDepth),
+      frameMaterial
+    );
+    leftRail.position.set(-object.size.x * 0.5 - sideThickness * 0.42, 0, frameZ);
+    const rightRail = leftRail.clone();
+    rightRail.position.x = object.size.x * 0.5 + sideThickness * 0.42;
+
+    const postGeometry = new THREE.CylinderGeometry(0.12, 0.17, object.size.y * 1.25, 8);
+    const leftPost = new THREE.Mesh(postGeometry, supportMaterial);
+    const rightPost = leftPost.clone();
+    leftPost.position.set(-object.size.x * 0.42, -object.size.y * 0.6, frameZ - 0.22);
+    rightPost.position.set(object.size.x * 0.42, -object.size.y * 0.6, frameZ - 0.22);
+
+    const braceGeometry = new THREE.BoxGeometry(object.size.x * 0.86, 0.1, 0.12);
+    const rearBrace = new THREE.Mesh(braceGeometry, supportMaterial);
+    rearBrace.position.set(0, -object.size.y * 0.16, frameZ - 0.28);
+
+    for (const mesh of [top, bottom, leftRail, rightRail, leftPost, rightPost, rearBrace]) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
     return group;
   }
 

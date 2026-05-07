@@ -12,6 +12,7 @@ import type {
   RoadSegment,
   RoutePoint,
   SurfaceSegment,
+  TrafficSignalDefinition,
   TrafficRoute,
   Vec3Data,
   WorldObjectKind
@@ -33,6 +34,7 @@ interface RoadNetwork {
   roads: RoadSegment[];
   surfaces: SurfaceSegment[];
   trafficRoutes: TrafficRoute[];
+  trafficSignals: TrafficSignalDefinition[];
   pedestrianPaths: PedestrianPath[];
 }
 
@@ -99,6 +101,7 @@ export class ProceduralMapGenerator {
 
     this.addPlazas(objects, occupied, network.surfaces, network.roads, spawnPoints, rng, options.size);
     this.addBuildings(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
+    this.addTrafficSignalObjects(objects, occupied, network.trafficSignals, rng);
     this.addRoadsideObjects(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
     this.addTraffic(objects, occupied, network.trafficRoutes, rng, objectBudget);
     this.addParkedVehicles(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
@@ -117,6 +120,7 @@ export class ProceduralMapGenerator {
       roads: network.roads,
       surfaces: network.surfaces,
       trafficRoutes: network.trafficRoutes,
+      trafficSignals: network.trafficSignals,
       pedestrianPaths: network.pedestrianPaths,
       objects,
       powerUps,
@@ -130,9 +134,10 @@ export class ProceduralMapGenerator {
     const roads: RoadSegment[] = [];
     const surfaces: SurfaceSegment[] = [];
     const trafficRoutes: TrafficRoute[] = [];
+    const trafficSignals: TrafficSignalDefinition[] = [];
     const pedestrianPaths: PedestrianPath[] = [];
     const half = settings.halfExtent;
-    const majorCount = Math.max(4, Math.floor(half / (settings.blockSize * 0.86)) + 2);
+    const majorCount = Math.max(3, Math.floor(half / (settings.blockSize * 1.18)) + 1);
 
     const addRoad = (
       id: string,
@@ -167,13 +172,13 @@ export class ProceduralMapGenerator {
     verticalPositions.forEach((x, index) => addRoad(`avenue-v-${index}`, x, 0, half * 1.9, 0));
     horizontalPositions.forEach((z, index) => addRoad(`avenue-h-${index}`, 0, z, half * 1.9, Math.PI / 2));
 
-    const sideStreetCount = Math.floor(majorCount * 0.86);
+    const sideStreetCount = Math.floor(majorCount * 0.42);
     for (let i = 0; i < sideStreetCount; i += 1) {
       const vertical = rng.chance(0.5);
       const base = rng.pick(vertical ? verticalPositions : horizontalPositions);
-      const offset = rng.pick([-1, 1]) * rng.range(settings.blockSize * 0.28, settings.blockSize * 0.52);
+      const offset = rng.pick([-1, 1]) * rng.range(settings.blockSize * 0.38, settings.blockSize * 0.7);
       const center = rng.range(-half * 0.45, half * 0.45);
-      const length = rng.range(half * 0.45, half * 0.95);
+      const length = rng.range(half * 0.34, half * 0.68);
       if (vertical) {
         addRoad(`side-v-${i}`, base + offset, center, length, 0, settings.roadWidth * 0.72);
       } else {
@@ -187,15 +192,16 @@ export class ProceduralMapGenerator {
       this.addRoadSurfaces(road, roads, surfaces);
     }
     this.addCrosswalks(roads, surfaces, settings.roadWidth);
+    this.addTrafficSignals(roads, trafficRoutes, trafficSignals);
 
-    return { roads, surfaces, trafficRoutes, pedestrianPaths };
+    return { roads, surfaces, trafficRoutes, trafficSignals, pedestrianPaths };
   }
 
   private cityAxisPositions(count: number, half: number, blockSize: number, rng: SeededRandom): number[] {
     const positions = new Set<number>([0]);
-    const start = -half * 0.78;
-    const span = half * 1.56;
-    const minGap = blockSize * 0.38;
+    const start = -half * 0.7;
+    const span = half * 1.4;
+    const minGap = blockSize * 0.62;
     for (let i = 0; i < count; i += 1) {
       const base = start + (span * i) / Math.max(1, count - 1);
       const candidate = Math.round((base + rng.range(-blockSize * 0.26, blockSize * 0.26)) * 10) / 10;
@@ -490,17 +496,19 @@ export class ProceduralMapGenerator {
     const endAlong = road.length * 0.48;
     const routes: TrafficRoute[] = [];
     for (const lane of [-1, 1]) {
+      const laneStart = lane < 0 ? startAlong : endAlong;
+      const laneEnd = lane < 0 ? endAlong : startAlong;
       routes.push({
         id: `${road.id}-traffic-${lane}`,
         loop: true,
         points: [
           {
-            x: road.x + forward.x * startAlong + side.x * laneOffset * lane,
-            z: road.z + forward.z * startAlong + side.z * laneOffset * lane
+            x: road.x + forward.x * laneStart + side.x * laneOffset * lane,
+            z: road.z + forward.z * laneStart + side.z * laneOffset * lane
           },
           {
-            x: road.x + forward.x * endAlong + side.x * laneOffset * lane,
-            z: road.z + forward.z * endAlong + side.z * laneOffset * lane
+            x: road.x + forward.x * laneEnd + side.x * laneOffset * lane,
+            z: road.z + forward.z * laneEnd + side.z * laneOffset * lane
           }
         ]
       });
@@ -733,6 +741,115 @@ export class ProceduralMapGenerator {
     }
   }
 
+  private addTrafficSignals(
+    roads: RoadSegment[],
+    routes: TrafficRoute[],
+    trafficSignals: TrafficSignalDefinition[]
+  ): void {
+    const routesById = new Map(routes.map((route) => [route.id, route]));
+    const maxSignals = 220;
+    for (const a of roads) {
+      for (const b of roads) {
+        if (a.id >= b.id || Math.abs(Math.sin(a.rotationY - b.rotationY)) < 0.8) {
+          continue;
+        }
+
+        if (!a.id.startsWith('avenue') && !b.id.startsWith('avenue')) {
+          continue;
+        }
+
+        const vertical = Math.abs(Math.sin(a.rotationY)) < 0.5 ? a : b;
+        const horizontal = vertical === a ? b : a;
+        const center = { x: vertical.x, z: horizontal.z };
+        if (
+          Math.abs(center.z - vertical.z) > vertical.length * 0.5 ||
+          Math.abs(center.x - horizontal.x) > horizontal.length * 0.5
+        ) {
+          continue;
+        }
+
+        const groupId = `signal-${Math.round(center.x * 10)}-${Math.round(center.z * 10)}`;
+        const phaseOffset = ((Math.abs(Math.round(center.x * 3 + center.z * 5)) % 4) - 1.5) * 0.012;
+        const approaches: Array<{ road: RoadSegment; crossRoad: RoadSegment; axis: TrafficSignalDefinition['axis'] }> = [
+          { road: vertical, crossRoad: horizontal, axis: 'vertical' },
+          { road: horizontal, crossRoad: vertical, axis: 'horizontal' }
+        ];
+
+        for (const approach of approaches) {
+          for (const lane of [-1, 1]) {
+            if (trafficSignals.length >= maxSignals) {
+              return;
+            }
+            const routeId = `${approach.road.id}-traffic-${lane}`;
+            const route = routesById.get(routeId);
+            if (!route) {
+              continue;
+            }
+
+            const stopT = this.stopTForRouteAtIntersection(
+              route,
+              center,
+              approach.crossRoad.width * 0.5 + 1.55
+            );
+            if (stopT === null) {
+              continue;
+            }
+
+            const routeSample = this.routePoint(route, stopT);
+            const side = this.sideVector(approach.road.rotationY);
+            const sidewalkOffset = approach.road.width * 0.5 + approach.road.sidewalkWidth * 0.48;
+            const poleSide = lane < 0 ? -1 : 1;
+            trafficSignals.push({
+              id: `${groupId}-${approach.axis}-${lane}`,
+              routeId,
+              groupId,
+              axis: approach.axis,
+              position: {
+                x: routeSample.position.x + side.x * sidewalkOffset * poleSide,
+                y: 0,
+                z: routeSample.position.z + side.z * sidewalkOffset * poleSide
+              },
+              rotationY: routeSample.rotationY,
+              stopT,
+              phaseOffset
+            });
+          }
+        }
+      }
+    }
+  }
+
+  private stopTForRouteAtIntersection(
+    route: TrafficRoute,
+    center: RoutePoint,
+    stopOffset: number
+  ): number | null {
+    if (route.points.length < 2) {
+      return null;
+    }
+
+    const start = route.points[0];
+    const end = route.points[1];
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const length = Math.hypot(dx, dz);
+    if (length < 0.001) {
+      return null;
+    }
+
+    const dirX = dx / length;
+    const dirZ = dz / length;
+    const projected = (center.x - start.x) * dirX + (center.z - start.z) * dirZ;
+    const lateralX = center.x - (start.x + dirX * projected);
+    const lateralZ = center.z - (start.z + dirZ * projected);
+    const lateralDistance = Math.hypot(lateralX, lateralZ);
+    if (lateralDistance > 5.4 || projected < stopOffset + 1.2 || projected > length - 2.2) {
+      return null;
+    }
+
+    return Math.max(0.04, Math.min(0.96, (projected - stopOffset) / length));
+  }
+
   private blockInteriorBuildingCandidate(
     roads: RoadSegment[],
     rng: SeededRandom,
@@ -759,6 +876,28 @@ export class ProceduralMapGenerator {
   private buildingSpacingRadius(object: ObjectSpawnDefinition): number {
     const compactness = object.label === 'Factory Block' || object.label === 'Warehouse' ? 0.64 : 0.54;
     return Math.max(1.9, object.boundingRadius * compactness);
+  }
+
+  private addTrafficSignalObjects(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    signals: TrafficSignalDefinition[],
+    rng: SeededRandom
+  ): void {
+    for (const signal of signals) {
+      if (this.overlapsOccupied(signal.position.x, signal.position.z, 0.48, occupied)) {
+        continue;
+      }
+
+      const object = this.createObjectDefinition('trafficLight', objects.length, {
+        x: signal.position.x,
+        z: signal.position.z,
+        rotationY: signal.rotationY
+      }, rng);
+      object.trafficSignalId = signal.id;
+      objects.push(object);
+      occupied.push({ x: object.position.x, z: object.position.z, radius: object.boundingRadius });
+    }
   }
 
   private addRoadsideObjects(
@@ -809,7 +948,7 @@ export class ProceduralMapGenerator {
       const route = rng.pick(routes);
       const t = rng.range(0, Math.max(1, route.points.length - 1));
       const point = this.routePoint(route, t);
-      const kind: WorldObjectKind = rng.chance(0.22) ? 'truck' : 'car';
+      const kind = this.randomTrafficVehicleKind(rng);
       const object = this.createObjectDefinition(kind, objects.length, {
         x: point.position.x,
         z: point.position.z,
@@ -817,10 +956,27 @@ export class ProceduralMapGenerator {
       }, rng);
       object.routeId = route.id;
       object.routeT = t;
-      object.routeSpeed = rng.range(3.5, 7.5) * (kind === 'truck' ? 0.72 : 1);
+      object.routeSpeed = rng.range(3.5, 7.5) * this.vehicleSpeedMultiplier(kind);
       objects.push(object);
       occupied.push({ x: object.position.x, z: object.position.z, radius: object.boundingRadius });
     }
+  }
+
+  private randomTrafficVehicleKind(rng: SeededRandom): WorldObjectKind {
+    const roll = rng.next();
+    if (roll < 0.055) return 'emergency';
+    if (roll < 0.12) return 'bus';
+    if (roll < 0.2) return 'trailerTruck';
+    if (roll < 0.34) return 'truck';
+    return 'car';
+  }
+
+  private vehicleSpeedMultiplier(kind: WorldObjectKind): number {
+    if (kind === 'emergency') return 1.08;
+    if (kind === 'bus') return 0.68;
+    if (kind === 'trailerTruck') return 0.58;
+    if (kind === 'truck') return 0.72;
+    return 1;
   }
 
   private addParkedVehicles(
@@ -838,9 +994,11 @@ export class ProceduralMapGenerator {
       if (!candidate || this.overlapsOccupied(candidate.x, candidate.z, 1.75, occupied)) {
         continue;
       }
-      const kind: WorldObjectKind = rng.chance(0.14) ? 'truck' : 'car';
+      const kind: WorldObjectKind = rng.chance(0.08)
+        ? rng.pick<WorldObjectKind>(['bus', 'trailerTruck'])
+        : rng.chance(0.16) ? 'truck' : 'car';
       const object = this.createObjectDefinition(kind, objects.length, candidate, rng);
-      object.label = kind === 'truck' ? 'Parked Truck' : 'Parked Car';
+      object.label = `Parked ${object.label}`;
       if (this.overlapsOccupied(candidate.x, candidate.z, object.boundingRadius, occupied)) {
         continue;
       }
@@ -1072,10 +1230,28 @@ export class ProceduralMapGenerator {
         const palette = ['#f0c850', '#e56f40', '#7aa9d8', '#e2e8f0'];
         return this.withSize(base, 'Delivery Truck', { x: 2.12, y: 1.28, z: 4.35 }, rng.pick(palette), 2.2, 30, 42);
       }
+      case 'bus': {
+        const palette = ['#f6d365', '#62c7d8', '#e8edf2', '#7bc67b'];
+        return this.withSize(base, 'City Bus', { x: 2.26, y: 1.58, z: 6.25 }, rng.pick(palette), 3.15, 48, 62);
+      }
+      case 'emergency': {
+        const palette = ['#f8fafc', '#f43f5e', '#2563eb'];
+        const label = rng.chance(0.5) ? 'Ambulance' : rng.chance(0.5) ? 'Police Car' : 'Fire Response Truck';
+        const size = label === 'Police Car'
+          ? { x: 1.72, y: 0.86, z: 3.18 }
+          : { x: 2.05, y: 1.28, z: 4.15 };
+        return this.withSize(base, label, size, rng.pick(palette), Math.hypot(size.x, size.z) * 0.5, 24, 44);
+      }
+      case 'trailerTruck': {
+        const palette = ['#d7dee8', '#c9b18a', '#8aa5b1', '#f0c850'];
+        return this.withSize(base, 'Truck With Trailer', { x: 2.2, y: 1.36, z: 6.65 }, rng.pick(palette), 3.45, 58, 70);
+      }
       case 'pedestrian': {
         const palette = ['#f6c453', '#fb7185', '#60a5fa', '#91e88c', '#d8b4fe'];
         return this.withSize(base, 'Pedestrian', { x: 0.45, y: 1.55, z: 0.35 }, rng.pick(palette), 0.36, 2.2, 8);
       }
+      case 'trafficLight':
+        return this.withSize(base, 'Traffic Light', { x: 0.46, y: 3.05, z: 0.46 }, '#27313c', 0.42, 6.5, 12);
       case 'structure': {
         const width = rng.range(1.6, 4.4);
         const depth = rng.range(1.5, 4.4);
@@ -1089,9 +1265,9 @@ export class ProceduralMapGenerator {
       case 'statue':
         return this.withSize(base, 'Stone Statue', { x: 1.15, y: 2.35, z: 1.15 }, '#9ca3af', 0.78, 14, 38);
       case 'billboard':
-        return this.withSize(base, 'Billboard Ad', { x: 7.6, y: 4.7, z: 0.42 }, '#31394b', 3.82, 48, 82);
+        return this.withSize(base, 'Billboard Ad', { x: 13.1, y: 5.95, z: 0.42 }, '#31394b', 6.58, 72, 110);
       case 'screen':
-        return this.withSize(base, 'Video Ad Screen', { x: 7.2, y: 4.5, z: 0.42 }, '#222a3a', 3.64, 52, 88);
+        return this.withSize(base, 'Video Ad Screen', { x: 12.55, y: 6.35, z: 0.42 }, '#222a3a', 6.32, 78, 118);
       case 'building':
       default: {
         const zone = this.zoneForPosition(candidate.x, candidate.z);
@@ -1139,8 +1315,8 @@ export class ProceduralMapGenerator {
 
   private categoryForKind(kind: WorldObjectKind): CityObjectCategory {
     if (kind === 'building') return 'building';
-    if (kind === 'car' || kind === 'truck') return 'traffic';
-    if (kind === 'post' || kind === 'hydrant' || kind === 'mailbox' || kind === 'cone') return 'utility';
+    if (kind === 'car' || kind === 'truck' || kind === 'bus' || kind === 'emergency' || kind === 'trailerTruck') return 'traffic';
+    if (kind === 'post' || kind === 'hydrant' || kind === 'mailbox' || kind === 'cone' || kind === 'trafficLight') return 'utility';
     if (kind === 'tree' || kind === 'rock' || kind === 'planter') return 'nature';
     if (kind === 'billboard' || kind === 'screen') return 'ad';
     if (kind === 'pedestrian') return 'pedestrian';
@@ -1183,9 +1359,9 @@ export class ProceduralMapGenerator {
     size: MapSize
   ): void {
     const settings = MAP_SIZE_SETTINGS[size];
-    const billboardCount = Math.max(8, Math.floor(settings.halfExtent / 12));
+    const billboardCount = Math.max(5, Math.floor(settings.halfExtent / 20));
     const buildingCandidates = objects.filter((object) => object.kind === 'building');
-    const vehicleCandidates = objects.filter((object) => object.kind === 'truck' || object.kind === 'car');
+    const vehicleCandidates = objects.filter((object) => object.category === 'traffic');
 
     for (let i = 0; i < billboardCount; i += 1) {
       const candidate = {
@@ -1194,8 +1370,8 @@ export class ProceduralMapGenerator {
         rotationY: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2])
       };
       if (
-        this.overlapsOccupied(candidate.x, candidate.z, 2.6, occupied) ||
-        this.pointConflictsRoads(candidate.x, candidate.z, 2.6, roads)
+        this.overlapsOccupied(candidate.x, candidate.z, 5.2, occupied) ||
+        this.pointConflictsRoads(candidate.x, candidate.z, 5.2, roads)
       ) {
         continue;
       }
@@ -1213,23 +1389,13 @@ export class ProceduralMapGenerator {
       adSurfaces.push(surface);
     }
 
-    const edgeOffset = settings.halfExtent * 0.9;
-    const edgePlacements: SpawnCandidate[] = [
-      { x: -edgeOffset, z: -edgeOffset, rotationY: Math.PI * 0.25 },
-      { x: edgeOffset, z: -edgeOffset, rotationY: -Math.PI * 0.25 },
-      { x: -edgeOffset, z: edgeOffset, rotationY: Math.PI * 0.75 },
-      { x: edgeOffset, z: edgeOffset, rotationY: -Math.PI * 0.75 },
-      { x: 0, z: -edgeOffset, rotationY: 0 },
-      { x: 0, z: edgeOffset, rotationY: Math.PI },
-      { x: -edgeOffset, z: 0, rotationY: Math.PI / 2 },
-      { x: edgeOffset, z: 0, rotationY: -Math.PI / 2 }
-    ];
+    const edgePlacements = this.edgeAdPlacements(settings.halfExtent, rng);
 
-    for (const candidate of edgePlacements.slice(0, Math.max(4, Math.floor(settings.halfExtent / 22)))) {
-      if (this.overlapsOccupied(candidate.x, candidate.z, 3.4, occupied)) {
+    for (const candidate of edgePlacements) {
+      if (this.overlapsOccupied(candidate.x, candidate.z, 1.8, occupied)) {
         continue;
       }
-      const kind: WorldObjectKind = rng.chance(0.38) ? 'screen' : 'billboard';
+      const kind: WorldObjectKind = rng.chance(0.48) ? 'screen' : 'billboard';
       const adObject = this.createObjectDefinition(kind, objects.length, candidate, rng);
       adObject.isAd = true;
       objects.push(adObject);
@@ -1277,6 +1443,31 @@ export class ProceduralMapGenerator {
         )
       );
     }
+  }
+
+  private edgeAdPlacements(halfExtent: number, rng: SeededRandom): SpawnCandidate[] {
+    const edgeOffset = halfExtent * 0.98;
+    const perSide = Math.max(2, Math.min(12, Math.floor(halfExtent / 23)));
+    const placements: SpawnCandidate[] = [];
+    for (let i = 0; i < perSide; i += 1) {
+      const t = perSide === 1 ? 0 : -0.78 + (1.56 * i) / (perSide - 1);
+      const along = halfExtent * t + rng.range(-halfExtent * 0.035, halfExtent * 0.035);
+      placements.push(
+        { x: along, z: -edgeOffset, rotationY: 0 },
+        { x: along, z: edgeOffset, rotationY: Math.PI },
+        { x: -edgeOffset, z: along, rotationY: Math.PI / 2 },
+        { x: edgeOffset, z: along, rotationY: -Math.PI / 2 }
+      );
+    }
+
+    placements.push(
+      { x: -edgeOffset, z: -edgeOffset, rotationY: Math.PI * 0.25 },
+      { x: edgeOffset, z: -edgeOffset, rotationY: -Math.PI * 0.25 },
+      { x: -edgeOffset, z: edgeOffset, rotationY: Math.PI * 0.75 },
+      { x: edgeOffset, z: edgeOffset, rotationY: -Math.PI * 0.75 }
+    );
+
+    return placements;
   }
 
   private nearestRoad(x: number, z: number, roads: RoadSegment[]): { road: RoadSegment; distance: number } {
