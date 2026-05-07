@@ -38,6 +38,7 @@ export type WorldObjectKind =
   | 'statue';
 
 export type PowerUpType = 'magnet' | 'shrink' | 'haste' | 'shield' | 'stamina' | 'mass';
+export type HoleRimStyle = 'classic' | 'neon' | 'double' | 'clean';
 
 export interface Vec2Data {
   x: number;
@@ -207,6 +208,8 @@ export interface MatchHistoryEntry extends MatchResult {
 export interface PlayerProfile {
   accountId: string;
   playerName: string;
+  holeRimColor: string;
+  holeRimStyle: HoleRimStyle;
   createdAt: string;
   updatedAt: string;
   matchHistory: MatchHistoryEntry[];
