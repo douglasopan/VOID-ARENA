@@ -209,6 +209,10 @@ export class ProceduralMapGenerator {
     const sideVector = this.sideVector(road.rotationY);
     const forward = this.forwardVector(road.rotationY);
     for (const side of [-1, 1]) {
+      if (this.hasNearbyParallelRoadOnSide(road, roads, side)) {
+        continue;
+      }
+
       const sidewalkCuts = this.sidewalkCutsForRoadSide(road, roads, side, sideOffset);
       const sidewalkRuns = this.subtractRanges(-road.length * 0.5, road.length * 0.5, sidewalkCuts, 3.2);
       sidewalkRuns.forEach((run, index) => {
@@ -327,12 +331,39 @@ export class ProceduralMapGenerator {
     const overlapAlong = along < road.length * 0.5 + other.length * 0.5 + 1.2;
     const protectedLateral =
       road.width * 0.5 +
-      road.sidewalkWidth +
       other.width * 0.5 +
-      other.sidewalkWidth +
       0.9;
 
     return overlapAlong && lateral < protectedLateral;
+  }
+
+  private hasNearbyParallelRoadOnSide(road: RoadSegment, roads: RoadSegment[], sideSign: number): boolean {
+    const forward = this.forwardVector(road.rotationY);
+    const side = this.sideVector(road.rotationY);
+
+    return roads.some((other) => {
+      if (other === road || Math.abs(Math.sin(road.rotationY - other.rotationY)) > 0.2) {
+        return false;
+      }
+
+      const dx = other.x - road.x;
+      const dz = other.z - road.z;
+      const along = Math.abs(dx * forward.x + dz * forward.z);
+      const lateral = dx * side.x + dz * side.z;
+      if (lateral * sideSign <= 0) {
+        return false;
+      }
+
+      const overlapAlong = along < road.length * 0.5 + other.length * 0.5;
+      const asphaltGap = Math.abs(lateral) - road.width * 0.5 - other.width * 0.5;
+      const hasAvenue = road.id.startsWith('avenue') || other.id.startsWith('avenue');
+      const widestRoad = Math.max(road.width, other.width);
+      const internalGapAllowance = hasAvenue
+        ? Math.max(20, Math.min(28, widestRoad * 2.2))
+        : Math.max(11, Math.min(16, widestRoad * 1.4));
+      const mergedAvenueGap = road.sidewalkWidth + other.sidewalkWidth + internalGapAllowance;
+      return overlapAlong && asphaltGap > 0.1 && asphaltGap <= mergedAvenueGap;
+    });
   }
 
   private sidewalkCutsForRoadSide(

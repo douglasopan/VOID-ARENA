@@ -11,8 +11,8 @@ export class NetworkClient {
   private socket: Socket | null = null;
   private readonly baseUrl: string;
 
-  constructor(baseUrl = 'http://localhost:3001') {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl = resolveMultiplayerServerUrl()) {
+    this.baseUrl = baseUrl.replace(/\/+$/, '');
   }
 
   get connected(): boolean {
@@ -114,4 +114,17 @@ export class NetworkClient {
     this.socket?.disconnect();
     this.socket = null;
   }
+}
+
+function resolveMultiplayerServerUrl(): string {
+  const configured = import.meta.env.VITE_MULTIPLAYER_SERVER_URL?.trim();
+  if (configured) {
+    return configured;
+  }
+
+  if (import.meta.env.DEV) {
+    return 'http://localhost:3001';
+  }
+
+  return window.location.origin;
 }

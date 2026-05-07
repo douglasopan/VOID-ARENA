@@ -6,21 +6,35 @@ import { RoomManager } from './rooms/RoomManager';
 import type { RoomCreateOptions, ServerPlayer, ServerPlayerState } from './shared/serverTypes';
 
 const PORT = Number(process.env.PORT ?? 3001);
+const HOST = process.env.HOST ?? '0.0.0.0';
+const allowedOrigins = (process.env.CLIENT_ORIGINS ?? process.env.CLIENT_ORIGIN ?? '*')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const corsOrigin = allowedOrigins.includes('*') ? '*' : allowedOrigins;
 const app = express();
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: '*'
+    origin: corsOrigin
   }
 });
 const roomManager = new RoomManager();
 const socketRooms = new Map<string, string>();
 
 app.use(express.json());
-app.use((_request, response, next) => {
-  response.header('Access-Control-Allow-Origin', '*');
+app.use((request, response, next) => {
+  const requestOrigin = request.headers.origin;
+  const responseOrigin =
+    allowedOrigins.includes('*') || !requestOrigin
+      ? '*'
+      : allowedOrigins.includes(requestOrigin)
+        ? requestOrigin
+        : allowedOrigins[0] ?? '*';
+  response.header('Access-Control-Allow-Origin', responseOrigin);
   response.header('Access-Control-Allow-Headers', 'Content-Type');
   response.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  response.header('Vary', 'Origin');
   next();
 });
 app.options('*', (_request, response) => {
@@ -36,14 +50,19 @@ roomManager.createRoom({
   durationSeconds: 180,
   enableChat: true,
   enableAds: true,
-    objectDensityMultiplier: 1,
-    powerUpCount: 14,
-    respawnSafeRadius: 12,
-    botDifficultyMix: 'balanced'
+  objectDensityMultiplier: 1,
+  powerUpCount: 14,
+  respawnSafeRadius: 12,
+  botDifficultyMix: 'balanced'
 });
 
 app.get('/health', (_request, response) => {
-  response.json({ ok: true, name: 'Void Arena server' });
+  response.json({
+    ok: true,
+    name: 'Void Arena server',
+    rooms: roomManager.listRooms().length,
+    uptimeSeconds: Math.round(process.uptime())
+  });
 });
 
 app.get('/rooms', (_request, response) => {
@@ -133,6 +152,6 @@ io.on('connection', (socket) => {
   });
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`Void Arena server listening on http://localhost:${PORT}`);
+httpServer.listen(PORT, HOST, () => {
+  console.log(`Void Arena server listening on http://${HOST}:${PORT}`);
 });
