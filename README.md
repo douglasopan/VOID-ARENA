@@ -1,93 +1,214 @@
-# Void Arena
+# VOID ARENA
 
-Void Arena e um jogo 3D multiplayer feito com Vite, TypeScript, Three.js, Express e Socket.IO.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/douglasopan/VOID-ARENA/main/public/logo.png" width="400" />
+</p>
 
-## Rodar localmente
+<h3 align="center">
+Consume. Grow. Dominate.
+</h3>
+
+---
+
+## About The Project
+
+VOID ARENA is a large-scale competitive multiplayer game where players control gravitational entities capable of consuming the world around them in order to grow, evolve, and dominate the arena.
+
+The core gameplay loop is simple, satisfying, and highly addictive:
+
+- Hunt
+- Consume
+- Grow
+- Dominate
+- Repeat
+
+Players absorb:
+- structures
+- vehicles
+- trees
+- objects
+- NPCs
+- parts of the city
+- and even other players
+
+As the Void grows, the player's influence over the arena increases, transforming both the gameplay and the map itself.
+
+Every match becomes a living ecosystem of destruction, territorial control, survival, and chaos.
+
+---
+
+# Vision
+
+VOID ARENA is designed to become more than just another multiplayer game.
+
+The vision is to create a highly replayable and massively scalable experience that combines:
+
+- Real-time multiplayer gameplay
+- Physics-based interaction
+- Environmental destruction
+- Emergent gameplay
+- Territorial domination
+- Dynamic arenas
+- Social competition
+- Streamable chaos
+
+We want every match to feel alive and unpredictable.
+
+---
+
+# The Core Feeling
+
+One of the most important aspects of VOID ARENA is the emotional satisfaction created by the act of consumption itself.
+
+There is something strangely enjoyable and instinctive about chasing objects across the map just to watch them be swallowed by the Void.
+
+As players move through the arena, they unconsciously enter an addictive gameplay loop:
+
+- Search
+- Consume
+- Expand
+- Dominate
+
+Watching the Void erase parts of the environment creates a powerful sense of progression and visual reward.
+
+The game is built around this sensation:
+
+> The pleasure of consuming the world and becoming something larger, stronger, and impossible to ignore.
+
+---
+
+# Gameplay Philosophy
+
+VOID ARENA focuses on:
+
+- Fast and satisfying gameplay
+- Constant progression
+- Massive multiplayer potential
+- Environmental interaction
+- Emergent strategies
+- Visual feedback
+- Replayability
+
+The arena itself becomes part of the gameplay.
+
+The battlefield changes dynamically as players consume and reshape the environment in real time.
+
+---
+
+# Future Goals
+
+The long-term vision for VOID ARENA includes:
+
+- Massive multiplayer matches
+- Competitive ranked systems
+- Clans and factions
+- Dynamic world events
+- Seasonal content
+- Procedural arenas
+- Persistent progression
+- Cosmetics and customization
+- AI-driven ecosystems
+- Large-scale city destruction
+- Cross-platform gameplay
+
+---
+
+# Technology Stack
+
+VOID ARENA is currently built using:
+
+- Vite
+- TypeScript
+- Three.js
+- Express
+- Socket.IO
+- Node.js
+
+---
+
+# Running Locally
+
+## Install dependencies
 
 ```bash
 npm install
-npm run dev
-```
 
-O cliente abre em `http://localhost:5173` e o servidor multiplayer em `http://localhost:3001`.
 
-Para rodar separado:
 
-```bash
+Running Client and Server Separately
+Client
 npm run dev:client
+Server
 npm run dev:server
-```
+Environment Variables
 
-## Variaveis de ambiente
+Copy:
 
-Copie `.env.example` para `.env` quando precisar configurar URLs locais ou de producao.
+.env.example
 
-Cliente:
+to:
 
-```bash
+.env
+
+Example:
+
 VITE_MULTIPLAYER_SERVER_URL=http://localhost:3001
-```
 
-Servidor:
+Deployment
+Frontend
 
-```bash
-PORT=3001
-HOST=0.0.0.0
-CLIENT_ORIGIN=http://localhost:5173
-```
+Recommended:
 
-Em producao, `VITE_MULTIPLAYER_SERVER_URL` deve apontar para a URL publica do servidor Socket.IO.
+Vercel
+Multiplayer Server
 
-## Deploy rapido
+Recommended:
 
-### Frontend na Vercel
+Railway
+Render
+Fly.io
+VPS
+Project Structure
+VOID-ARENA/
+├── public/
+├── server/
+├── src/
+├── package.json
+├── vite.config.ts
+├── vercel.json
+└── README.md
+Inspirations
 
-1. Suba este repositorio no GitHub.
-2. Na Vercel, importe o repositorio.
-3. Use:
-   - Build Command: `npm run build`
-   - Output Directory: `dist`
-4. Configure a variavel:
-   - `VITE_MULTIPLAYER_SERVER_URL=https://sua-url-do-servidor-multiplayer`
+VOID ARENA draws inspiration from:
 
-O arquivo `vercel.json` ja deixa o projeto pronto para deploy do frontend Vite.
+Competitive .io games
+Battle Royale experiences
+Sandbox destruction systems
+Physics-driven gameplay
+Cyberpunk aesthetics
+Emergent multiplayer chaos
 
-### Servidor multiplayer
+But its identity is centered around one core idea:
 
-O multiplayer usa Socket.IO/WebSockets. Vercel Functions nao devem ser usadas como servidor WebSocket persistente. A propria documentacao da Vercel informa essa limitacao e recomenda provedores realtime externos ou um servidor separado:
+"Consume. Grow. Dominate."
+Final Objective
 
-- https://vercel.com/docs/limits/overview#websockets
-- https://vercel.com/guides/do-vercel-serverless-functions-support-websocket-connections
+VOID ARENA aims to become:
 
-Para manter o jogo multiplayer online, hospede o servidor em uma plataforma que aceite processos Node com WebSockets, como Railway, Render, Fly.io, VPS ou Docker.
+Easy to understand
+Difficult to master
+Exciting to watch
+Highly shareable
+Creator-friendly
+Socially engaging
+Competitive
+Infinitely replayable
 
-Comandos comuns para o servidor:
+The Void is always hungry.
 
-```bash
-npm install
-npm start
-```
+Author
 
-Variaveis recomendadas:
+Created by Douglas Pan.
 
-```bash
-PORT=3001
-HOST=0.0.0.0
-CLIENT_ORIGIN=https://seu-jogo.vercel.app
-```
-
-Tambem ha `Dockerfile` e `Procfile` para facilitar deploy em hospedagens que detectam Docker ou processos web.
-
-## GitHub
-
-Arquivos gerados, `node_modules`, `dist`, logs e screenshots locais ficam fora do Git via `.gitignore`.
-
-Checklist antes de publicar:
-
-```bash
-npm run build
-git status
-git add .
-git commit -m "Prepare Void Arena for online deploy"
-git push origin main
-```
+GitHub:
+https://github.com/douglasopan & Codex (OpenAI)
