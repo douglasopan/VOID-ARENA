@@ -760,7 +760,7 @@ export class ObjectFactory {
     const floorCount = Math.max(2, Math.min(isIndustrial ? 5 : 14, Math.floor(object.size.y / 1.18)));
     const rowStep = object.size.y / (floorCount + 1);
     const lightColor = isIndustrial ? '#ffd38a' : object.label === 'Office Building' ? '#dff6ff' : '#ffe6a7';
-    const material = this.createCityLightMaterial(lightColor, 0.025, isIndustrial ? 0.68 : 0.9);
+    const material = this.createCityLightMaterial(lightColor, 0.04, isIndustrial ? 0.86 : 1);
     const frontGeometry = new THREE.BoxGeometry(object.size.x * 0.68, 0.12, 0.045);
     const sideGeometry = new THREE.BoxGeometry(0.045, 0.12, object.size.z * 0.58);
 
@@ -770,11 +770,11 @@ export class ObjectFactory {
       }
 
       const y = -object.size.y * 0.5 + rowStep * floor;
-      const rowOpacity = floor % 3 === 0 ? 0.68 : 0.94;
+      const rowOpacity = floor % 3 === 0 ? 0.82 : 1;
       for (const z of [-object.size.z * 0.506, object.size.z * 0.506]) {
         const strip = new THREE.Mesh(frontGeometry, material);
         strip.position.set(0, y, z);
-        this.markCityLight(strip, 0.025, rowOpacity);
+        this.markCityLight(strip, 0.04, rowOpacity);
         group.add(strip);
       }
 
@@ -782,7 +782,7 @@ export class ObjectFactory {
         for (const x of [-object.size.x * 0.506, object.size.x * 0.506]) {
           const strip = new THREE.Mesh(sideGeometry, material);
           strip.position.set(x, y, 0);
-          this.markCityLight(strip, 0.018, rowOpacity * 0.82);
+          this.markCityLight(strip, 0.03, rowOpacity * 0.9);
           group.add(strip);
         }
       }
@@ -797,10 +797,10 @@ export class ObjectFactory {
     const color = isIndustrial ? '#ffd38a' : object.label === 'Office Building' ? '#dff6ff' : '#ffe6a7';
     const glow = new THREE.Mesh(
       new THREE.BoxGeometry(object.size.x * 0.58, 0.08, 0.055),
-      this.createCityLightMaterial(color, 0.015, isIndustrial ? 0.56 : 0.68)
+      this.createCityLightMaterial(color, 0.026, isIndustrial ? 0.72 : 0.82)
     );
     glow.position.set(0, Math.max(0.9, object.size.y * 0.08), -object.size.z * 0.53);
-    this.markCityLight(glow, 0.015, isIndustrial ? 0.56 : 0.68);
+    this.markCityLight(glow, 0.026, isIndustrial ? 0.72 : 0.82);
     group.add(glow);
   }
 
@@ -867,12 +867,15 @@ export class ObjectFactory {
     const glowMaterial = this.createCityLightMaterial('#fff4bc', 0.08, 0.9);
     const beamLength = emergency ? 13.5 : 10.5;
     const beamWidth = Math.max(width * 1.85, emergency ? 3.8 : 2.9);
-    const beam = new THREE.Mesh(
-      new THREE.PlaneGeometry(beamWidth, beamLength, 1, 1),
-      this.createLightGlowMaterial('#fff1a8', 0.025, emergency ? 0.46 : 0.34)
+    const beam = this.createForwardLightBeam(
+      '#fff1a8',
+      Math.max(0.75, width * 0.55),
+      beamWidth,
+      beamLength,
+      0.025,
+      emergency ? 0.46 : 0.34
     );
-    beam.rotation.x = -Math.PI / 2;
-    beam.position.set(0, 0.095, length * 0.56 + beamLength * 0.5);
+    beam.position.set(0, 0.095, length * 0.56);
     group.add(beam);
 
     for (const x of [-width * 0.28, width * 0.28]) {
@@ -986,15 +989,41 @@ export class ObjectFactory {
     );
     flashlight.position.set(0.2, object.size.y * 0.08, 0.18);
     const beam = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.25, 2.9, 1, 1),
+      this.createForwardLightBeamGeometry(0.18, 1.25, 2.9),
       this.createLightGlowMaterial('#fff7bd', 0.018, 0.28)
     );
     beam.rotation.x = -Math.PI / 2;
-    beam.position.set(0.2, 0.09, 1.62);
+    beam.position.set(0.2, 0.09, 0.3);
     const spot = this.createCitySpotLight('#fff7bd', 0, 0.48, 8.5, 0.5, 1.35, 1.2);
     spot.position.set(0.2, object.size.y * 0.16, 0.24);
     spot.target.position.set(0.2, 0.06, 3.2);
     group.add(flashlight, beam, spot, spot.target);
+  }
+
+  private createForwardLightBeam(
+    color: string,
+    nearWidth: number,
+    farWidth: number,
+    length: number,
+    dayOpacity: number,
+    nightOpacity: number
+  ): THREE.Mesh {
+    const beam = new THREE.Mesh(
+      this.createForwardLightBeamGeometry(nearWidth, farWidth, length),
+      this.createLightGlowMaterial(color, dayOpacity, nightOpacity)
+    );
+    beam.rotation.x = -Math.PI / 2;
+    return beam;
+  }
+
+  private createForwardLightBeamGeometry(nearWidth: number, farWidth: number, length: number): THREE.ShapeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-nearWidth * 0.5, 0);
+    shape.lineTo(nearWidth * 0.5, 0);
+    shape.lineTo(farWidth * 0.5, length);
+    shape.lineTo(-farWidth * 0.5, length);
+    shape.closePath();
+    return new THREE.ShapeGeometry(shape);
   }
 
   private getMaterial(color: string, roughness: number, metalness: number): THREE.MeshStandardMaterial {
