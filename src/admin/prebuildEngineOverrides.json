@@ -29,7 +29,7 @@
     }
   },
   "gameplay": {
-    "startSpeedMultiplier": 100,
+    "startSpeedMultiplier": 2,
     "boostMultiplier": "",
     "magnetStrengthMultiplier": ""
   }
