@@ -296,19 +296,21 @@ export class ObjectFactory {
     );
     lampHead.position.set(0.98, object.size.y * 0.5 + 0.02, 0);
     const bulb = new THREE.Mesh(
-      new THREE.SphereGeometry(0.13, 10, 8),
-      this.createCityLightMaterial('#ffe4a3', 0.08, 0.92)
+      new THREE.SphereGeometry(0.17, 12, 8),
+      this.createCityLightMaterial('#ffe4a3', 0.16, 1)
     );
     bulb.position.set(0.98, object.size.y * 0.5 - 0.08, 0);
-    this.markCityLight(bulb, 0.08, 0.92);
-    const light = this.createCityPointLight('#ffe4a3', 0, 0.95, 13.5, 2.25, 3);
+    this.markCityLight(bulb, 0.16, 1);
+    const light = this.createCityPointLight('#ffe4a3', 0.04, 3.45, 34, 1.45, 7);
     light.position.copy(bulb.position);
+    const groundGlow = this.createGroundGlow('#ffd98f', 7.2, 0.05, 0.5);
+    groundGlow.position.set(0.92, 0.095, 0);
     pole.castShadow = true;
     base.castShadow = true;
     cap.castShadow = true;
     arm.castShadow = true;
     lampHead.castShadow = true;
-    group.add(base, pole, cap, arm, lampHead, bulb, light);
+    group.add(base, pole, cap, arm, lampHead, bulb, groundGlow, light);
     return group;
   }
 
@@ -507,6 +509,9 @@ export class ObjectFactory {
     body.castShadow = true;
     head.castShadow = true;
     group.add(body, head);
+    if (this.shouldAddPedestrianFlashlight(object.id)) {
+      this.addPedestrianFlashlight(group, object);
+    }
     return group;
   }
 
@@ -555,18 +560,18 @@ export class ObjectFactory {
       }
     }
 
-    const headlightMaterial = this.createCityLightMaterial('#fff4bc', 0.12, 1);
-    const tailLightMaterial = this.createCityLightMaterial('#ff4c4c', 0.08, 0.82);
+    const headlightMaterial = this.createCityLightMaterial('#fff4bc', 0.18, 1);
+    const tailLightMaterial = this.createCityLightMaterial('#ff4c4c', 0.1, 0.92);
     for (const x of [-object.size.x * 0.28, object.size.x * 0.28]) {
       const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.05), headlightMaterial);
       headlight.position.set(x, object.size.y * 0.06, object.size.z * 0.51);
-      this.markCityLight(headlight, 0.12, 1);
+      this.markCityLight(headlight, 0.18, 1);
       const tailLight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.05), tailLightMaterial);
       tailLight.position.set(x, object.size.y * 0.02, -object.size.z * 0.51);
-      this.markCityLight(tailLight, 0.08, 0.82);
+      this.markCityLight(tailLight, 0.1, 0.92);
       group.add(headlight, tailLight);
     }
-    this.addVehicleHeadlightGlow(group, object.size.y, object.size.z);
+    this.addVehicleHeadlightGlow(group, object.size.x, object.size.y, object.size.z);
 
     body.castShadow = true;
     cabin.castShadow = true;
@@ -619,6 +624,7 @@ export class ObjectFactory {
     );
     lightbar.position.set(0, object.size.y * 0.58, -object.size.z * 0.08);
     this.markCityLight(lightbar, 0.28, 1);
+    this.addEmergencyBeacons(group, object);
     this.addVehicleWheels(group, object, [-object.size.z * 0.32, object.size.z * 0.32], 0.23);
     this.addVehicleLights(group, object, object.size.x, object.size.y, object.size.z);
     body.castShadow = true;
@@ -693,18 +699,18 @@ export class ObjectFactory {
   }
 
   private addVehicleLights(group: THREE.Group, object: WorldObject, width: number, height: number, length: number): void {
-    const headlightMaterial = this.createCityLightMaterial('#fff4bc', 0.12, 1);
-    const tailLightMaterial = this.createCityLightMaterial('#ff4c4c', 0.08, 0.82);
+    const headlightMaterial = this.createCityLightMaterial('#fff4bc', 0.18, 1);
+    const tailLightMaterial = this.createCityLightMaterial('#ff4c4c', 0.1, 0.92);
     for (const x of [-width * 0.28, width * 0.28]) {
       const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.05), headlightMaterial);
       headlight.position.set(x, height * 0.06, length * 0.51);
-      this.markCityLight(headlight, 0.12, 1);
+      this.markCityLight(headlight, 0.18, 1);
       const tailLight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.05), tailLightMaterial);
       tailLight.position.set(x, height * 0.02, -length * 0.51);
-      this.markCityLight(tailLight, 0.08, 0.82);
+      this.markCityLight(tailLight, 0.1, 0.92);
       group.add(headlight, tailLight);
     }
-    this.addVehicleHeadlightGlow(group, height, length);
+    this.addVehicleHeadlightGlow(group, width, height, length, object.kind === 'emergency');
   }
 
   private createAdFrame(object: WorldObject): THREE.Group {
@@ -851,14 +857,43 @@ export class ObjectFactory {
     mesh.userData.cityLight = { dayOpacity, nightOpacity };
   }
 
-  private addVehicleHeadlightGlow(group: THREE.Group, height: number, length: number): void {
-    const glowMaterial = this.createCityLightMaterial('#fff4bc', 0.04, 0.62);
-    for (const x of [-0.32, 0.32]) {
-      const glow = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.05), glowMaterial);
+  private addVehicleHeadlightGlow(
+    group: THREE.Group,
+    width: number,
+    height: number,
+    length: number,
+    emergency = false
+  ): void {
+    const glowMaterial = this.createCityLightMaterial('#fff4bc', 0.08, 0.9);
+    const beamLength = emergency ? 13.5 : 10.5;
+    const beamWidth = Math.max(width * 1.85, emergency ? 3.8 : 2.9);
+    const beam = new THREE.Mesh(
+      new THREE.PlaneGeometry(beamWidth, beamLength, 1, 1),
+      this.createLightGlowMaterial('#fff1a8', 0.025, emergency ? 0.46 : 0.34)
+    );
+    beam.rotation.x = -Math.PI / 2;
+    beam.position.set(0, 0.095, length * 0.56 + beamLength * 0.5);
+    group.add(beam);
+
+    for (const x of [-width * 0.28, width * 0.28]) {
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.08), glowMaterial);
       glow.position.set(x, height * 0.08, length * 0.6);
-      this.markCityLight(glow, 0.04, 0.62);
+      this.markCityLight(glow, 0.08, 0.9);
       group.add(glow);
     }
+
+    const spot = this.createCitySpotLight(
+      '#fff4bc',
+      0.02,
+      emergency ? 1.85 : 1.2,
+      emergency ? 32 : 25,
+      emergency ? 0.48 : 0.42,
+      1.12,
+      emergency ? 6 : 4
+    );
+    spot.position.set(0, height * 0.18, length * 0.55);
+    spot.target.position.set(0, 0.06, length * 0.55 + beamLength + 4);
+    group.add(spot, spot.target);
   }
 
   private createCityPointLight(
@@ -873,6 +908,93 @@ export class ObjectFactory {
     light.castShadow = false;
     light.userData.cityPointLight = { dayIntensity, nightIntensity, priority };
     return light;
+  }
+
+  private createCitySpotLight(
+    color: string,
+    dayIntensity: number,
+    nightIntensity: number,
+    distance: number,
+    angle: number,
+    decay: number,
+    priority: number
+  ): THREE.SpotLight {
+    const light = new THREE.SpotLight(color, 0, distance, angle, 0.62, decay);
+    light.castShadow = false;
+    light.userData.cityPointLight = { dayIntensity, nightIntensity, priority };
+    return light;
+  }
+
+  private createGroundGlow(
+    color: string,
+    radius: number,
+    dayOpacity: number,
+    nightOpacity: number
+  ): THREE.Mesh {
+    const glow = new THREE.Mesh(
+      new THREE.CircleGeometry(radius, 28),
+      this.createLightGlowMaterial(color, dayOpacity, nightOpacity)
+    );
+    glow.rotation.x = -Math.PI / 2;
+    return glow;
+  }
+
+  private createLightGlowMaterial(color: string, dayOpacity: number, nightOpacity: number): THREE.MeshBasicMaterial {
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: dayOpacity,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending
+    });
+    material.userData.cityLight = { dayOpacity, nightOpacity };
+    return material;
+  }
+
+  private addEmergencyBeacons(group: THREE.Group, object: WorldObject): void {
+    const redBeacon = new THREE.Mesh(
+      new THREE.BoxGeometry(object.size.x * 0.22, 0.09, 0.16),
+      this.createCityLightMaterial('#ef4444', 0.22, 1)
+    );
+    redBeacon.position.set(-object.size.x * 0.16, object.size.y * 0.64, -object.size.z * 0.08);
+    const blueBeacon = redBeacon.clone();
+    blueBeacon.material = this.createCityLightMaterial('#60a5fa', 0.22, 1);
+    blueBeacon.position.x = object.size.x * 0.16;
+    this.markCityLight(redBeacon, 0.22, 1);
+    this.markCityLight(blueBeacon, 0.22, 1);
+
+    const redLight = this.createCityPointLight('#ef4444', 0.04, 2.45, 24, 1.35, 8);
+    redLight.position.copy(redBeacon.position);
+    const blueLight = this.createCityPointLight('#60a5fa', 0.04, 2.45, 24, 1.35, 8);
+    blueLight.position.copy(blueBeacon.position);
+    group.add(redBeacon, blueBeacon, redLight, blueLight);
+  }
+
+  private shouldAddPedestrianFlashlight(id: string): boolean {
+    let hash = 0;
+    for (let index = 0; index < id.length; index += 1) {
+      hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+    }
+    return hash % 5 < 2;
+  }
+
+  private addPedestrianFlashlight(group: THREE.Group, object: WorldObject): void {
+    const flashlight = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 0.18),
+      this.getMaterial('#111827', 0.48, 0.16)
+    );
+    flashlight.position.set(0.2, object.size.y * 0.08, 0.18);
+    const beam = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.25, 2.9, 1, 1),
+      this.createLightGlowMaterial('#fff7bd', 0.018, 0.28)
+    );
+    beam.rotation.x = -Math.PI / 2;
+    beam.position.set(0.2, 0.09, 1.62);
+    const spot = this.createCitySpotLight('#fff7bd', 0, 0.48, 8.5, 0.5, 1.35, 1.2);
+    spot.position.set(0.2, object.size.y * 0.16, 0.24);
+    spot.target.position.set(0.2, 0.06, 3.2);
+    group.add(flashlight, beam, spot, spot.target);
   }
 
   private getMaterial(color: string, roughness: number, metalness: number): THREE.MeshStandardMaterial {

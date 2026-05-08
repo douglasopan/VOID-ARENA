@@ -54,7 +54,7 @@ export class SceneManager {
   }> = [];
   private readonly cityLightMeshes: THREE.Mesh[] = [];
   private readonly cityPointLights: Array<{
-    light: THREE.PointLight;
+    light: THREE.PointLight | THREE.SpotLight;
     dayIntensity: number;
     nightIntensity: number;
     priority: number;
@@ -647,16 +647,16 @@ export class SceneManager {
 
   private collectCityLightMeshes(object: THREE.Object3D): void {
     object.traverse((child) => {
-      const pointLight = child as THREE.PointLight;
       const pointLightData = child.userData.cityPointLight as {
         dayIntensity?: number;
         nightIntensity?: number;
         priority?: number;
       } | undefined;
-      if (pointLight.isPointLight && pointLightData) {
-        pointLight.visible = false;
+      if ((child instanceof THREE.PointLight || child instanceof THREE.SpotLight) && pointLightData) {
+        const cityLight = child;
+        cityLight.visible = false;
         this.cityPointLights.push({
-          light: pointLight,
+          light: cityLight,
           dayIntensity: pointLightData.dayIntensity ?? 0,
           nightIntensity: pointLightData.nightIntensity ?? 0.4,
           priority: pointLightData.priority ?? 0,
@@ -681,12 +681,12 @@ export class SceneManager {
 
   private cityPointLightLimit(): number {
     if (this.currentGraphicsQuality === 'performance') {
-      return 0;
+      return 5;
     }
     if (this.currentGraphicsQuality === 'quality') {
-      return 16;
+      return 30;
     }
-    return 6;
+    return 14;
   }
 
   private applyRendererPixelRatio(): void {
