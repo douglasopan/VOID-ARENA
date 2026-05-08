@@ -336,6 +336,32 @@ label {
   background: rgba(94, 234, 212, 0.2);
 }
 
+.seed-field {
+  grid-column: 1 / -1;
+}
+
+.seed-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, auto);
+  gap: 8px;
+  align-items: center;
+}
+
+.seed-row input {
+  font-family: var(--menu-font);
+  font-size: 0.88rem;
+}
+
+.seed-row button {
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
+.seed-field small {
+  color: var(--text-soft);
+  line-height: 1.35;
+}
+
 .hole-appearance-field {
   grid-column: 1 / -1;
 }
@@ -609,6 +635,53 @@ label {
 
 .hud-options-field {
   grid-column: 1 / -1;
+}
+
+.controls-options-field {
+  grid-column: 1 / -1;
+}
+
+.control-bind-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 8px;
+}
+
+.control-bind-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  border-color: rgba(255, 255, 255, 0.12);
+  padding: 0 10px;
+  color: #f6f8ff;
+  background: rgba(255, 255, 255, 0.05);
+  font-family: "Open Sans", sans-serif;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.control-bind-button:hover {
+  transform: none;
+}
+
+.control-bind-button strong {
+  color: var(--cyan);
+  font-family: "Orbitron", "Open Sans", sans-serif;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.control-bind-button.listening {
+  border-color: rgba(246, 196, 83, 0.88);
+  background: rgba(246, 196, 83, 0.14);
+}
+
+.controls-hint {
+  color: var(--text-soft);
+  line-height: 1.35;
 }
 
 .pause-hud-toggle-list {
@@ -933,6 +1006,8 @@ label {
 
 .touch-stick-base,
 .touch-boost,
+.touch-dash,
+.touch-power,
 .touch-menu {
   pointer-events: auto;
   touch-action: none;
@@ -965,12 +1040,21 @@ label {
 
 .touch-action-stack {
   display: grid;
-  gap: 10px;
+  gap: 9px;
   justify-items: end;
   pointer-events: none;
 }
 
+.touch-secondary-row {
+  display: flex;
+  gap: 8px;
+  justify-content: end;
+  pointer-events: none;
+}
+
 .touch-boost,
+.touch-dash,
+.touch-power,
 .touch-menu {
   width: 92px;
   border-radius: 999px;
@@ -994,7 +1078,29 @@ label {
   box-shadow: 0 0 22px rgba(94, 234, 212, 0.28);
 }
 
-.touch-boost.active {
+.touch-dash,
+.touch-power {
+  width: 74px;
+  height: 54px;
+  min-height: 54px;
+  border-radius: 18px;
+  font-size: 0.72rem;
+  pointer-events: auto;
+}
+
+.touch-dash {
+  background: rgba(249, 115, 22, 0.88);
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.28);
+}
+
+.touch-power {
+  background: rgba(163, 230, 53, 0.88);
+  box-shadow: 0 0 18px rgba(163, 230, 53, 0.28);
+}
+
+.touch-boost.active,
+.touch-dash.active,
+.touch-power.active {
   transform: scale(0.96);
   background: rgba(251, 113, 133, 0.9);
 }
@@ -1169,6 +1275,10 @@ label {
     width: 42px;
     height: 42px;
     min-height: 42px;
+  }
+
+  .seed-row {
+    grid-template-columns: 1fr;
   }
 
   .hud-settings-toggle {

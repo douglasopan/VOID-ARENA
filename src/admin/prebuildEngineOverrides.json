@@ -1,1 +1,36 @@
-{}
+{
+  "generation": {
+    "spawnHeightOffsets": {
+      "crate": 0,
+      "post": 0,
+      "tree": -0.35,
+      "rock": 0.03,
+      "car": 0.14,
+      "truck": 0.06,
+      "bus": 0.08,
+      "emergency": 0.14,
+      "trailerTruck": 0.18,
+      "trafficLight": 0,
+      "building": 0,
+      "structure": 0,
+      "billboard": 0,
+      "screen": 0.08,
+      "bench": 0.14,
+      "hydrant": 0,
+      "trash": 0,
+      "pedestrian": -0.28,
+      "cone": 0,
+      "mailbox": 0.06,
+      "bike": 0.23,
+      "planter": 0,
+      "kiosk": 0,
+      "fountain": -0.07,
+      "statue": -0.35
+    }
+  },
+  "gameplay": {
+    "startSpeedMultiplier": 20000000,
+    "boostMultiplier": 10,
+    "magnetStrengthMultiplier": 100
+  }
+}

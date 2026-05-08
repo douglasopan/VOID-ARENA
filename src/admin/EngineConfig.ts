@@ -11,11 +11,33 @@ import type { NaturalDisasterType } from '../game/NaturalDisasterSystem';
 import prebuildEngineOverrides from './prebuildEngineOverrides.json';
 
 export type EngineDisasterType = Exclude<NaturalDisasterType, 'clear'>;
+export type ControlAction =
+  | 'moveUp'
+  | 'moveDown'
+  | 'moveLeft'
+  | 'moveRight'
+  | 'boost'
+  | 'dash'
+  | 'power'
+  | 'chat'
+  | 'pause';
 
 export const ENGINE_CONFIG_STORAGE_KEY = 'void-arena-engine-config';
 export const ENGINE_CONFIG_EVENT = 'void-arena-engine-config-changed';
 
 export const ALL_POWER_UP_TYPES: PowerUpType[] = ['magnet', 'shrink', 'haste', 'shield', 'stamina', 'mass', 'gust', 'overcharge', 'dash'];
+export const CONTROL_ACTIONS: ControlAction[] = ['moveUp', 'moveDown', 'moveLeft', 'moveRight', 'boost', 'dash', 'power', 'chat', 'pause'];
+export const DEFAULT_CONTROL_BINDINGS: Record<ControlAction, string[]> = {
+  moveUp: ['KeyW', 'ArrowUp'],
+  moveDown: ['KeyS', 'ArrowDown'],
+  moveLeft: ['KeyA', 'ArrowLeft'],
+  moveRight: ['KeyD', 'ArrowRight'],
+  boost: ['ShiftLeft', 'ShiftRight'],
+  dash: ['Space'],
+  power: ['KeyE'],
+  chat: ['Enter'],
+  pause: ['Escape']
+};
 
 export const ALL_WORLD_OBJECT_KINDS: WorldObjectKind[] = [
   'crate',
@@ -91,6 +113,11 @@ export interface EngineDisasterConfig {
   weight: number;
 }
 
+export interface EngineControlsConfig {
+  mouseControlEnabled: boolean;
+  bindings: Record<ControlAction, string[]>;
+}
+
 export interface EngineConfig {
   version: number;
   branding: {
@@ -125,6 +152,7 @@ export interface EngineConfig {
     nextDelayMultiplier: number;
     events: Record<EngineDisasterType, EngineDisasterConfig>;
   };
+  controls: EngineControlsConfig;
   audio: {
     menuMusic: string[];
     mapMusic: string[];
@@ -185,6 +213,10 @@ export function createDefaultEngineConfig(): EngineConfig {
         meteorShower: { enabled: true, weight: 20 },
         sandstorm: { enabled: true, weight: 22 }
       }
+    },
+    controls: {
+      mouseControlEnabled: true,
+      bindings: cloneControlBindings(DEFAULT_CONTROL_BINDINGS)
     },
     audio: {
       menuMusic: ['/audio/music/mainmenu1.ogg', '/audio/music/mainmenu2.ogg'],
@@ -369,6 +401,14 @@ function mergeEngineConfig(defaults: EngineConfig, input: Partial<EngineConfig>)
         ...input.disasters?.events
       }
     },
+    controls: {
+      ...defaults.controls,
+      ...input.controls,
+      bindings: {
+        ...defaults.controls.bindings,
+        ...input.controls?.bindings
+      }
+    },
     audio: {
       ...defaults.audio,
       ...input.audio,
@@ -430,6 +470,9 @@ function sanitizeEngineConfig(input: Partial<EngineConfig>): EngineConfig {
     };
   }
 
+  merged.controls.mouseControlEnabled = merged.controls.mouseControlEnabled !== false;
+  merged.controls.bindings = sanitizeControlBindings(merged.controls.bindings, defaults.controls.bindings);
+
   merged.audio.menuMusic = merged.audio.menuMusic.map(normalizeOggAudioPath).filter(Boolean);
   merged.audio.mapMusic = merged.audio.mapMusic.map(normalizeOggAudioPath).filter(Boolean);
   merged.audio.uiHover = normalizeOggAudioPath(merged.audio.uiHover) || defaults.audio.uiHover;
@@ -454,4 +497,30 @@ function clamp(value: number, min: number, max: number): number {
     return min;
   }
   return Math.min(max, Math.max(min, value));
+}
+
+function cloneControlBindings(bindings: Record<ControlAction, string[]>): Record<ControlAction, string[]> {
+  return Object.fromEntries(
+    CONTROL_ACTIONS.map((action) => [action, [...(bindings[action] ?? [])]])
+  ) as Record<ControlAction, string[]>;
+}
+
+function sanitizeControlBindings(
+  bindings: Partial<Record<ControlAction, unknown>>,
+  fallback: Record<ControlAction, string[]>
+): Record<ControlAction, string[]> {
+  const sanitized = cloneControlBindings(fallback);
+  for (const action of CONTROL_ACTIONS) {
+    const raw = bindings[action];
+    const source = Array.isArray(raw)
+      ? raw
+      : typeof raw === 'string'
+        ? [raw]
+        : fallback[action];
+    const values = source
+      .map((value) => typeof value === 'string' ? value.trim() : '')
+      .filter(Boolean);
+    sanitized[action] = values.length > 0 ? [...new Set(values)].slice(0, 4) : [...fallback[action]];
+  }
+  return sanitized;
 }

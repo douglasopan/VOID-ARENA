@@ -1,6 +1,7 @@
 import type { AudioManager } from '../audio/AudioManager';
+import { CONTROL_ACTIONS, type ControlAction, type EngineControlsConfig } from '../admin/EngineConfig';
 import { HOLE_RIM_STYLE_OPTIONS, LANGUAGE_OPTIONS, RIM_COLORS } from '../shared/constants';
-import { t } from '../i18n/I18n';
+import { t, type TranslationKey } from '../i18n/I18n';
 import type { GraphicsQuality, HoleRimStyle, LanguageCode } from '../shared/types';
 import type { HudDisplayKey, HudDisplaySettings } from './HUD';
 
@@ -14,6 +15,7 @@ export interface PauseCallbacks {
   onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
   onHoleAppearanceChange?: (rimColor: string, rimStyle: HoleRimStyle) => void;
   onLanguageChange?: (language: LanguageCode) => void;
+  onControlConfigChange?: (controls: EngineControlsConfig) => void;
 }
 
 export class PauseMenu {
@@ -35,6 +37,7 @@ export class PauseMenu {
       holeRimStyle?: HoleRimStyle;
       graphicsQuality?: GraphicsQuality;
       language?: LanguageCode;
+      controlsConfig?: EngineControlsConfig;
     }
   ): void {
     this.hide();
@@ -44,6 +47,7 @@ export class PauseMenu {
     const language = options.language ?? 'en';
     const enabledText = t(language, 'enabled');
     const disabledText = t(language, 'disabled');
+    const controlsConfig = options.controlsConfig ? this.cloneControlsConfig(options.controlsConfig) : null;
     element.innerHTML = `
       <section class="menu-panel narrow">
         <h2>${options.inMatch ? t(language, 'paused') : t(language, 'settings')}</h2>
@@ -74,6 +78,23 @@ export class PauseMenu {
             <label>${t(language, 'deathCamera')}</label>
             <button class="toggle death-camera-toggle ${options.deathCameraEnabled !== false ? 'active' : ''}">${options.deathCameraEnabled !== false ? enabledText : disabledText}</button>
           </div>
+          ${controlsConfig ? `
+            <div class="field controls-options-field">
+              <label>${t(language, 'controls')}</label>
+              <button
+                class="hud-toggle-row mouse-control-toggle ${controlsConfig.mouseControlEnabled ? 'active' : ''}"
+                type="button"
+                aria-pressed="${controlsConfig.mouseControlEnabled}"
+              >
+                <span>${t(language, 'mouseControl')}</span>
+                <strong>${controlsConfig.mouseControlEnabled ? enabledText : disabledText}</strong>
+              </button>
+              <div class="control-bind-grid" aria-label="${t(language, 'keyboardBindings')}">
+                ${CONTROL_ACTIONS.map((action) => this.controlBindingMarkup(action, controlsConfig, language)).join('')}
+              </div>
+              <small class="controls-hint">${t(language, 'keybindHint')}</small>
+            </div>
+          ` : ''}
           <div class="field language-field">
             <span class="field-label">${t(language, 'language')}</span>
             <div class="language-flags" role="group" aria-label="${t(language, 'language')}">
@@ -181,6 +202,29 @@ export class PauseMenu {
       deathCameraToggle.textContent = deathCameraEnabled ? enabledText : disabledText;
       callbacks.onDeathCameraToggle?.(deathCameraEnabled);
     });
+    if (controlsConfig) {
+      const emitControls = (): void => callbacks.onControlConfigChange?.(this.cloneControlsConfig(controlsConfig));
+      const mouseToggle = element.querySelector<HTMLButtonElement>('.mouse-control-toggle');
+      mouseToggle?.addEventListener('click', () => {
+        controlsConfig.mouseControlEnabled = !controlsConfig.mouseControlEnabled;
+        mouseToggle.classList.toggle('active', controlsConfig.mouseControlEnabled);
+        mouseToggle.setAttribute('aria-pressed', String(controlsConfig.mouseControlEnabled));
+        const value = mouseToggle.querySelector('strong');
+        if (value) {
+          value.textContent = controlsConfig.mouseControlEnabled ? enabledText : disabledText;
+        }
+        emitControls();
+      });
+      element.querySelectorAll<HTMLButtonElement>('.control-bind-button').forEach((button) => {
+        const action = button.dataset.controlAction as ControlAction | undefined;
+        if (!action) {
+          return;
+        }
+        button.addEventListener('click', () => {
+          this.captureControlBinding(button, action, controlsConfig, language, emitControls);
+        });
+      });
+    }
     element.querySelectorAll<HTMLButtonElement>('.language-flag').forEach((button) => {
       button.addEventListener('click', () => {
         const value = button.dataset.language as LanguageCode | undefined;
@@ -243,5 +287,135 @@ export class PauseMenu {
         <strong>${visible ? t(language, 'hide') : t(language, 'show')}</strong>
       </button>
     `;
+  }
+
+  private controlBindingMarkup(action: ControlAction, controlsConfig: EngineControlsConfig, language: LanguageCode): string {
+    return `
+      <button class="control-bind-button" type="button" data-control-action="${action}">
+        <span>${t(language, this.controlActionLabelKey(action))}</span>
+        <strong>${this.escapeHtml(this.formatBindings(controlsConfig.bindings[action] ?? []))}</strong>
+      </button>
+    `;
+  }
+
+  private captureControlBinding(
+    button: HTMLButtonElement,
+    action: ControlAction,
+    controlsConfig: EngineControlsConfig,
+    language: LanguageCode,
+    emitControls: () => void
+  ): void {
+    const value = button.querySelector('strong');
+    const previousLabel = value?.textContent ?? '';
+    button.classList.add('listening');
+    if (value) {
+      value.textContent = t(language, 'pressAKey');
+    }
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      button.classList.remove('listening');
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
+
+      if (event.code === 'Escape' && action !== 'pause') {
+        if (value) {
+          value.textContent = previousLabel;
+        }
+        return;
+      }
+
+      for (const controlAction of CONTROL_ACTIONS) {
+        controlsConfig.bindings[controlAction] = (controlsConfig.bindings[controlAction] ?? []).filter((code) => code !== event.code);
+      }
+
+      const alternates = (controlsConfig.bindings[action] ?? [])
+        .slice(1)
+        .filter((code) => code !== event.code);
+      controlsConfig.bindings[action] = [event.code, ...alternates].slice(0, 4);
+      if (value) {
+        value.textContent = this.formatBindings(controlsConfig.bindings[action]);
+      }
+      emitControls();
+    };
+
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+  }
+
+  private controlActionLabelKey(action: ControlAction): TranslationKey {
+    switch (action) {
+      case 'moveUp':
+        return 'controlMoveUp';
+      case 'moveDown':
+        return 'controlMoveDown';
+      case 'moveLeft':
+        return 'controlMoveLeft';
+      case 'moveRight':
+        return 'controlMoveRight';
+      case 'boost':
+        return 'controlBoost';
+      case 'dash':
+        return 'controlDash';
+      case 'power':
+        return 'controlPower';
+      case 'chat':
+        return 'controlChat';
+      case 'pause':
+      default:
+        return 'controlPause';
+    }
+  }
+
+  private formatBindings(bindings: string[]): string {
+    return bindings.map((code) => this.formatKeyCode(code)).join(' / ') || '-';
+  }
+
+  private formatKeyCode(code: string): string {
+    const named: Record<string, string> = {
+      Space: 'Space',
+      Enter: 'Enter',
+      Escape: 'Esc',
+      ShiftLeft: 'Shift L',
+      ShiftRight: 'Shift R',
+      ControlLeft: 'Ctrl L',
+      ControlRight: 'Ctrl R',
+      AltLeft: 'Alt L',
+      AltRight: 'Alt R',
+      ArrowUp: 'Up',
+      ArrowDown: 'Down',
+      ArrowLeft: 'Left',
+      ArrowRight: 'Right',
+      NumpadAdd: 'Num +',
+      NumpadSubtract: 'Num -'
+    };
+    if (named[code]) {
+      return named[code];
+    }
+    if (/^Key[A-Z]$/.test(code)) {
+      return code.slice(3);
+    }
+    if (/^Digit[0-9]$/.test(code)) {
+      return code.slice(5);
+    }
+    return code.replace(/([a-z])([A-Z])/g, '$1 $2');
+  }
+
+  private cloneControlsConfig(config: EngineControlsConfig): EngineControlsConfig {
+    return {
+      mouseControlEnabled: config.mouseControlEnabled,
+      bindings: Object.fromEntries(
+        CONTROL_ACTIONS.map((action) => [action, [...(config.bindings[action] ?? [])]])
+      ) as EngineControlsConfig['bindings']
+    };
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }

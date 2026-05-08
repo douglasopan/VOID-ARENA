@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { AudioManager } from '../audio/AudioManager';
-import { getEngineConfig, subscribeEngineConfig, type EngineConfig } from '../admin/EngineConfig';
+import { getEngineConfig, saveEngineConfig, subscribeEngineConfig, type EngineConfig, type EngineControlsConfig } from '../admin/EngineConfig';
 import { detectLanguage, powerUpLabelKey, t, tf, type TranslationKey } from '../i18n/I18n';
 import { BOT_NAMES, CAMERA_ZOOM_MAX, CAMERA_ZOOM_MIN, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
 import type { ChatMessage, DayNightMode, GraphicsQuality, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary } from '../shared/types';
@@ -23,7 +23,7 @@ import { BotManager } from './BotManager';
 import { BOT_DIFFICULTY_PROFILES, getBotDifficultyForIndex } from './BotDifficulty';
 import { canObjectFit } from './BalanceConfig';
 import type { MatchConfig } from './MatchConfig';
-import { createDefaultMatchConfig } from './MatchConfig';
+import { createDefaultMatchConfig, generateMapSeed, normalizeMapSeed } from './MatchConfig';
 import { MatchMode } from './MatchMode';
 import { MatchTimer } from './MatchTimer';
 import {
@@ -32,6 +32,7 @@ import {
   type NaturalDisasterSnapshot,
   type NaturalDisasterType
 } from './NaturalDisasterSystem';
+import type { Player } from './Player';
 import { PlayerManager } from './PlayerManager';
 import { ProceduralMapGenerator } from './ProceduralMapGenerator';
 import { RespawnSystem } from './RespawnSystem';
@@ -107,6 +108,11 @@ export class Game {
   private objectiveCompleted = false;
   private objectiveFailed = false;
   private localDashCooldown = 0;
+  private localDashRemaining = 0;
+  private localDashSpeed = 0;
+  private readonly localDashDirection = new THREE.Vector3();
+  private localPowerCooldown = 0;
+  private readonly lastAimDirection = new THREE.Vector3(0, 0, -1);
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -284,13 +290,13 @@ export class Game {
     this.audioManager.startMenuMusic();
     this.hideMenus();
     this.soloPresetMenu.show({
-      onPreset: (preset, dayNightMode) => this.startMatch(this.createSoloPresetConfig(playerName, preset, dayNightMode)),
-      onCustom: () => this.showCustomSoloSetup(playerName),
+      onPreset: (preset, dayNightMode, mapSeed) => this.startMatch(this.createSoloPresetConfig(playerName, preset, dayNightMode, mapSeed)),
+      onCustom: (mapSeed) => this.showCustomSoloSetup(playerName, mapSeed),
       onBack: () => this.showMainMenu()
     }, this.language);
   }
 
-  private showCustomSoloSetup(playerName: string): void {
+  private showCustomSoloSetup(playerName: string, mapSeed = generateMapSeed()): void {
     this.playerName = playerName;
     this.state = 'setup';
     this.audioManager.startMenuMusic();
@@ -303,18 +309,20 @@ export class Game {
       cameraZoom: this.cameraZoom,
       deathCameraEnabled: this.deathCameraEnabled,
       holeRimColor: this.holeRimColor,
-      holeRimStyle: this.holeRimStyle
+      holeRimStyle: this.holeRimStyle,
+      mapSeed
     }, this.language);
   }
 
-  private createSoloPresetConfig(playerName: string, preset: SoloPreset, dayNightMode: DayNightMode = 'cycle'): MatchConfig {
+  private createSoloPresetConfig(playerName: string, preset: SoloPreset, dayNightMode: DayNightMode = 'cycle', mapSeed = generateMapSeed()): MatchConfig {
     const config = {
       ...createDefaultMatchConfig(playerName),
       holeRimColor: this.holeRimColor,
       holeRimStyle: this.holeRimStyle,
       cameraZoom: this.cameraZoom,
       deathCameraEnabled: this.deathCameraEnabled,
-      dayNightMode
+      dayNightMode,
+      mapSeed
     };
 
     switch (preset) {
@@ -473,6 +481,7 @@ export class Game {
       itemRespawnEnabled: config.itemRespawnEnabled ?? true,
       powerUpRespawnEnabled: config.powerUpRespawnEnabled ?? true
     };
+    prepared.mapSeed = normalizeMapSeed(prepared.mapSeed) || generateMapSeed();
 
     if (prepared.matchMode === MatchMode.TimeTrial) {
       prepared.singlePlayerMode = 'time-trial';
@@ -581,7 +590,8 @@ export class Game {
         respawnSafeRadius: config.respawnSafeRadius,
         itemRespawnEnabled: config.itemRespawnEnabled,
         powerUpRespawnEnabled: config.powerUpRespawnEnabled,
-        botDifficultyMix: config.botDifficultyMix
+        botDifficultyMix: config.botDifficultyMix,
+        mapSeed: normalizeMapSeed(config.mapSeed) || generateMapSeed()
       };
       const room = await this.networkClient.createRoom(roomOptions);
       await this.joinMultiplayerRoom(room, config.playerName, config);
@@ -759,22 +769,33 @@ export class Game {
     }
     const disasterSpeedMultiplier = this.naturalDisasterSystem.playerSpeedMultiplier(this.currentDisasterSnapshot);
     this.localDashCooldown = Math.max(0, this.localDashCooldown - deltaSeconds);
+    const dashStepSeconds = Math.min(deltaSeconds, this.localDashRemaining);
+    this.localDashRemaining = Math.max(0, this.localDashRemaining - deltaSeconds);
+    this.localPowerCooldown = Math.max(0, this.localPowerCooldown - deltaSeconds);
+    let activePowerApplied = false;
 
     if (localPlayer?.alive && !this.chatUI.isInputFocused()) {
       const pointerMovement = this.pointerMovementFor(localPlayer);
       const movement = pointerMovement ?? this.inputManager.getMovementVector().clone();
+      if (movement.lengthSq() > 0.001) {
+        this.lastAimDirection.copy(movement).normalize();
+      }
       const wantsBoost = movement.lengthSq() > 0.001 && this.inputManager.wantsBoost();
       localPlayer.updateResources(deltaSeconds, wantsBoost);
       const speed = localPlayer.getSpeed(localPlayer.isBoosting) * disasterSpeedMultiplier;
       localPlayer.position.x += movement.x * speed * deltaSeconds;
       localPlayer.position.z += movement.z * speed * deltaSeconds;
-      localPlayer.velocity.set(movement.x * speed, 0, movement.z * speed);
-      if (localPlayer.hasPowerUp('dash') && wantsBoost && this.localDashCooldown <= 0) {
-        const dashDistance = THREE.MathUtils.clamp(5.8 + localPlayer.radius * 0.85, 5.8, 12);
-        localPlayer.position.x += movement.x * dashDistance;
-        localPlayer.position.z += movement.z * dashDistance;
-        localPlayer.velocity.add(new THREE.Vector3(movement.x * dashDistance * 8, 0, movement.z * dashDistance * 8));
-        this.localDashCooldown = 0.85;
+      const dashVelocity = this.localDashDirection.clone().multiplyScalar(this.localDashRemaining > 0 || dashStepSeconds > 0 ? this.localDashSpeed : 0);
+      if (dashStepSeconds > 0) {
+        localPlayer.position.x += this.localDashDirection.x * this.localDashSpeed * dashStepSeconds;
+        localPlayer.position.z += this.localDashDirection.z * this.localDashSpeed * dashStepSeconds;
+      }
+      localPlayer.velocity.set(movement.x * speed + dashVelocity.x, 0, movement.z * speed + dashVelocity.z);
+      if (localPlayer.hasPowerUp('dash') && movement.lengthSq() > 0.001 && this.inputManager.consumeDashPress() && this.localDashCooldown <= 0) {
+        this.startLocalDash(localPlayer, movement);
+      }
+      if (this.inputManager.consumePowerPress()) {
+        activePowerApplied = this.activateLocalPower(localPlayer, movement);
       }
       this.world.clampToArena(localPlayer.position, localPlayer.radius);
     } else if (localPlayer) {
@@ -783,7 +804,7 @@ export class Game {
     }
 
     this.botManager.update(deltaSeconds, this.world, this.playerManager);
-    if (this.applyPowerUpEffects(deltaSeconds, now)) {
+    if (this.applyPowerUpEffects(deltaSeconds, now) || activePowerApplied) {
       this.world.rebuildObjectGrid();
     }
     this.collectPowerUps(now);
@@ -957,6 +978,106 @@ export class Game {
     object.applyPhysicsImpulse({ linear, angular, topple, fracture });
   }
 
+  private activateLocalPower(player: Player, movement: THREE.Vector3): boolean {
+    if (!this.world || !player.hasPowerUp('gust') || this.localPowerCooldown > 0) {
+      return false;
+    }
+
+    const direction = movement.lengthSq() > 0.001
+      ? movement.clone().normalize()
+      : this.lastAimDirection.clone().normalize();
+    if (direction.lengthSq() <= 0.001) {
+      return false;
+    }
+
+    const pushed = this.applyVoidGust(player, direction);
+    this.localPowerCooldown = pushed > 0 ? 0.95 : 0.28;
+    return pushed > 0;
+  }
+
+  private startLocalDash(player: Player, direction: THREE.Vector3): void {
+    const dashDirection = direction.clone();
+    dashDirection.y = 0;
+    if (dashDirection.lengthSq() <= 0.001) {
+      return;
+    }
+
+    dashDirection.normalize();
+    const dashDistance = THREE.MathUtils.clamp(5.8 + player.radius * 0.85, 5.8, 12);
+    const dashDuration = THREE.MathUtils.clamp(0.16 + player.radius * 0.006, 0.16, 0.24);
+    this.localDashDirection.copy(dashDirection);
+    this.localDashSpeed = dashDistance / dashDuration;
+    this.localDashRemaining = dashDuration;
+    this.localDashCooldown = 0.85;
+    player.velocity.addScaledVector(dashDirection, this.localDashSpeed);
+  }
+
+  private applyVoidGust(player: Player, direction: THREE.Vector3): number {
+    if (!this.world) {
+      return 0;
+    }
+
+    const range = THREE.MathUtils.clamp(9 + player.radius * 2.7, 9, 24);
+    const searchCenter = player.position.clone().addScaledVector(direction, range * 0.52);
+    let pushed = 0;
+
+    for (const object of this.world.queryObjects(searchCenter, range + player.radius + 3)) {
+      if (!object.active || object.swallowAnimation) {
+        continue;
+      }
+
+      const toObject = new THREE.Vector3(object.position.x - player.position.x, 0, object.position.z - player.position.z);
+      const frontDistance = toObject.dot(direction);
+      if (frontDistance < player.radius * 0.35 || frontDistance > range + object.collisionRadius) {
+        continue;
+      }
+
+      const lateral = Math.sqrt(Math.max(0, toObject.lengthSq() - frontDistance * frontDistance));
+      const coneWidth = Math.max(2.4 + player.radius * 0.45, frontDistance * 0.46);
+      if (lateral > coneWidth + object.collisionRadius) {
+        continue;
+      }
+
+      const isHeavyBuilding = object.category === 'building' && player.radius < object.effectiveBoundingRadius * 0.95;
+      const isHugeObject = object.mass > Math.max(95, player.radius * player.radius * 18);
+      if (isHeavyBuilding || isHugeObject) {
+        continue;
+      }
+
+      const rangeFalloff = THREE.MathUtils.clamp(1 - frontDistance / Math.max(0.001, range), 0.12, 1);
+      const lateralFalloff = THREE.MathUtils.clamp(1 - lateral / Math.max(0.001, coneWidth + object.collisionRadius), 0.18, 1);
+      const massDamping = 1 / Math.max(1, Math.sqrt(object.mass) * 0.24);
+      const categoryScale = object.category === 'pedestrian'
+        ? 1.35
+        : object.category === 'traffic'
+          ? 1.08
+          : object.kind === 'post' || object.kind === 'trafficLight'
+            ? 0.92
+            : 0.82;
+      const strength = (16 + player.radius * 4.2) * rangeFalloff * lateralFalloff * massDamping * categoryScale;
+      const linear = direction.clone().multiplyScalar(strength);
+      linear.y = object.category === 'pedestrian'
+        ? 1.35
+        : object.category === 'traffic'
+          ? 0.72
+          : 0.46;
+      const angular = new THREE.Vector3(
+        direction.z * strength * 0.08,
+        (Math.random() - 0.5) * strength * 0.035,
+        -direction.x * strength * 0.08
+      );
+      object.applyPhysicsImpulse({
+        linear,
+        angular,
+        topple: true,
+        fracture: object.category === 'building' ? strength * 0.004 : 0
+      });
+      pushed += 1;
+    }
+
+    return pushed;
+  }
+
   private maybeAnnounceSize(playerId: string): void {
     const player = this.playerManager.get(playerId);
     if (!player) {
@@ -985,6 +1106,10 @@ export class Game {
       this.createDisasterWarning(),
       this.createObjectiveStatus()
     );
+    this.inputManager.setTouchActionAvailability({
+      dash: Boolean(local?.alive && local.hasPowerUp('dash')),
+      power: Boolean(local?.alive && local.hasPowerUp('gust'))
+    });
   }
 
   private createObjectiveStatus(): HudObjectiveStatus | null {
@@ -1355,7 +1480,8 @@ export class Game {
         onNextMusic: () => this.audioManager.nextMusicTrack(),
         onGraphicsQualityChange: (quality) => this.applyGraphicsQuality(quality),
         onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle),
-        onLanguageChange: (language) => this.applyLanguage(language)
+        onLanguageChange: (language) => this.applyLanguage(language),
+        onControlConfigChange: (controls) => this.applyControlConfig(controls)
       },
       {
         chatEnabled: this.chatEnabled,
@@ -1365,7 +1491,8 @@ export class Game {
         holeRimColor: this.holeRimColor,
         holeRimStyle: this.holeRimStyle,
         graphicsQuality: this.currentConfig.graphicsQuality,
-        language: this.language
+        language: this.language,
+        controlsConfig: getEngineConfig().controls
       }
     );
   }
@@ -1409,9 +1536,19 @@ export class Game {
   private applyEngineConfigRuntime(config: EngineConfig): void {
     document.documentElement.style.setProperty('--menu-font', `"${config.branding.menuFont}", "Open Sans", sans-serif`);
     document.documentElement.style.setProperty('--text-font', `"${config.branding.textFont}", "Open Sans", sans-serif`);
+    this.inputManager?.setControlsConfig(config.controls);
     if (this.currentConfig) {
       this.currentConfig.enableAds = this.currentConfig.enableAds && config.generation.adsEnabled;
     }
+  }
+
+  private applyControlConfig(controls: EngineControlsConfig): void {
+    const current = getEngineConfig();
+    const updated = saveEngineConfig({
+      ...current,
+      controls
+    });
+    this.applyEngineConfigRuntime(updated);
   }
 
   private resumeMatch(): void {
@@ -1455,7 +1592,8 @@ export class Game {
         onLanguageChange: (language) => {
           this.applyLanguage(language);
           this.showSettingsOverlay(inMatch);
-        }
+        },
+        onControlConfigChange: (controls) => this.applyControlConfig(controls)
       },
       {
         chatEnabled: this.chatEnabled,
@@ -1465,7 +1603,8 @@ export class Game {
         holeRimColor: this.holeRimColor,
         holeRimStyle: this.holeRimStyle,
         graphicsQuality: this.currentConfig?.graphicsQuality,
-        language: this.language
+        language: this.language,
+        controlsConfig: getEngineConfig().controls
       }
     );
   }
@@ -1647,6 +1786,11 @@ export class Game {
     this.localHoleCombo = 0;
     this.lastLocalHoleKillAt = 0;
     this.localDashCooldown = 0;
+    this.localDashRemaining = 0;
+    this.localDashSpeed = 0;
+    this.localDashDirection.set(0, 0, 0);
+    this.localPowerCooldown = 0;
+    this.lastAimDirection.set(0, 0, -1);
     this.objectiveProgress = 0;
     this.objectiveCompleted = false;
     this.objectiveFailed = false;

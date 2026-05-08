@@ -450,7 +450,7 @@
         ctx.setLineDash([]);
 
         ctx.save();
-        ctx.translate(centerX, toScreenY(centerY));
+        ctx.translate(centerX, toScreenY((topY + bottomY) * 0.5));
         drawObjectSilhouette(ctx, data, objectWidth, (topY - bottomY) * unitScale, penetratesGround);
         ctx.restore();
 
@@ -563,6 +563,13 @@
           cursor = cursor[part];
         }
         cursor[parts.at(-1)] = value;
+      }
+
+      function clamp(value, min, max) {
+        if (!Number.isFinite(value)) {
+          return min;
+        }
+        return Math.min(max, Math.max(min, value));
       }
 
       function escapeHtml(value) {

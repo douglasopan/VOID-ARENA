@@ -1,5 +1,5 @@
 import type { MatchConfig } from '../game/MatchConfig';
-import { createDefaultMatchConfig } from '../game/MatchConfig';
+import { createDefaultMatchConfig, generateMapSeed, normalizeMapSeed } from '../game/MatchConfig';
 import { MatchMode } from '../game/MatchMode';
 import type { BotDifficultyMix } from '../game/BotDifficulty';
 import { t } from '../i18n/I18n';
@@ -25,6 +25,7 @@ export class MatchSetupMenu {
         <h2>${t(language, 'customMatchSetup')}</h2>
         <p class="subtitle">${t(language, 'customMatchSubtitle')}</p>
         <div class="form-grid">
+          ${this.seedField(language, state.mapSeed || generateMapSeed())}
           ${this.segment(t(language, 'mapSize'), 'mapSize', [
             ['small', t(language, 'small')],
             ['medium', t(language, 'medium')],
@@ -119,7 +120,11 @@ export class MatchSetupMenu {
     `;
 
     this.bindSegments(element, state);
-    element.querySelector('.start-match')?.addEventListener('click', () => callbacks.onStart({ ...state }));
+    this.bindSeedField(element, state, language);
+    element.querySelector('.start-match')?.addEventListener('click', () => {
+      state.mapSeed = normalizeMapSeed(state.mapSeed) || generateMapSeed();
+      callbacks.onStart({ ...state });
+    });
     element.querySelector('.back')?.addEventListener('click', callbacks.onBack);
     this.root.appendChild(element);
     this.element = element;
@@ -135,6 +140,34 @@ export class MatchSetupMenu {
       .map(([value, text]) => `<button data-field="${field}" data-value="${value}" class="${value === activeValue ? 'active' : ''}">${text}</button>`)
       .join('');
     return `<div class="field"><label>${label}</label><div class="segmented">${buttons}</div></div>`;
+  }
+
+  private seedField(language: LanguageCode, seed: string): string {
+    return `
+      <label class="field seed-field">${t(language, 'mapSeed')}
+        <div class="seed-row">
+          <input class="seed-input" maxlength="48" value="${this.escapeHtml(seed)}" aria-label="${t(language, 'mapSeed')}" />
+          <button class="generate-seed" type="button">${t(language, 'generateSeed')}</button>
+        </div>
+        <small>${t(language, 'mapSeedHint')}</small>
+      </label>
+    `;
+  }
+
+  private bindSeedField(element: HTMLElement, state: MatchConfig, _language: LanguageCode): void {
+    const input = element.querySelector<HTMLInputElement>('.seed-input');
+    if (!input) {
+      return;
+    }
+    state.mapSeed = normalizeMapSeed(input.value) || generateMapSeed();
+    input.value = state.mapSeed;
+    input.addEventListener('input', () => {
+      state.mapSeed = normalizeMapSeed(input.value);
+    });
+    element.querySelector<HTMLButtonElement>('.generate-seed')?.addEventListener('click', () => {
+      state.mapSeed = generateMapSeed();
+      input.value = state.mapSeed;
+    });
   }
 
   private bindSegments(element: HTMLElement, state: MatchConfig): void {
@@ -197,5 +230,14 @@ export class MatchSetupMenu {
         button.classList.add('active');
       });
     });
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }

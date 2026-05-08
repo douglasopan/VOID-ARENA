@@ -173,7 +173,12 @@ export class ProceduralMapGenerator {
     }
 
     const engineConfig = getEngineConfig();
-    const filteredObjects = objects.filter((object) => isWorldObjectKindEnabled(object.kind));
+    const filteredObjects = this.finalizeObjectPlacement(
+      objects.filter((object) => isWorldObjectKindEnabled(object.kind)),
+      network.roads,
+      network.surfaces,
+      network.pedestrianPaths
+    );
     const filteredAdSurfaces = engineConfig.generation.adsEnabled
       ? adSurfaces.filter((surface) => !surface.attachedObjectId || filteredObjects.some((object) => object.id === surface.attachedObjectId))
       : [];
@@ -998,7 +1003,7 @@ export class ProceduralMapGenerator {
   }
 
   private buildingSpacingRadius(object: ObjectSpawnDefinition): number {
-    const largestSide = Math.max(object.size.x, object.size.z) * 0.5;
+    const largestSide = Math.hypot(object.size.x, object.size.z) * 0.5;
     const zonePadding = object.label === 'Factory Block' || object.label === 'Warehouse' ? 0.86 : 0.62;
     return largestSide + zonePadding;
   }
@@ -1601,6 +1606,136 @@ export class ProceduralMapGenerator {
     };
   }
 
+  private finalizeObjectPlacement(
+    objects: ObjectSpawnDefinition[],
+    roads: RoadSegment[],
+    surfaces: SurfaceSegment[],
+    pedestrianPaths: PedestrianPath[]
+  ): ObjectSpawnDefinition[] {
+    const accepted: Array<{ object: ObjectSpawnDefinition; index: number }> = [];
+    const occupied: OccupiedFootprint[] = [];
+    const ordered = objects
+      .map((object, index) => ({
+        object,
+        index,
+        priority: this.objectPlacementPriority(object)
+      }))
+      .sort((a, b) => b.priority - a.priority || b.object.mass - a.object.mass || a.index - b.index);
+
+    for (const entry of ordered) {
+      const footprint = this.placementFootprint(entry.object);
+      if (
+        this.objectConflictsProtectedSurface(entry.object, roads, surfaces, pedestrianPaths, footprint.radius) ||
+        this.overlapsOccupied(footprint.x, footprint.z, footprint.radius, occupied)
+      ) {
+        continue;
+      }
+
+      accepted.push({ object: entry.object, index: entry.index });
+      occupied.push(footprint);
+    }
+
+    return accepted.sort((a, b) => a.index - b.index).map((entry) => entry.object);
+  }
+
+  private objectPlacementPriority(object: ObjectSpawnDefinition): number {
+    if (object.kind === 'trafficLight') return 120;
+    if (object.category === 'building') return 112;
+    if (object.category === 'ad') return 104;
+    if (object.kind === 'fountain' || object.kind === 'statue') return 98;
+    if (object.category === 'traffic') return 92;
+    if (object.category === 'pedestrian') return 88;
+    if (object.kind === 'post') return 82;
+    if (object.kind === 'kiosk' || object.kind === 'structure') return 76;
+    if (object.kind === 'tree') return 70;
+    if (object.kind === 'bench' || object.kind === 'bike' || object.kind === 'planter') return 64;
+    return 58;
+  }
+
+  private placementFootprint(object: ObjectSpawnDefinition): OccupiedFootprint {
+    const padding = this.placementPadding(object);
+    const radius = Math.max(object.boundingRadius, Math.hypot(object.size.x, object.size.z) * 0.5) + padding;
+    const rectangular =
+      object.category === 'building' ||
+      object.category === 'ad' ||
+      object.category === 'traffic' ||
+      object.kind === 'structure' ||
+      object.kind === 'kiosk' ||
+      object.kind === 'bench' ||
+      object.kind === 'bike' ||
+      object.kind === 'fountain' ||
+      object.kind === 'statue' ||
+      object.kind === 'planter';
+
+    return {
+      x: object.position.x,
+      z: object.position.z,
+      radius,
+      halfWidth: rectangular ? object.size.x * 0.5 + padding : undefined,
+      halfDepth: rectangular ? object.size.z * 0.5 + padding : undefined,
+      rotationY: rectangular ? object.rotationY : undefined
+    };
+  }
+
+  private placementPadding(object: ObjectSpawnDefinition): number {
+    if (object.category === 'building') return 0.9;
+    if (object.category === 'ad') return 0.75;
+    if (object.category === 'traffic') return 0.42;
+    if (object.category === 'pedestrian') return 0.38;
+    if (object.kind === 'post' || object.kind === 'trafficLight') return 0.34;
+    if (object.kind === 'tree') return 0.55;
+    if (object.kind === 'bench' || object.kind === 'bike' || object.kind === 'planter') return 0.48;
+    return 0.45;
+  }
+
+  private objectConflictsProtectedSurface(
+    object: ObjectSpawnDefinition,
+    roads: RoadSegment[],
+    surfaces: SurfaceSegment[],
+    pedestrianPaths: PedestrianPath[],
+    radius: number
+  ): boolean {
+    if (this.pointConflictsCrosswalks(object.position.x, object.position.z, radius * 0.78, surfaces)) {
+      return object.kind !== 'trafficLight';
+    }
+
+    const shouldStayOffRoads =
+      object.category === 'building' ||
+      object.category === 'ad' ||
+      object.kind === 'structure' ||
+      object.kind === 'kiosk' ||
+      object.kind === 'fountain' ||
+      object.kind === 'statue';
+    if (shouldStayOffRoads && this.pointConflictsRoads(object.position.x, object.position.z, radius * 0.72, roads)) {
+      return true;
+    }
+
+    const shouldStayOffPedestrianLane =
+      object.category !== 'pedestrian' &&
+      object.category !== 'traffic' &&
+      object.kind !== 'trafficLight';
+    if (
+      shouldStayOffPedestrianLane &&
+      this.pointConflictsPedestrianPaths(
+        object.position.x,
+        object.position.z,
+        this.pedestrianLaneClearance(object),
+        pedestrianPaths
+      )
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private pedestrianLaneClearance(object: ObjectSpawnDefinition): number {
+    if (object.category === 'building') return Math.min(4.2, object.boundingRadius * 0.46 + 0.55);
+    if (object.category === 'ad') return Math.min(3.4, object.boundingRadius * 0.42 + 0.5);
+    if (object.kind === 'post') return 0.62;
+    return Math.max(0.72, Math.min(2.15, object.boundingRadius + 0.55));
+  }
+
   private addAdPlacements(
     objects: ObjectSpawnDefinition[],
     adSurfaces: AdSurface[],
@@ -1805,6 +1940,46 @@ export class ProceduralMapGenerator {
     }
 
     return false;
+  }
+
+  private pointConflictsPedestrianPaths(x: number, z: number, radius: number, paths: PedestrianPath[]): boolean {
+    const radiusSq = radius * radius;
+    for (const path of paths) {
+      for (let i = 0; i < path.points.length - 1; i += 1) {
+        const start = path.points[i];
+        const end = path.points[i + 1];
+        const distanceSq = this.pointSegmentDistanceSq(x, z, start.x, start.z, end.x, end.z);
+        if (distanceSq < radiusSq) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private pointSegmentDistanceSq(
+    x: number,
+    z: number,
+    startX: number,
+    startZ: number,
+    endX: number,
+    endZ: number
+  ): number {
+    const segmentX = endX - startX;
+    const segmentZ = endZ - startZ;
+    const lengthSq = segmentX * segmentX + segmentZ * segmentZ;
+    if (lengthSq <= 0.0001) {
+      const dx = x - startX;
+      const dz = z - startZ;
+      return dx * dx + dz * dz;
+    }
+
+    const t = Math.max(0, Math.min(1, ((x - startX) * segmentX + (z - startZ) * segmentZ) / lengthSq));
+    const closestX = startX + segmentX * t;
+    const closestZ = startZ + segmentZ * t;
+    const dx = x - closestX;
+    const dz = z - closestZ;
+    return dx * dx + dz * dz;
   }
 
   private reserveCrosswalkFootprints(occupied: OccupiedFootprint[], surfaces: SurfaceSegment[]): void {

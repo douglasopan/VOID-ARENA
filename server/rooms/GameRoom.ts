@@ -17,7 +17,7 @@ export class GameRoom {
     private readonly options: RoomCreateOptions
   ) {
     this.botCount = options.fillBots ? Math.max(0, options.maxPlayers) : 0;
-    this.seed = `server-${id.slice(0, 8)}-${Date.now()}`;
+    this.seed = options.mapSeed?.trim() || `server-${id.slice(0, 8)}-${Date.now()}`;
   }
 
   join(player: ServerPlayer): JoinRoomResult {

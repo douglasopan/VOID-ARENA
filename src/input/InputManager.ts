@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getEngineConfig, type ControlAction, type EngineControlsConfig } from '../admin/EngineConfig';
 
 export interface InputCallbacks {
   onEscape: () => void;
@@ -10,9 +11,12 @@ export class InputManager {
   private readonly pressed = new Set<string>();
   private readonly movement = new THREE.Vector3();
   private readonly touchMovement = new THREE.Vector3();
-  private touchBoost = false;
+  private readonly virtualActions = new Set<ControlAction>();
+  private readonly actionPressLatches = new Set<ControlAction>();
   private touchControls: HTMLDivElement | null = null;
   private touchStick: HTMLDivElement | null = null;
+  private touchDashButton: HTMLButtonElement | null = null;
+  private touchPowerButton: HTMLButtonElement | null = null;
   private activeMovePointerId: number | null = null;
   private joystickOrigin = { x: 0, y: 0 };
   private readonly joystickRadius = 54;
@@ -20,6 +24,7 @@ export class InputManager {
   private pointerTarget: { x: number; y: number } | null = null;
   private mouseBoost = false;
   private activeMouseBoostPointerId: number | null = null;
+  private controlsConfig: EngineControlsConfig = getEngineConfig().controls;
 
   constructor(
     private readonly callbacks: InputCallbacks,
@@ -35,10 +40,10 @@ export class InputManager {
 
   getMovementVector(): THREE.Vector3 {
     this.movement.copy(this.touchMovement);
-    if (this.pressed.has('KeyW') || this.pressed.has('ArrowUp')) this.movement.z -= 1;
-    if (this.pressed.has('KeyS') || this.pressed.has('ArrowDown')) this.movement.z += 1;
-    if (this.pressed.has('KeyA') || this.pressed.has('ArrowLeft')) this.movement.x -= 1;
-    if (this.pressed.has('KeyD') || this.pressed.has('ArrowRight')) this.movement.x += 1;
+    if (this.isActionDown('moveUp')) this.movement.z -= 1;
+    if (this.isActionDown('moveDown')) this.movement.z += 1;
+    if (this.isActionDown('moveLeft')) this.movement.x -= 1;
+    if (this.isActionDown('moveRight')) this.movement.x += 1;
 
     if (this.movement.lengthSq() > 1) {
       this.movement.normalize();
@@ -48,7 +53,22 @@ export class InputManager {
   }
 
   wantsBoost(): boolean {
-    return this.mouseBoost || this.touchBoost || this.pressed.has('ShiftLeft') || this.pressed.has('ShiftRight') || this.pressed.has('Space');
+    return this.isActionDown('boost') || this.mouseBoost;
+  }
+
+  consumeDashPress(): boolean {
+    return this.consumeActionPress('dash');
+  }
+
+  consumePowerPress(): boolean {
+    return this.consumeActionPress('power');
+  }
+
+  setControlsConfig(config: EngineControlsConfig): void {
+    this.controlsConfig = config;
+    if (!this.controlsConfig.mouseControlEnabled) {
+      this.clearPointerTarget();
+    }
   }
 
   bindPointerMoveRoot(root: HTMLElement): void {
@@ -66,6 +86,9 @@ export class InputManager {
   }
 
   getPointerTarget(): { x: number; y: number } | null {
+    if (!this.controlsConfig.mouseControlEnabled) {
+      return null;
+    }
     return this.pointerTarget;
   }
 
@@ -79,8 +102,23 @@ export class InputManager {
     this.touchControls?.classList.toggle('active', visible);
     if (!visible) {
       this.resetTouchMovement();
-      this.touchBoost = false;
+      this.clearVirtualActions();
       this.mouseBoost = false;
+    }
+  }
+
+  setTouchActionAvailability(options: { dash: boolean; power: boolean }): void {
+    this.touchDashButton?.classList.toggle('hidden', !options.dash);
+    this.touchPowerButton?.classList.toggle('hidden', !options.power);
+    if (!options.dash) {
+      this.virtualActions.delete('dash');
+      this.actionPressLatches.delete('dash');
+      this.touchDashButton?.classList.remove('active');
+    }
+    if (!options.power) {
+      this.virtualActions.delete('power');
+      this.actionPressLatches.delete('power');
+      this.touchPowerButton?.classList.remove('active');
     }
   }
 
@@ -95,19 +133,19 @@ export class InputManager {
   clear = (): void => {
     this.pressed.clear();
     this.resetTouchMovement();
-    this.touchBoost = false;
+    this.clearVirtualActions();
     this.mouseBoost = false;
     this.clearPointerTarget();
   };
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape') {
+    if (this.matchesAction(event.code, 'pause')) {
       event.preventDefault();
       this.callbacks.onEscape();
       return;
     }
 
-    if (event.key === 'Enter') {
+    if (this.matchesAction(event.code, 'chat')) {
       this.callbacks.onEnter();
       return;
     }
@@ -141,6 +179,10 @@ export class InputManager {
       </div>
       <div class="touch-action-stack">
         <button class="touch-menu" type="button">MENU</button>
+        <div class="touch-secondary-row">
+          <button class="touch-dash hidden" type="button">DASH</button>
+          <button class="touch-power hidden" type="button">POWER</button>
+        </div>
         <button class="touch-boost" type="button">BOOST</button>
       </div>
     `;
@@ -148,9 +190,13 @@ export class InputManager {
     const base = controls.querySelector<HTMLDivElement>('.touch-stick-base');
     const stick = controls.querySelector<HTMLDivElement>('.touch-stick');
     const boost = controls.querySelector<HTMLButtonElement>('.touch-boost');
+    const dash = controls.querySelector<HTMLButtonElement>('.touch-dash');
+    const power = controls.querySelector<HTMLButtonElement>('.touch-power');
     const menu = controls.querySelector<HTMLButtonElement>('.touch-menu');
     this.touchControls = controls;
     this.touchStick = stick;
+    this.touchDashButton = dash;
+    this.touchPowerButton = power;
 
     base?.addEventListener('pointerdown', (event) => {
       this.activeMovePointerId = event.pointerId;
@@ -180,17 +226,9 @@ export class InputManager {
     base?.addEventListener('pointerup', endMove);
     base?.addEventListener('pointercancel', endMove);
 
-    boost?.addEventListener('pointerdown', (event) => {
-      boost.setPointerCapture(event.pointerId);
-      this.touchBoost = true;
-      boost.classList.add('active');
-    });
-    const endBoost = (): void => {
-      this.touchBoost = false;
-      boost?.classList.remove('active');
-    };
-    boost?.addEventListener('pointerup', endBoost);
-    boost?.addEventListener('pointercancel', endBoost);
+    this.bindTouchActionButton(boost, 'boost');
+    this.bindTouchActionButton(dash, 'dash');
+    this.bindTouchActionButton(power, 'power');
     let menuTriggeredAt = 0;
     const triggerMenu = (event: Event): void => {
       event.preventDefault();
@@ -208,7 +246,7 @@ export class InputManager {
   }
 
   private readonly handlePointerTargetDown = (event: PointerEvent): void => {
-    if (!event.isPrimary || event.pointerType === 'touch' || this.isTypingTarget(event.target)) {
+    if (!this.controlsConfig.mouseControlEnabled || !event.isPrimary || event.pointerType === 'touch' || this.isTypingTarget(event.target)) {
       return;
     }
 
@@ -222,7 +260,7 @@ export class InputManager {
   };
 
   private readonly handlePointerTargetMove = (event: PointerEvent): void => {
-    if (!event.isPrimary || event.pointerType === 'touch' || this.isTypingTarget(event.target)) {
+    if (!this.controlsConfig.mouseControlEnabled || !event.isPrimary || event.pointerType === 'touch' || this.isTypingTarget(event.target)) {
       return;
     }
 
@@ -277,5 +315,62 @@ export class InputManager {
     this.touchMovement.set(0, 0, 0);
     this.touchStick?.style.setProperty('--stick-x', '0px');
     this.touchStick?.style.setProperty('--stick-y', '0px');
+  }
+
+  private isActionDown(action: ControlAction): boolean {
+    return this.virtualActions.has(action) || this.bindingsFor(action).some((code) => this.pressed.has(code));
+  }
+
+  private consumeActionPress(action: ControlAction): boolean {
+    const pressed = this.isActionDown(action);
+    if (!pressed) {
+      this.actionPressLatches.delete(action);
+      return false;
+    }
+    if (this.actionPressLatches.has(action)) {
+      return false;
+    }
+    this.actionPressLatches.add(action);
+    return true;
+  }
+
+  private matchesAction(code: string, action: ControlAction): boolean {
+    return this.bindingsFor(action).includes(code);
+  }
+
+  private bindingsFor(action: ControlAction): string[] {
+    return this.controlsConfig.bindings[action] ?? [];
+  }
+
+  private bindTouchActionButton(button: HTMLButtonElement | null, action: ControlAction): void {
+    if (!button) {
+      return;
+    }
+
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.setPointerCapture(event.pointerId);
+      this.virtualActions.add(action);
+      button.classList.add('active');
+    });
+    const endAction = (event: PointerEvent): void => {
+      if (button.hasPointerCapture(event.pointerId)) {
+        button.releasePointerCapture(event.pointerId);
+      }
+      this.virtualActions.delete(action);
+      button.classList.remove('active');
+    };
+    button.addEventListener('pointerup', endAction);
+    button.addEventListener('pointercancel', endAction);
+    button.addEventListener('pointerleave', endAction);
+  }
+
+  private clearVirtualActions(): void {
+    this.virtualActions.clear();
+    this.actionPressLatches.clear();
+    this.touchControls?.querySelectorAll('.touch-boost, .touch-dash, .touch-power').forEach((button) => {
+      button.classList.remove('active');
+    });
   }
 }

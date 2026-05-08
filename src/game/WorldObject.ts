@@ -169,7 +169,6 @@ export class WorldObject {
     this.active = false;
     this.swallowScale = 1;
     this.resetSwallowContact();
-    const routeSpeed = Math.max(0, Math.abs(this.routeVelocity || this.routeSpeed || 0));
     const forward = new THREE.Vector3(Math.sin(this.rotation.y), 0, Math.cos(this.rotation.y));
     const toHole = options.holeCenter
       ? new THREE.Vector3(options.holeCenter.x - this.position.x, 0, options.holeCenter.z - this.position.z)
@@ -179,30 +178,22 @@ export class WorldObject {
     }
     toHole.normalize();
 
-    if (routeSpeed > 0.01 && Math.hypot(this.physicsVelocity.x, this.physicsVelocity.z) < routeSpeed * 0.22) {
-      this.physicsVelocity.addScaledVector(forward, routeSpeed * 0.38);
-    }
-    if (options.playerVelocity) {
-      this.physicsVelocity.x += options.playerVelocity.x * 0.035;
-      this.physicsVelocity.z += options.playerVelocity.z * 0.035;
-    }
-    this.physicsVelocity.addScaledVector(toHole, 0.08 + Math.min(0.16, this.boundingRadius * 0.025));
+    this.physicsVelocity.x *= 0.08;
+    this.physicsVelocity.z *= 0.08;
 
     const insideLeverage = THREE.MathUtils.clamp(options.insideFraction ?? 0.62, 0.5, 1);
     this.physicsVelocity.y = Math.min(
       this.physicsVelocity.y,
-      -0.16 - insideLeverage * 0.48 - Math.min(0.65, this.boundingRadius * 0.075)
+      -0.34 - insideLeverage * 0.68 - Math.min(0.58, this.boundingRadius * 0.055)
     );
 
     if (this.physicsAngularVelocity.lengthSq() < 0.04) {
-      const horizontalSpeed = Math.max(routeSpeed, Math.hypot(this.physicsVelocity.x, this.physicsVelocity.z));
-      const tumbleScale = THREE.MathUtils.clamp(0.46 + horizontalSpeed * 0.08 + this.boundingRadius * 0.055, 0.5, 2.35);
+      const tumbleScale = THREE.MathUtils.clamp(0.48 + insideLeverage * 0.52 + this.boundingRadius * 0.045, 0.55, 1.9);
       this.physicsAngularVelocity.set(
         -toHole.z * tumbleScale + (Math.random() - 0.5) * 0.12,
         (Math.random() - 0.5) * tumbleScale * 0.12,
         toHole.x * tumbleScale + (Math.random() - 0.5) * 0.12
       );
-      this.addRollingAngularImpulse(this.physicsVelocity);
     }
 
     this.physicsAwake = true;
@@ -381,19 +372,20 @@ export class WorldObject {
       const distance = Math.max(0.001, toCenter.length());
       const insideFraction = this.footprintInsideApertureFraction(targetRadius, this.effectiveBoundingRadius, distance);
       const aperturePressure = THREE.MathUtils.clamp((insideFraction - 0.35) / 0.65, 0, 1);
+      const belowSurface = this.position.y < targetPosition.y - Math.max(0.14, this.size.y * 0.05);
       toCenter.normalize();
 
       const massDamping = 1 / Math.max(0.75, Math.sqrt(this.mass) * 0.14);
-      const settlePressure = Math.max(0, aperturePressure - 0.72);
-      const centering = targetRadius * 0.075 * settlePressure * settlePressure * massDamping * engine.rimSuctionMultiplier;
-      const gravity = (9.8 + aperturePressure * 5.6) * engine.swallowGravityMultiplier;
+      const settlePressure = belowSurface ? Math.max(0, aperturePressure - 0.72) : 0;
+      const centering = targetRadius * 0.042 * settlePressure * settlePressure * massDamping * engine.rimSuctionMultiplier;
+      const gravity = (9.8 + aperturePressure * 4.2) * engine.swallowGravityMultiplier;
       if (centering > 0) {
         this.physicsVelocity.x += toCenter.x * centering * step;
         this.physicsVelocity.z += toCenter.z * centering * step;
       }
       this.physicsVelocity.y -= gravity * step * Math.max(0.48, aperturePressure);
 
-      const horizontalDrag = Math.max(0, 1 - step * (0.28 + aperturePressure * 0.42));
+      const horizontalDrag = Math.max(0, 1 - step * (belowSurface ? 0.3 + aperturePressure * 0.34 : 8.4));
       this.physicsVelocity.x *= horizontalDrag;
       this.physicsVelocity.z *= horizontalDrag;
       this.physicsVelocity.y *= Math.max(0, 1 - step * 0.05);

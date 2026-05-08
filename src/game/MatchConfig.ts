@@ -68,8 +68,19 @@ export function createDefaultMatchConfig(playerName = ''): MatchConfig {
     powerUpCount: 14,
     respawnSafeRadius: 12,
     itemRespawnEnabled: true,
-    powerUpRespawnEnabled: true
+    powerUpRespawnEnabled: true,
+    mapSeed: generateMapSeed()
   };
+}
+
+export function generateMapSeed(): string {
+  const timePart = Date.now().toString(36).toUpperCase();
+  const randomPart = Math.floor(Math.random() * 0x1000000).toString(36).toUpperCase().padStart(5, '0');
+  return `VA-${timePart}-${randomPart}`;
+}
+
+export function normalizeMapSeed(seed: string | undefined): string {
+  return (seed ?? '').trim().replace(/\s+/g, '-').slice(0, 48);
 }
 
 export function generatePlayerName(): string {

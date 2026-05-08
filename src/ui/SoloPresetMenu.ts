@@ -1,3 +1,4 @@
+import { generateMapSeed, normalizeMapSeed } from '../game/MatchConfig';
 import { t } from '../i18n/I18n';
 import type { DayNightMode, LanguageCode } from '../shared/types';
 
@@ -13,8 +14,8 @@ export type SoloPreset =
   | 'creative';
 
 export interface SoloPresetCallbacks {
-  onPreset: (preset: SoloPreset, dayNightMode: DayNightMode) => void;
-  onCustom: () => void;
+  onPreset: (preset: SoloPreset, dayNightMode: DayNightMode, mapSeed: string) => void;
+  onCustom: (mapSeed: string) => void;
   onBack: () => void;
 }
 
@@ -26,12 +27,14 @@ export class SoloPresetMenu {
   show(callbacks: SoloPresetCallbacks, language: LanguageCode): void {
     this.hide();
     let dayNightMode: DayNightMode = 'cycle';
+    let mapSeed = generateMapSeed();
     const element = document.createElement('div');
     element.className = 'screen';
     element.innerHTML = `
       <section class="menu-panel preset-panel">
         <h2>${t(language, 'soloPresetTitle')}</h2>
         <p class="subtitle">${t(language, 'soloPresetSubtitle')}</p>
+        ${this.seedField(language, mapSeed)}
         <div class="field preset-day-night">
           <label>${t(language, 'dayNightMode')}</label>
           <div class="segmented">
@@ -71,15 +74,32 @@ export class SoloPresetMenu {
         button.classList.add('active');
       });
     });
+    const seedInput = element.querySelector<HTMLInputElement>('.seed-input');
+    const syncSeed = (): string => {
+      mapSeed = normalizeMapSeed(seedInput?.value) || generateMapSeed();
+      if (seedInput && seedInput.value !== mapSeed) {
+        seedInput.value = mapSeed;
+      }
+      return mapSeed;
+    };
+    seedInput?.addEventListener('input', () => {
+      mapSeed = normalizeMapSeed(seedInput.value);
+    });
+    element.querySelector<HTMLButtonElement>('.generate-seed')?.addEventListener('click', () => {
+      mapSeed = generateMapSeed();
+      if (seedInput) {
+        seedInput.value = mapSeed;
+      }
+    });
     element.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach((button) => {
       button.addEventListener('click', () => {
         const preset = button.dataset.preset as SoloPreset | undefined;
         if (preset) {
-          callbacks.onPreset(preset, dayNightMode);
+          callbacks.onPreset(preset, dayNightMode, syncSeed());
         }
       });
     });
-    element.querySelector<HTMLButtonElement>('.custom-preset')?.addEventListener('click', callbacks.onCustom);
+    element.querySelector<HTMLButtonElement>('.custom-preset')?.addEventListener('click', () => callbacks.onCustom(syncSeed()));
     element.querySelector<HTMLButtonElement>('.back')?.addEventListener('click', callbacks.onBack);
     this.root.appendChild(element);
     this.element = element;
@@ -97,5 +117,26 @@ export class SoloPresetMenu {
         <span>${description}</span>
       </button>
     `;
+  }
+
+  private seedField(language: LanguageCode, seed: string): string {
+    return `
+      <label class="field seed-field">${t(language, 'mapSeed')}
+        <div class="seed-row">
+          <input class="seed-input" maxlength="48" value="${this.escapeHtml(seed)}" aria-label="${t(language, 'mapSeed')}" />
+          <button class="generate-seed" type="button">${t(language, 'generateSeed')}</button>
+        </div>
+        <small>${t(language, 'mapSeedHint')}</small>
+      </label>
+    `;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }

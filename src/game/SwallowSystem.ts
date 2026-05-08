@@ -159,7 +159,7 @@ export class SwallowSystem {
     physicallyFits: boolean,
     deltaSeconds: number
   ): void {
-    const canUseSpecialPush = player.hasPowerUp('gust');
+    const canUseSpecialPush = false;
     const canUseNaturalRimPush = false;
     if (distance <= 0.001 || (!canUseNaturalRimPush && !canUseSpecialPush)) {
       return;
@@ -220,7 +220,17 @@ export class SwallowSystem {
   private requiredObjectInsideFraction(object: WorldObject): number {
     const massPenalty = THREE.MathUtils.clamp((Math.sqrt(object.mass) - 3) * 0.012, 0, 0.1);
     const tallPenalty = object.size.y > Math.max(object.size.x, object.size.z) * 1.5 ? 0.04 : 0;
-    return THREE.MathUtils.clamp(0.56 + massPenalty + tallPenalty, 0.56, 0.72);
+    const categoryPenalty =
+      object.category === 'traffic'
+        ? 0.16
+        : object.kind === 'tree' || object.kind === 'planter'
+          ? 0.14
+          : object.kind === 'bike'
+            ? 0.1
+            : object.category === 'nature'
+              ? 0.08
+              : 0;
+    return THREE.MathUtils.clamp(0.6 + massPenalty + tallPenalty + categoryPenalty, 0.6, 0.86);
   }
 
   private minimumRimPushInsideFraction(object: WorldObject): number {

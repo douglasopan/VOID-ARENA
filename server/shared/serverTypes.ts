@@ -24,6 +24,7 @@ export interface RoomCreateOptions {
   itemRespawnEnabled: boolean;
   powerUpRespawnEnabled: boolean;
   botDifficultyMix: BotDifficultyMix;
+  mapSeed?: string;
 }
 
 export interface ServerRoomSummary {
