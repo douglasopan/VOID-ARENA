@@ -1,17 +1,19 @@
 import * as THREE from 'three';
 import { AudioManager } from '../audio/AudioManager';
+import { getEngineConfig, subscribeEngineConfig, type EngineConfig } from '../admin/EngineConfig';
 import { detectLanguage, powerUpLabelKey, t, tf, type TranslationKey } from '../i18n/I18n';
-import { BOT_NAMES, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
-import type { ChatMessage, DayNightMode, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary } from '../shared/types';
+import { BOT_NAMES, CAMERA_ZOOM_MAX, CAMERA_ZOOM_MIN, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
+import type { ChatMessage, DayNightMode, GraphicsQuality, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary } from '../shared/types';
 import { InputManager } from '../input/InputManager';
 import { NetworkClient } from '../network/NetworkClient';
 import { PlayerProfileStore } from '../player/PlayerProfileStore';
 import { SceneManager } from '../render/SceneManager';
 import { ChatUI } from '../ui/ChatUI';
 import { EndScreen } from '../ui/EndScreen';
+import { AdminEnginePanel } from '../ui/AdminEnginePanel';
 import { FindGamesMenu } from '../ui/FindGamesMenu';
 import { HostMenu } from '../ui/HostMenu';
-import { HUD, type HudDisasterWarning } from '../ui/HUD';
+import { HUD, type HudDisasterWarning, type HudObjectiveStatus } from '../ui/HUD';
 import { MainMenu } from '../ui/MainMenu';
 import { MatchSetupMenu } from '../ui/MatchSetupMenu';
 import { PauseMenu } from '../ui/PauseMenu';
@@ -64,6 +66,7 @@ export class Game {
   private chatUI!: ChatUI;
   private hud!: HUD;
   private endScreen!: EndScreen;
+  private adminEnginePanel!: AdminEnginePanel;
   private world: World | null = null;
   private menuWorld: World | null = null;
   private menuPreviewElapsed = 0;
@@ -98,6 +101,12 @@ export class Game {
   private performanceSampleFrames = 0;
   private performanceSlowFrames = 0;
   private performanceDegradeCooldown = 0;
+  private adminPanelWasPlaying = false;
+  private unsubscribeEngineConfig: (() => void) | null = null;
+  private objectiveProgress = 0;
+  private objectiveCompleted = false;
+  private objectiveFailed = false;
+  private localDashCooldown = 0;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -123,8 +132,10 @@ export class Game {
     this.sceneManager = new SceneManager(this.sceneLayer);
     this.inputManager = new InputManager({
       onEscape: () => this.handleEscape(),
-      onEnter: () => this.handleEnter()
+      onEnter: () => this.handleEnter(),
+      onPause: () => this.handleEscape()
     }, this.uiLayer);
+    this.inputManager.bindPointerMoveRoot(this.sceneManager.renderer.domElement);
     this.inputManager.setTouchControlsVisible(false);
     this.mainMenu = new MainMenu(this.uiLayer);
     this.matchSetupMenu = new MatchSetupMenu(this.uiLayer);
@@ -135,6 +146,13 @@ export class Game {
     this.chatUI = new ChatUI(this.uiLayer);
     this.hud = new HUD(this.uiLayer);
     this.endScreen = new EndScreen(this.uiLayer);
+    this.adminEnginePanel = new AdminEnginePanel(this.uiLayer, this.audioManager);
+    window.addEventListener('keydown', this.handleAdminHotkey);
+    this.unsubscribeEngineConfig = subscribeEngineConfig((config) => this.applyEngineConfigRuntime(config));
+    this.applyEngineConfigRuntime(getEngineConfig());
+    if (window.location.hash === '#admin-engine') {
+      window.setTimeout(() => this.showAdminEnginePanel(), 0);
+    }
 
     this.showMainMenu();
     this.lastFrame = performance.now();
@@ -281,6 +299,7 @@ export class Game {
       onStart: (config) => this.startMatch(config),
       onBack: () => this.showSoloPresets(playerName)
     }, {
+      singlePlayerMode: 'custom',
       cameraZoom: this.cameraZoom,
       deathCameraEnabled: this.deathCameraEnabled,
       holeRimColor: this.holeRimColor,
@@ -302,6 +321,7 @@ export class Game {
       case 'easy':
         return {
           ...config,
+          singlePlayerMode: 'quick',
           mapSize: 'small',
           durationSeconds: 120,
           botCount: 5,
@@ -313,6 +333,7 @@ export class Game {
       case 'hard':
         return {
           ...config,
+          singlePlayerMode: 'quick',
           mapSize: 'large',
           durationSeconds: 300,
           botCount: 35,
@@ -321,10 +342,100 @@ export class Game {
           powerUpCount: 72,
           respawnSafeRadius: 10
         };
+      case 'timeTrial':
+        return {
+          ...config,
+          singlePlayerMode: 'time-trial',
+          matchMode: MatchMode.TimeTrial,
+          mapSize: 'medium',
+          durationSeconds: 180,
+          botCount: 0,
+          objectDensityMultiplier: 1.04,
+          powerUpCount: 24,
+          respawnSafeRadius: 16,
+          itemRespawnEnabled: false,
+          powerUpRespawnEnabled: false,
+          objective: {
+            type: 'swallowCategory',
+            targetCategory: 'building',
+            targetCount: 12,
+            title: t(this.language, 'objectiveTimeTrialBuildingsTitle'),
+            description: t(this.language, 'objectiveTimeTrialBuildingsDesc')
+          }
+        };
+      case 'careerBuildings':
+        return this.createCareerStageConfig(config, 'career-buildings', {
+          mapSize: 'small',
+          durationSeconds: 150,
+          botCount: 4,
+          botDifficultyMix: 'relaxed',
+          objective: {
+            type: 'swallowCategory',
+            targetCategory: 'building',
+            targetCount: 8,
+            title: t(this.language, 'objectiveCareerBuildingsTitle'),
+            description: t(this.language, 'objectiveCareerBuildingsDesc')
+          }
+        });
+      case 'careerCollector':
+        return this.createCareerStageConfig(config, 'career-collector', {
+          mapSize: 'medium',
+          durationSeconds: 210,
+          botCount: 8,
+          botDifficultyMix: 'balanced',
+          objective: {
+            type: 'swallowKind',
+            targetKind: 'car',
+            targetCount: 10,
+            title: t(this.language, 'objectiveCareerCollectorTitle'),
+            description: t(this.language, 'objectiveCareerCollectorDesc')
+          }
+        });
+      case 'careerHunter':
+        return this.createCareerStageConfig(config, 'career-hunter', {
+          mapSize: 'large',
+          durationSeconds: 240,
+          botCount: 18,
+          botDifficultyMix: 'competitive',
+          objective: {
+            type: 'eliminateHoles',
+            targetCount: 3,
+            title: t(this.language, 'objectiveCareerHunterTitle'),
+            description: t(this.language, 'objectiveCareerHunterDesc')
+          }
+        });
+      case 'careerScore':
+        return this.createCareerStageConfig(config, 'career-score', {
+          mapSize: 'huge',
+          durationSeconds: 300,
+          botCount: 16,
+          botDifficultyMix: 'balanced',
+          objective: {
+            type: 'score',
+            targetCount: 2800,
+            title: t(this.language, 'objectiveCareerScoreTitle'),
+            description: t(this.language, 'objectiveCareerScoreDesc')
+          }
+        });
+      case 'creative':
+        return {
+          ...config,
+          singlePlayerMode: 'creative',
+          matchMode: MatchMode.Creative,
+          mapSize: 'large',
+          durationSeconds: 0,
+          botCount: 0,
+          objectDensityMultiplier: 1.15,
+          powerUpCount: 72,
+          respawnSafeRadius: 20,
+          itemRespawnEnabled: true,
+          powerUpRespawnEnabled: true
+        };
       case 'medium':
       default:
         return {
           ...config,
+          singlePlayerMode: 'quick',
           mapSize: 'medium',
           durationSeconds: 180,
           botCount: 14,
@@ -334,6 +445,71 @@ export class Game {
           respawnSafeRadius: 12
         };
     }
+  }
+
+  private createCareerStageConfig(
+    baseConfig: MatchConfig,
+    stageId: string,
+    options: Partial<MatchConfig> & { objective: NonNullable<MatchConfig['objective']> }
+  ): MatchConfig {
+    return {
+      ...baseConfig,
+      ...options,
+      singlePlayerMode: 'career',
+      matchMode: MatchMode.Career,
+      careerStageId: stageId,
+      objectDensityMultiplier: options.objectDensityMultiplier ?? 1.08,
+      powerUpCount: options.powerUpCount ?? 34,
+      respawnSafeRadius: options.respawnSafeRadius ?? 14,
+      itemRespawnEnabled: false,
+      powerUpRespawnEnabled: true
+    };
+  }
+
+  private prepareMatchConfig(config: MatchConfig): MatchConfig {
+    const prepared: MatchConfig = {
+      ...config,
+      botCount: Math.min(100, Math.max(0, config.botCount)),
+      itemRespawnEnabled: config.itemRespawnEnabled ?? true,
+      powerUpRespawnEnabled: config.powerUpRespawnEnabled ?? true
+    };
+
+    if (prepared.matchMode === MatchMode.TimeTrial) {
+      prepared.singlePlayerMode = 'time-trial';
+      prepared.itemRespawnEnabled = false;
+      prepared.powerUpRespawnEnabled = false;
+      prepared.objective ??= {
+        type: 'swallowCategory',
+        targetCategory: 'building',
+        targetCount: 12,
+        title: t(this.language, 'objectiveTimeTrialBuildingsTitle'),
+        description: t(this.language, 'objectiveTimeTrialBuildingsDesc')
+      };
+      prepared.durationSeconds = Math.max(30, prepared.durationSeconds || 180);
+    }
+
+    if (prepared.matchMode === MatchMode.Career) {
+      prepared.singlePlayerMode = 'career';
+      prepared.itemRespawnEnabled = false;
+      prepared.durationSeconds = Math.max(30, prepared.durationSeconds || 180);
+    }
+
+    if (prepared.matchMode === MatchMode.Creative) {
+      prepared.singlePlayerMode = 'creative';
+      prepared.durationSeconds = 0;
+      prepared.objective = undefined;
+    }
+
+    return prepared;
+  }
+
+  private shouldUseMatchTimer(config: MatchConfig): boolean {
+    return (
+      config.durationSeconds > 0 &&
+      (config.matchMode === MatchMode.Timed ||
+        config.matchMode === MatchMode.TimeTrial ||
+        config.matchMode === MatchMode.Career)
+    );
   }
 
   private async showFindGames(playerName: string): Promise<void> {
@@ -403,6 +579,8 @@ export class Game {
         objectDensityMultiplier: config.objectDensityMultiplier,
         powerUpCount: config.powerUpCount,
         respawnSafeRadius: config.respawnSafeRadius,
+        itemRespawnEnabled: config.itemRespawnEnabled,
+        powerUpRespawnEnabled: config.powerUpRespawnEnabled,
         botDifficultyMix: config.botDifficultyMix
       };
       const room = await this.networkClient.createRoom(roomOptions);
@@ -454,6 +632,8 @@ export class Game {
         objectDensityMultiplier: room.objectDensityMultiplier,
         powerUpCount: room.powerUpCount,
         respawnSafeRadius: room.respawnSafeRadius,
+        itemRespawnEnabled: room.itemRespawnEnabled ?? true,
+        powerUpRespawnEnabled: room.powerUpRespawnEnabled ?? true,
         botDifficultyMix: room.botDifficultyMix,
         botCount: 0,
         fillBots: room.botsEnabled,
@@ -467,15 +647,15 @@ export class Game {
   }
 
   private startMatch(config: MatchConfig): void {
-    const preparedConfig: MatchConfig = {
-      ...config,
-      botCount: Math.min(100, Math.max(0, config.botCount))
-    };
+    const preparedConfig = this.prepareMatchConfig(config);
     this.hideMenus();
     this.endScreen.hide();
     this.clearMatch();
     this.currentConfig = preparedConfig;
     this.lastConfig = { ...preparedConfig };
+    this.objectiveProgress = 0;
+    this.objectiveCompleted = false;
+    this.objectiveFailed = false;
     this.playerName = preparedConfig.playerName;
     this.chatEnabled = preparedConfig.enableChat;
     this.cameraZoom = preparedConfig.cameraZoom;
@@ -499,10 +679,11 @@ export class Game {
     this.sceneManager.setGraphicsQuality(preparedConfig.graphicsQuality);
     const localSpawn = this.world.getSpawnPoint(0);
     const localId = preparedConfig.multiplayer && this.networkClient.socketId ? this.networkClient.socketId : 'local-player';
+    const spawnProtectionNow = performance.now() / 1000;
     this.playerManager.createLocalPlayer(this.currentConfig.playerName, localSpawn, localId, {
       rimColor: this.holeRimColor,
       rimStyle: this.holeRimStyle
-    });
+    }).grantSpawnProtection(spawnProtectionNow);
 
     for (let i = 0; i < this.currentConfig.botCount; i += 1) {
       const nameBase = BOT_NAMES[i % BOT_NAMES.length];
@@ -516,6 +697,7 @@ export class Game {
         i + 1,
         difficulty
       );
+      bot.grantSpawnProtection(spawnProtectionNow);
       this.botManager.addBotController(new BotController(bot, difficulty));
     }
 
@@ -523,10 +705,9 @@ export class Game {
     this.sceneManager.setDayNightMode(preparedConfig.dayNightMode);
     this.swallowSystem = new SwallowSystem(this.world, this.playerManager, this.currentConfig);
     this.respawnSystem = new RespawnSystem(this.world, this.playerManager, this.currentConfig);
-    this.timer =
-      this.currentConfig.matchMode === MatchMode.Timed
-        ? new MatchTimer(this.currentConfig.durationSeconds)
-        : null;
+    this.timer = this.shouldUseMatchTimer(this.currentConfig)
+      ? new MatchTimer(this.currentConfig.durationSeconds)
+      : null;
 
     this.hud.show({
       onZoomIn: () => this.adjustCameraZoom(-0.08),
@@ -541,6 +722,9 @@ export class Game {
     this.chatUI.setEnabled(this.chatEnabled);
     this.chatUI.setVisible(this.hud.getDisplaySetting('chat'));
     this.addSystemMessage(t(this.language, 'matchStarted'));
+    if (this.currentConfig.objective) {
+      this.addSystemMessage(`${t(this.language, 'objective')}: ${this.currentConfig.objective.description}`);
+    }
     if (this.currentConfig.roomName) {
       this.addSystemMessage(`${this.currentConfig.multiplayer ? t(this.language, 'multiplayerRoom') : t(this.language, 'localRoomPreview')}: ${this.currentConfig.roomName}`);
     }
@@ -574,17 +758,28 @@ export class Game {
       );
     }
     const disasterSpeedMultiplier = this.naturalDisasterSystem.playerSpeedMultiplier(this.currentDisasterSnapshot);
+    this.localDashCooldown = Math.max(0, this.localDashCooldown - deltaSeconds);
 
     if (localPlayer?.alive && !this.chatUI.isInputFocused()) {
-      const movement = this.inputManager.getMovementVector();
+      const pointerMovement = this.pointerMovementFor(localPlayer);
+      const movement = pointerMovement ?? this.inputManager.getMovementVector().clone();
       const wantsBoost = movement.lengthSq() > 0.001 && this.inputManager.wantsBoost();
       localPlayer.updateResources(deltaSeconds, wantsBoost);
       const speed = localPlayer.getSpeed(localPlayer.isBoosting) * disasterSpeedMultiplier;
       localPlayer.position.x += movement.x * speed * deltaSeconds;
       localPlayer.position.z += movement.z * speed * deltaSeconds;
+      localPlayer.velocity.set(movement.x * speed, 0, movement.z * speed);
+      if (localPlayer.hasPowerUp('dash') && wantsBoost && this.localDashCooldown <= 0) {
+        const dashDistance = THREE.MathUtils.clamp(5.8 + localPlayer.radius * 0.85, 5.8, 12);
+        localPlayer.position.x += movement.x * dashDistance;
+        localPlayer.position.z += movement.z * dashDistance;
+        localPlayer.velocity.add(new THREE.Vector3(movement.x * dashDistance * 8, 0, movement.z * dashDistance * 8));
+        this.localDashCooldown = 0.85;
+      }
       this.world.clampToArena(localPlayer.position, localPlayer.radius);
     } else if (localPlayer) {
       localPlayer.updateResources(deltaSeconds, false);
+      localPlayer.velocity.set(0, 0, 0);
     }
 
     this.botManager.update(deltaSeconds, this.world, this.playerManager);
@@ -603,6 +798,7 @@ export class Game {
     for (const event of respawnEvents) {
       this.addSystemMessage(tf(this.language, 'respawned', { player: event.player.name }));
     }
+    this.refreshObjectiveProgress();
 
     this.updateHud();
     this.updateNetwork(deltaSeconds);
@@ -615,6 +811,7 @@ export class Game {
         case 'objectSwallowed':
           if (event.player.id === this.playerManager.localPlayerId) {
             this.audioManager.playObjectSwallow(event.object.kind, event.object.category, event.object.mass);
+            this.applyObjectiveObjectProgress(event.object);
           }
           this.maybeAnnounceSize(event.player.id);
           break;
@@ -626,6 +823,7 @@ export class Game {
           }
           if (event.attacker.id === this.playerManager.localPlayerId && event.victim.id !== this.playerManager.localPlayerId) {
             this.showKillNotice(event.victim.name);
+            this.refreshObjectiveProgress();
           }
           this.addSystemMessage(tf(this.language, 'swallowedBy', { victim: event.victim.name, attacker: event.attacker.name }));
           this.broadcastHoleSwallow(event.attacker.id, event.victim.id);
@@ -654,9 +852,15 @@ export class Game {
     for (const player of this.playerManager.alivePlayers()) {
       const candidates = this.world.queryPowerUps(player.position, player.radius + 1.4);
       for (const powerUp of candidates) {
+        if (getEngineConfig().powerUps[powerUp.type]?.enabled === false) {
+          continue;
+        }
         const distance = player.position.distanceTo(powerUp.position);
         if (distance > player.radius + powerUp.radius + 0.45) continue;
         powerUp.collect(now);
+        if (this.currentConfig?.powerUpRespawnEnabled === false) {
+          powerUp.respawnAt = Number.POSITIVE_INFINITY;
+        }
         player.addPowerUp(powerUp.type, powerUp.durationSeconds, now);
         this.addSystemMessage(tf(this.language, 'pickedUp', {
           player: player.name,
@@ -726,7 +930,7 @@ export class Game {
         : object.category === 'pedestrian'
           ? 1.36
           : 1.08;
-    const acceleration = MAGNET_PULL_STRENGTH * pullFactor * categoryBoost * massDamping;
+    const acceleration = MAGNET_PULL_STRENGTH * getEngineConfig().gameplay.magnetStrengthMultiplier * pullFactor * categoryBoost * massDamping;
     const linear = direction.clone().multiplyScalar(acceleration * deltaSeconds);
     linear.y = Math.min(1.3, pullFactor * deltaSeconds * (object.category === 'pedestrian' ? 3.4 : 1.2));
 
@@ -778,8 +982,24 @@ export class Game {
       this.playerManager.getLeaderboard(mode),
       this.timer,
       this.playerManager.alivePlayers().length,
-      this.createDisasterWarning()
+      this.createDisasterWarning(),
+      this.createObjectiveStatus()
     );
+  }
+
+  private createObjectiveStatus(): HudObjectiveStatus | null {
+    const objective = this.currentConfig?.objective;
+    if (!objective) {
+      return null;
+    }
+
+    const progress = Math.min(objective.targetCount, Math.max(0, Math.floor(this.objectiveProgress)));
+    return {
+      title: objective.title,
+      description: objective.description,
+      progressLabel: `${progress}/${objective.targetCount}`,
+      complete: this.objectiveCompleted
+    };
   }
 
   private createDisasterWarning(): HudDisasterWarning | null {
@@ -795,8 +1015,61 @@ export class Game {
     };
   }
 
+  private applyObjectiveObjectProgress(object: WorldObject): void {
+    const objective = this.currentConfig?.objective;
+    if (!objective || this.objectiveCompleted || this.objectiveFailed) {
+      return;
+    }
+
+    if (objective.type === 'swallowCategory' && object.category === objective.targetCategory) {
+      this.objectiveProgress += 1;
+    }
+    if (objective.type === 'swallowKind' && object.kind === objective.targetKind) {
+      this.objectiveProgress += 1;
+    }
+  }
+
+  private refreshObjectiveProgress(): void {
+    const objective = this.currentConfig?.objective;
+    const local = this.playerManager.getLocalPlayer();
+    if (!objective || !local) {
+      return;
+    }
+
+    switch (objective.type) {
+      case 'eliminateHoles':
+        this.objectiveProgress = local.eliminations;
+        break;
+      case 'score':
+        this.objectiveProgress = local.score;
+        break;
+      case 'swallowCategory':
+      case 'swallowKind':
+      default:
+        break;
+    }
+  }
+
+  private objectiveTargetReached(): boolean {
+    const objective = this.currentConfig?.objective;
+    return Boolean(objective && this.objectiveProgress >= objective.targetCount);
+  }
+
   private checkMatchEnd(): void {
     if (!this.currentConfig) {
+      return;
+    }
+
+    if (this.objectiveTargetReached()) {
+      this.endMatch(true);
+      return;
+    }
+
+    if (
+      (this.currentConfig.matchMode === MatchMode.TimeTrial || this.currentConfig.matchMode === MatchMode.Career) &&
+      this.timer?.complete
+    ) {
+      this.endMatch(false);
       return;
     }
 
@@ -810,15 +1083,22 @@ export class Game {
     }
   }
 
-  private endMatch(): void {
+  private endMatch(challengeCompleted?: boolean): void {
     if (this.state === 'ended' || !this.currentConfig) {
       return;
     }
 
     this.state = 'ended';
+    if (this.currentConfig.objective) {
+      this.objectiveCompleted = challengeCompleted ?? this.objectiveTargetReached();
+      this.objectiveFailed = !this.objectiveCompleted;
+      this.addSystemMessage(t(this.language, this.objectiveCompleted ? 'objectiveComplete' : 'objectiveFailed'));
+    }
     const result = this.createMatchResult();
     this.recordMatchHistory(result);
-    this.addSystemMessage(tf(this.language, 'wonMatch', { winner: result.winnerName }));
+    if (!this.currentConfig.objective || this.objectiveCompleted) {
+      this.addSystemMessage(tf(this.language, 'wonMatch', { winner: result.winnerName }));
+    }
     this.audioManager.playMatchEnd();
     this.pauseMenu.hide();
     this.endScreen.show(result, {
@@ -837,14 +1117,24 @@ export class Game {
     const local = this.playerManager.getLocalPlayer();
     const winner = leaderboard[0];
     const placement = Math.max(1, leaderboard.findIndex((entry) => entry.id === local?.id) + 1);
+    const objective = this.currentConfig?.objective;
+    const winnerName = objective
+      ? this.objectiveCompleted
+        ? local?.name ?? t(this.language, 'playerFallback')
+        : t(this.language, 'noWinner')
+      : winner?.name ?? t(this.language, 'noWinner');
 
     return {
-      winnerName: winner?.name ?? t(this.language, 'noWinner'),
+      winnerName,
       placement,
       finalScore: local?.score ?? 0,
       finalRadius: local?.radius ?? 1,
       objectsSwallowed: local?.swallowedObjects ?? 0,
-      eliminations: local?.eliminations ?? 0
+      eliminations: local?.eliminations ?? 0,
+      challengeCompleted: objective ? this.objectiveCompleted : undefined,
+      objectiveTitle: objective?.title,
+      objectiveProgress: objective ? Math.floor(this.objectiveProgress) : undefined,
+      objectiveTarget: objective?.targetCount
     };
   }
 
@@ -930,6 +1220,9 @@ export class Game {
     }
 
     const now = performance.now() / 1000;
+    if (victim.isSpawnProtected(now)) {
+      return;
+    }
     victim.markSwallowed(payload.attackerId, now);
     if (attacker) {
       attacker.addMass(Math.max(6, victim.mass * 0.28 + victim.radius * 5));
@@ -974,7 +1267,8 @@ export class Game {
       alive: local.alive,
       stamina: local.stamina,
       eliminations: local.eliminations,
-      swallowedObjects: local.swallowedObjects
+      swallowedObjects: local.swallowedObjects,
+      spawnProtectionRemaining: local.spawnProtectionRemaining(performance.now() / 1000)
     };
     this.networkClient.sendPlayerState(this.currentConfig.roomId, state);
   }
@@ -1014,6 +1308,7 @@ export class Game {
       player.renderVisible = state.alive;
       player.eliminations = state.eliminations;
       player.swallowedObjects = state.swallowedObjects;
+      player.spawnProtectionUntil = performance.now() / 1000 + Math.max(0, state.spawnProtectionRemaining ?? 0);
     });
 
     for (const player of this.playerManager.all()) {
@@ -1058,6 +1353,7 @@ export class Game {
           }
         },
         onNextMusic: () => this.audioManager.nextMusicTrack(),
+        onGraphicsQualityChange: (quality) => this.applyGraphicsQuality(quality),
         onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle),
         onLanguageChange: (language) => this.applyLanguage(language)
       },
@@ -1068,9 +1364,54 @@ export class Game {
         hudDisplaySettings: this.hud.getDisplaySettings(),
         holeRimColor: this.holeRimColor,
         holeRimStyle: this.holeRimStyle,
+        graphicsQuality: this.currentConfig.graphicsQuality,
         language: this.language
       }
     );
+  }
+
+  private readonly handleAdminHotkey = (event: KeyboardEvent): void => {
+    if (!event.ctrlKey || !event.altKey || event.key.toLowerCase() !== 'e') {
+      return;
+    }
+    event.preventDefault();
+    this.showAdminEnginePanel();
+  };
+
+  private showAdminEnginePanel(): void {
+    if (this.adminEnginePanel.visible) {
+      return;
+    }
+
+    this.adminPanelWasPlaying = this.state === 'playing';
+    if (this.adminPanelWasPlaying) {
+      this.state = 'paused';
+      this.inputManager.clear();
+      this.inputManager.setTouchControlsVisible(false);
+    }
+
+    this.adminEnginePanel.show({
+      onClose: () => this.closeAdminEnginePanel(),
+      onApply: (config) => this.applyEngineConfigRuntime(config)
+    });
+  }
+
+  private closeAdminEnginePanel(): void {
+    this.adminEnginePanel.hide();
+    if (this.adminPanelWasPlaying && this.currentConfig) {
+      this.state = 'playing';
+      this.inputManager.setTouchControlsVisible(true);
+      this.lastFrame = performance.now();
+    }
+    this.adminPanelWasPlaying = false;
+  }
+
+  private applyEngineConfigRuntime(config: EngineConfig): void {
+    document.documentElement.style.setProperty('--menu-font', `"${config.branding.menuFont}", "Open Sans", sans-serif`);
+    document.documentElement.style.setProperty('--text-font', `"${config.branding.textFont}", "Open Sans", sans-serif`);
+    if (this.currentConfig) {
+      this.currentConfig.enableAds = this.currentConfig.enableAds && config.generation.adsEnabled;
+    }
   }
 
   private resumeMatch(): void {
@@ -1109,6 +1450,7 @@ export class Game {
           }
         },
         onNextMusic: () => this.audioManager.nextMusicTrack(),
+        onGraphicsQualityChange: (quality) => this.applyGraphicsQuality(quality),
         onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle),
         onLanguageChange: (language) => {
           this.applyLanguage(language);
@@ -1122,9 +1464,34 @@ export class Game {
         hudDisplaySettings: this.hud.getDisplaySettings(),
         holeRimColor: this.holeRimColor,
         holeRimStyle: this.holeRimStyle,
+        graphicsQuality: this.currentConfig?.graphicsQuality,
         language: this.language
       }
     );
+  }
+
+  private pointerMovementFor(localPlayer: { position: THREE.Vector3; radius: number }): THREE.Vector3 | null {
+    const pointerTarget = this.inputManager.getPointerTarget();
+    if (!pointerTarget) {
+      return null;
+    }
+
+    const groundPoint = this.sceneManager.clientPointToGround(pointerTarget.x, pointerTarget.y);
+    if (!groundPoint) {
+      return null;
+    }
+
+    const direction = new THREE.Vector3(
+      groundPoint.x - localPlayer.position.x,
+      0,
+      groundPoint.z - localPlayer.position.z
+    );
+    const distance = direction.length();
+    if (distance <= Math.max(0.35, localPlayer.radius * 0.2)) {
+      return null;
+    }
+
+    return direction.multiplyScalar(1 / distance);
   }
 
   private applyHoleAppearance(rimColor: string, rimStyle: HoleRimStyle): void {
@@ -1155,7 +1522,22 @@ export class Game {
     }
   }
 
+  private applyGraphicsQuality(quality: GraphicsQuality): void {
+    this.sceneManager.setGraphicsQuality(quality);
+    if (this.currentConfig) {
+      this.currentConfig.graphicsQuality = quality;
+    }
+    if (this.lastConfig) {
+      this.lastConfig.graphicsQuality = quality;
+    }
+  }
+
   private handleEscape(): void {
+    if (this.adminEnginePanel?.visible) {
+      this.closeAdminEnginePanel();
+      return;
+    }
+
     if (this.chatUI.handleEscape()) {
       return;
     }
@@ -1264,6 +1646,10 @@ export class Game {
     this.appliedNetworkSwallows.clear();
     this.localHoleCombo = 0;
     this.lastLocalHoleKillAt = 0;
+    this.localDashCooldown = 0;
+    this.objectiveProgress = 0;
+    this.objectiveCompleted = false;
+    this.objectiveFailed = false;
     this.naturalDisasterSystem.reset();
     this.currentDisasterSnapshot = CLEAR_NATURAL_DISASTER;
     this.sceneManager?.clearWorld();
@@ -1296,6 +1682,8 @@ export class Game {
         return 'disasterEarthquake';
       case 'meteorShower':
         return 'disasterMeteorShower';
+      case 'sandstorm':
+        return 'disasterSandstorm';
       case 'clear':
       default:
         return 'disasterClear';
@@ -1303,7 +1691,7 @@ export class Game {
   }
 
   private effectiveObjectDensityMultiplier(config: MatchConfig): number {
-    let multiplier = config.objectDensityMultiplier;
+    let multiplier = config.objectDensityMultiplier * getEngineConfig().generation.objectDensityMultiplier;
     const mapCap = {
       small: 1.08,
       medium: 1,
@@ -1332,7 +1720,7 @@ export class Game {
   }
 
   private adjustCameraZoom(delta: number): void {
-    this.cameraZoom = THREE.MathUtils.clamp(this.cameraZoom + delta, 0.72, 1.42);
+    this.cameraZoom = THREE.MathUtils.clamp(this.cameraZoom + delta, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
     if (this.currentConfig) {
       this.currentConfig.cameraZoom = this.cameraZoom;
     }

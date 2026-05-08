@@ -2,14 +2,17 @@ export const GAME_VERSION = '0.1.0-codex-prototype';
 
 export const MATCH_DURATION_SECONDS = 180;
 export const START_RADIUS = 1.0;
-export const START_SPEED = 8.0;
-export const MIN_SPEED = 4.0;
+export const START_SPEED = 13.2;
+export const MIN_SPEED = 4.9;
 export const GROWTH_PER_MASS = 0.13;
 export const OBJECT_FIT_RATIO = 1.08;
 export const HOLE_SWALLOW_RATIO = 1.15;
+export const CAMERA_ZOOM_MIN = 0.42;
+export const CAMERA_ZOOM_MAX = 1.42;
 export const PLAYER_RESPAWN_SECONDS = 3.5;
+export const SPAWN_PROTECTION_SECONDS = 15;
 export const MAX_STAMINA = 100;
-export const BOOST_MULTIPLIER = 1.7;
+export const BOOST_MULTIPLIER = 1.58;
 export const BOOST_STAMINA_DRAIN_PER_SECOND = 36;
 export const STAMINA_REGEN_PER_SECOND = 22;
 export const STAMINA_REGEN_DELAY_SECONDS = 0.75;
@@ -130,5 +133,20 @@ export const POWERUP_SETTINGS = {
     label: 'Mass Core',
     color: '#d8b4fe',
     durationSeconds: 0
+  },
+  gust: {
+    label: 'Void Gust',
+    color: '#a3e635',
+    durationSeconds: 8
+  },
+  overcharge: {
+    label: 'Infinite Stamina',
+    color: '#22d3ee',
+    durationSeconds: 9
+  },
+  dash: {
+    label: 'Rift Dash',
+    color: '#f97316',
+    durationSeconds: 9
   }
 } as const;

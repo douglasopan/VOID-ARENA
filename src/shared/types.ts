@@ -43,7 +43,16 @@ export type WorldObjectKind =
   | 'fountain'
   | 'statue';
 
-export type PowerUpType = 'magnet' | 'shrink' | 'haste' | 'shield' | 'stamina' | 'mass';
+export type PowerUpType =
+  | 'magnet'
+  | 'shrink'
+  | 'haste'
+  | 'shield'
+  | 'stamina'
+  | 'mass'
+  | 'gust'
+  | 'overcharge'
+  | 'dash';
 export type HoleRimStyle = 'classic' | 'neon' | 'double' | 'clean';
 
 export interface Vec2Data {
@@ -212,6 +221,10 @@ export interface MatchResult {
   finalRadius: number;
   objectsSwallowed: number;
   eliminations: number;
+  challengeCompleted?: boolean;
+  objectiveTitle?: string;
+  objectiveProgress?: number;
+  objectiveTarget?: number;
 }
 
 export interface MatchHistoryEntry extends MatchResult {

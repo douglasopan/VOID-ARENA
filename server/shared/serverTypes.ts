@@ -21,6 +21,8 @@ export interface RoomCreateOptions {
   objectDensityMultiplier: number;
   powerUpCount: number;
   respawnSafeRadius: number;
+  itemRespawnEnabled: boolean;
+  powerUpRespawnEnabled: boolean;
   botDifficultyMix: BotDifficultyMix;
 }
 
@@ -40,6 +42,8 @@ export interface ServerRoomSummary {
   objectDensityMultiplier: number;
   powerUpCount: number;
   respawnSafeRadius: number;
+  itemRespawnEnabled: boolean;
+  powerUpRespawnEnabled: boolean;
   botDifficultyMix: BotDifficultyMix;
   seed: string;
 }
@@ -58,6 +62,7 @@ export interface ServerPlayerState {
   stamina: number;
   eliminations: number;
   swallowedObjects: number;
+  spawnProtectionRemaining?: number;
 }
 
 export interface JoinRoomResult {

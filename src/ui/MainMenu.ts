@@ -1,5 +1,6 @@
 import { GAME_VERSION } from '../shared/constants';
 import { LANGUAGE_OPTIONS } from '../shared/constants';
+import { getEngineConfig } from '../admin/EngineConfig';
 import { generatePlayerName } from '../game/MatchConfig';
 import { t } from '../i18n/I18n';
 import type { LanguageCode, PlayerProfile } from '../shared/types';
@@ -26,13 +27,14 @@ export class MainMenu {
     this.hide();
     const element = document.createElement('div');
     element.className = 'screen main-screen';
+    const engineBranding = getEngineConfig().branding;
     const bestScore = Math.max(0, ...((profile?.matchHistory ?? []).map((entry) => entry.finalScore)));
     const accountSummary = profile
       ? `<div class="account-summary"><span>${t(language, 'accountSaved')}</span><strong>${profile.matchHistory.length} ${t(language, 'matches')}</strong><strong>${bestScore} ${t(language, 'best')}</strong></div>`
       : `<div class="account-summary"><span>${t(language, 'createAccount')}</span></div>`;
     element.innerHTML = `
       <section class="menu-panel narrow main-menu-panel">
-        <h1 class="title neon-title">VOID ARENA</h1>
+        <h1 class="title neon-title">${this.escape(engineBranding.title)}</h1>
         <p class="subtitle">${t(language, 'tagline')}</p>
         <label class="field">
           ${t(language, 'accountName')}
@@ -99,5 +101,13 @@ export class MainMenu {
   hide(): void {
     this.element?.remove();
     this.element = null;
+  }
+
+  private escape(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 }

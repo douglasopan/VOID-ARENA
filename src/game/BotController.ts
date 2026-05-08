@@ -29,6 +29,7 @@ export class BotController {
 
   update(deltaSeconds: number, world: World, playerManager: PlayerManager): void {
     if (!this.bot.alive) {
+      this.bot.velocity.set(0, 0, 0);
       return;
     }
 
@@ -40,9 +41,11 @@ export class BotController {
     }
 
     this.bot.updateResources(deltaSeconds, this.wantsBoost);
-    const moveDistance = this.bot.getSpeed(this.bot.isBoosting) * deltaSeconds;
+    const speed = this.bot.getSpeed(this.bot.isBoosting);
+    const moveDistance = speed * deltaSeconds;
     this.bot.position.x += this.direction.x * moveDistance;
     this.bot.position.z += this.direction.z * moveDistance;
+    this.bot.velocity.set(this.direction.x * speed, 0, this.direction.z * speed);
     world.clampToArena(this.bot.position, this.bot.radius);
   }
 
@@ -117,7 +120,11 @@ export class BotController {
     let bestScore = Number.NEGATIVE_INFINITY;
 
     for (const other of playerManager.alivePlayers()) {
-      if (other.id === this.bot.id || !canHoleSwallow(this.bot.radius, other.radius)) {
+      if (
+        other.id === this.bot.id ||
+        other.isSpawnProtected(performance.now() / 1000) ||
+        !canHoleSwallow(this.bot.radius, other.radius)
+      ) {
         continue;
       }
 

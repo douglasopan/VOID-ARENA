@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "server": "tsx server/index.ts",
     "start": "tsx server/index.ts",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "audio:ogg": "node scripts/convert-audio-to-ogg.mjs",
+    "admin:prebuild": "node tools/prebuild-admin/server.mjs"
   },
   "dependencies": {
     "express": "^4.19.2",

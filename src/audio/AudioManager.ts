@@ -8,7 +8,16 @@ import {
   PLAYER_DIE_SFX_ASSET,
   POWERUP_SFX_ASSETS
 } from './AudioAssets';
+import { getEngineConfig, normalizeOggAudioPath } from '../admin/EngineConfig';
 import type { CityObjectCategory, MapSize, PowerUpType, WorldObjectKind } from '../shared/types';
+
+interface MusicFadeState {
+  startedAt: number;
+  durationSeconds: number;
+  fromLevel: number;
+  toLevel: number;
+  stopAtEnd: boolean;
+}
 
 export class AudioManager {
   private context: AudioContext | null = null;
@@ -19,6 +28,13 @@ export class AudioManager {
   private musicOscillator: OscillatorNode | null = null;
   private musicGain: GainNode | null = null;
   private musicElement: HTMLAudioElement | null = null;
+  private readonly musicElements = new Set<HTMLAudioElement>();
+  private readonly musicLevels = new Map<HTMLAudioElement, number>();
+  private readonly musicFades = new Map<HTMLAudioElement, MusicFadeState>();
+  private musicTickId = 0;
+  private musicAutoAdvanceAudio: HTMLAudioElement | null = null;
+  private readonly musicCrossfadeSeconds = 5.5;
+  private readonly musicManualFadeSeconds = 3.25;
   private activeMusicKey: string | null = null;
   private activeMusicAssets: string[] = [];
   private activeMusicIndex = 0;
@@ -27,6 +43,7 @@ export class AudioManager {
     assets: string[];
     index: number;
     forceOriginalAsset: boolean;
+    fadeSeconds: number;
   } | null = null;
   private supportsOggOpus: boolean | null = null;
   private readonly activeSfx = new Set<HTMLAudioElement>();
@@ -43,8 +60,8 @@ export class AudioManager {
     if (this.musicGain) {
       this.musicGain.gain.value = this.muted ? 0 : this.musicVolume * 0.045;
     }
-    if (this.musicElement) {
-      this.musicElement.volume = this.muted ? 0 : this.musicVolume;
+    for (const audio of this.musicElements) {
+      this.applyMusicElementVolume(audio);
     }
   }
 
@@ -53,9 +70,9 @@ export class AudioManager {
     if (this.musicGain) {
       this.musicGain.gain.value = muted ? 0 : this.musicVolume * 0.045;
     }
-    if (this.musicElement) {
-      this.musicElement.muted = muted;
-      this.musicElement.volume = muted ? 0 : this.musicVolume;
+    for (const audio of this.musicElements) {
+      audio.muted = muted;
+      this.applyMusicElementVolume(audio);
     }
   }
 
@@ -76,7 +93,8 @@ export class AudioManager {
   }
 
   playObjectSwallow(kind: WorldObjectKind, category: CityObjectCategory, mass: number): void {
-    const asset = this.pickAsset(OBJECT_SWALLOW_SFX_ASSETS[kind]);
+    const configuredAssets = getEngineConfig().audio.objectSfx[kind];
+    const asset = this.pickAsset(configuredAssets?.length ? configuredAssets : OBJECT_SWALLOW_SFX_ASSETS[kind]);
     if (asset) {
       const fallMix = this.getDistantFallMix(kind, category);
       this.playSfxAsset(
@@ -115,7 +133,7 @@ export class AudioManager {
   }
 
   playDeath(): void {
-    this.playSfxAsset(PLAYER_DIE_SFX_ASSET, 0.36, this.randomRate(0.98, 1.02), () => undefined, { fadeInSeconds: 0.08, fadeOutSeconds: 0.42 });
+    this.playSfxAsset(getEngineConfig().audio.playerDie || PLAYER_DIE_SFX_ASSET, 0.36, this.randomRate(0.98, 1.02), () => undefined, { fadeInSeconds: 0.08, fadeOutSeconds: 0.42 });
   }
 
   playUiClick(): void {
@@ -128,13 +146,13 @@ export class AudioManager {
       return;
     }
     this.lastHoverSfxAt = now;
-    this.playSfxAsset(BUTTON_HOVER_SFX_ASSET, 0.42, this.randomRate(0.98, 1.03), () => {
+    this.playSfxAsset(getEngineConfig().audio.uiHover || BUTTON_HOVER_SFX_ASSET, 0.42, this.randomRate(0.98, 1.03), () => {
       this.playTone(460, 620, 0.045, 'triangle', 0.08);
     });
   }
 
   playButtonClick(): void {
-    this.playSfxAsset(BUTTON_CLICK_SFX_ASSET, 0.64, this.randomRate(0.98, 1.02), () => {
+    this.playSfxAsset(getEngineConfig().audio.uiClick || BUTTON_CLICK_SFX_ASSET, 0.64, this.randomRate(0.98, 1.02), () => {
       this.playTone(520, 780, 0.055, 'triangle', 0.16);
     });
   }
@@ -155,14 +173,16 @@ export class AudioManager {
       : Promise.resolve();
     this.primeContext(context);
 
-    if (this.musicElement?.paused && this.activeMusicKey) {
-      void this.musicElement.play().catch(() => undefined);
+    for (const audio of this.musicElements) {
+      if (audio.paused) {
+        void audio.play().catch(() => undefined);
+      }
     }
 
     const pending = this.pendingMusicRequest;
     if (pending) {
       this.pendingMusicRequest = null;
-      this.playMusicAsset(pending.key, pending.assets, pending.index, pending.forceOriginalAsset);
+      this.playMusicAsset(pending.key, pending.assets, pending.index, pending.forceOriginalAsset, pending.fadeSeconds);
     }
 
     void resume.then(() => {
@@ -172,11 +192,13 @@ export class AudioManager {
   }
 
   startMenuMusic(): void {
-    this.startTrackGroup('menu', MENU_MUSIC_ASSETS);
+    const assets = getEngineConfig().audio.menuMusic;
+    this.startTrackGroup('menu', assets.length ? assets : MENU_MUSIC_ASSETS);
   }
 
   startMusic(mapSize?: MapSize): void {
-    const assets = mapSize ? MAP_MUSIC_ASSETS[mapSize] : undefined;
+    const configuredAssets = getEngineConfig().audio.mapMusic;
+    const assets = configuredAssets.length ? configuredAssets : mapSize ? MAP_MUSIC_ASSETS[mapSize] : undefined;
     if (assets?.length) {
       this.startTrackGroup(`map:${mapSize}`, assets);
       return;
@@ -191,7 +213,7 @@ export class AudioManager {
     }
 
     const nextIndex = (this.activeMusicIndex + 1) % this.activeMusicAssets.length;
-    this.playMusicAsset(this.activeMusicKey, this.activeMusicAssets, nextIndex);
+    this.playMusicAsset(this.activeMusicKey, this.activeMusicAssets, nextIndex, false, this.musicManualFadeSeconds);
   }
 
   private startTrackGroup(key: string, assets: string[]): void {
@@ -210,34 +232,63 @@ export class AudioManager {
     this.playMusicAsset(key, assets, Math.floor(Math.random() * assets.length));
   }
 
-  private playMusicAsset(key: string, assets: string[], index: number, forceOriginalAsset = false): void {
-    this.stopMusic();
+  private playMusicAsset(
+    key: string,
+    assets: string[],
+    index: number,
+    forceOriginalAsset = false,
+    fadeSeconds = this.musicCrossfadeSeconds
+  ): void {
     this.activeMusicAssets = [...assets];
     this.activeMusicIndex = Math.max(0, Math.min(assets.length - 1, index));
     const requestedAsset = assets[this.activeMusicIndex];
     const sourceAsset = forceOriginalAsset ? requestedAsset : this.getPreferredAudioPath(requestedAsset);
     const audio = new Audio(sourceAsset);
+    const previousElements = [...this.musicElements];
     let failed = false;
     const handleFailure = (): void => {
-      if (failed || this.musicElement !== audio) {
+      if (failed) {
         return;
       }
       failed = true;
-      audio.removeEventListener('error', handleFailure);
-      if (!forceOriginalAsset && sourceAsset !== requestedAsset) {
-        this.playMusicAsset(key, assets, index, true);
-        return;
-      }
-      this.pendingMusicRequest = { key, assets: [...assets], index, forceOriginalAsset };
+      audio.onerror = null;
+      this.releaseMusicElement(audio);
+      this.pendingMusicRequest = { key, assets: [...assets], index, forceOriginalAsset, fadeSeconds };
     };
-    audio.loop = true;
+    audio.loop = false;
     audio.preload = 'auto';
-    audio.volume = this.muted ? 0 : this.musicVolume;
+    audio.volume = 0;
     audio.muted = this.muted;
-    audio.addEventListener('error', handleFailure, { once: true });
-    this.musicElement = audio;
-    this.activeMusicKey = key;
-    void audio.play().catch(handleFailure);
+    audio.onended = () => this.handleMusicEnded(audio);
+    audio.onerror = () => handleFailure();
+
+    this.musicElements.add(audio);
+    this.musicLevels.set(audio, 0);
+    this.stopGeneratedMusic();
+
+    const playPromise = audio.play();
+    void playPromise
+      .then(() => {
+        if (failed) {
+          return;
+        }
+        this.musicElement = audio;
+        this.activeMusicKey = key;
+        this.musicAutoAdvanceAudio = null;
+        this.fadeMusicElement(audio, 1, previousElements.length ? fadeSeconds : Math.min(1.6, fadeSeconds));
+        for (const previous of previousElements) {
+          this.fadeMusicElement(previous, 0, fadeSeconds, true);
+        }
+        this.scheduleMusicTick();
+      })
+      .catch(() => {
+        if (!this.unlocked) {
+          this.pendingMusicRequest = { key, assets: [...assets], index, forceOriginalAsset, fadeSeconds };
+          this.releaseMusicElement(audio);
+          return;
+        }
+        handleFailure();
+      });
   }
 
   private startGeneratedMusic(): void {
@@ -259,15 +310,168 @@ export class AudioManager {
   }
 
   stopMusic(): void {
-    this.musicOscillator?.stop();
-    this.musicOscillator = null;
-    this.musicGain = null;
-    this.musicElement?.pause();
-    this.musicElement = null;
+    this.stopGeneratedMusic();
+    for (const audio of [...this.musicElements]) {
+      this.fadeMusicElement(audio, 0, 1.8, true);
+    }
     this.activeMusicKey = null;
     this.activeMusicAssets = [];
     this.activeMusicIndex = 0;
     this.pendingMusicRequest = null;
+  }
+
+  private stopGeneratedMusic(): void {
+    if (this.musicOscillator) {
+      try {
+        this.musicOscillator.stop();
+      } catch {
+        // The oscillator can already be stopped if the browser closed the graph.
+      }
+      this.musicOscillator.disconnect();
+      this.musicOscillator = null;
+    }
+
+    if (this.musicGain) {
+      this.musicGain.disconnect();
+      this.musicGain = null;
+    }
+  }
+
+  private handleMusicEnded(audio: HTMLAudioElement): void {
+    const wasCurrentTrack = this.musicElement === audio;
+    const key = this.activeMusicKey;
+    const assets = [...this.activeMusicAssets];
+    const nextIndex = assets.length > 1 ? (this.activeMusicIndex + 1) % assets.length : this.activeMusicIndex;
+
+    this.releaseMusicElement(audio);
+
+    if (!wasCurrentTrack || !key || assets.length === 0) {
+      return;
+    }
+
+    this.playMusicAsset(key, assets, nextIndex, false, 1.2);
+  }
+
+  private applyMusicElementVolume(audio: HTMLAudioElement): void {
+    const level = this.musicLevels.get(audio) ?? 1;
+    audio.muted = this.muted;
+    audio.volume = this.muted ? 0 : this.clamp01(this.musicVolume * level);
+  }
+
+  private setMusicElementLevel(audio: HTMLAudioElement, level: number): void {
+    this.musicLevels.set(audio, this.clamp01(level));
+    this.applyMusicElementVolume(audio);
+  }
+
+  private fadeMusicElement(
+    audio: HTMLAudioElement,
+    toLevel: number,
+    durationSeconds: number,
+    stopAtEnd = false
+  ): void {
+    if (!this.musicElements.has(audio)) {
+      return;
+    }
+
+    const duration = Math.max(0.05, durationSeconds);
+    const fromLevel = this.musicLevels.get(audio) ?? 1;
+    this.musicFades.set(audio, {
+      startedAt: performance.now() / 1000,
+      durationSeconds: duration,
+      fromLevel,
+      toLevel: this.clamp01(toLevel),
+      stopAtEnd
+    });
+    this.scheduleMusicTick();
+  }
+
+  private releaseMusicElement(audio: HTMLAudioElement): void {
+    this.musicFades.delete(audio);
+    this.musicLevels.delete(audio);
+    this.musicElements.delete(audio);
+    audio.onended = null;
+    audio.onerror = null;
+    try {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    } catch {
+      // Releasing best-effort is enough; the browser will collect failed media nodes.
+    }
+
+    if (this.musicElement === audio) {
+      this.musicElement = null;
+    }
+    if (this.musicAutoAdvanceAudio === audio) {
+      this.musicAutoAdvanceAudio = null;
+    }
+  }
+
+  private scheduleMusicTick(): void {
+    if (this.musicTickId !== 0) {
+      return;
+    }
+
+    this.musicTickId = window.requestAnimationFrame(this.tickMusic);
+  }
+
+  private readonly tickMusic = (): void => {
+    this.musicTickId = 0;
+    const now = performance.now() / 1000;
+
+    for (const [audio, fade] of [...this.musicFades]) {
+      const progress = this.clamp01((now - fade.startedAt) / fade.durationSeconds);
+      const eased = progress * progress * (3 - 2 * progress);
+      const level = fade.fromLevel + (fade.toLevel - fade.fromLevel) * eased;
+      this.setMusicElementLevel(audio, level);
+
+      if (progress >= 1) {
+        this.musicFades.delete(audio);
+        this.setMusicElementLevel(audio, fade.toLevel);
+        if (fade.stopAtEnd) {
+          this.releaseMusicElement(audio);
+        }
+      }
+    }
+
+    this.maybeAutoAdvanceMusic();
+
+    if (this.musicFades.size > 0 || this.musicElements.size > 0) {
+      this.scheduleMusicTick();
+    }
+  };
+
+  private maybeAutoAdvanceMusic(): void {
+    const audio = this.musicElement;
+    if (!audio || !this.activeMusicKey || this.activeMusicAssets.length === 0 || audio.paused) {
+      return;
+    }
+
+    const duration = audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) {
+      return;
+    }
+
+    const remainingSeconds = duration - audio.currentTime;
+    if (
+      remainingSeconds > this.musicCrossfadeSeconds ||
+      remainingSeconds <= 0.2 ||
+      this.musicAutoAdvanceAudio === audio
+    ) {
+      return;
+    }
+
+    this.musicAutoAdvanceAudio = audio;
+    const nextIndex = this.activeMusicAssets.length > 1
+      ? (this.activeMusicIndex + 1) % this.activeMusicAssets.length
+      : this.activeMusicIndex;
+    this.playMusicAsset(
+      this.activeMusicKey,
+      this.activeMusicAssets,
+      nextIndex,
+      false,
+      Math.max(0.9, Math.min(this.musicCrossfadeSeconds, remainingSeconds))
+    );
   }
 
   private playGeneratedSwallow(category: CityObjectCategory, mass: number): void {
@@ -347,10 +551,6 @@ export class AudioManager {
     }
 
     void this.loadSfxBuffer(sourcePath).then((buffer) => {
-      if (!buffer && !forceOriginalAsset && sourcePath !== path) {
-        this.playSfxAsset(path, gain, playbackRate, onError, fade, true);
-        return;
-      }
       if (!buffer) {
         onError();
         return;
@@ -443,10 +643,6 @@ export class AudioManager {
     this.activeSfx.add(audio);
     void audio.play().catch(() => {
       release();
-      if (!forceOriginalAsset && sourcePath !== originalPath) {
-        this.playSfxAsset(originalPath, gain, playbackRate, onError, fade, true);
-        return;
-      }
       onError();
     });
   }
@@ -616,11 +812,7 @@ export class AudioManager {
   }
 
   private getPreferredAudioPath(path: string): string {
-    if (!path.toLowerCase().endsWith('.mp3') || !this.canPlayOggOpus()) {
-      return path;
-    }
-
-    return `${path.slice(0, -4)}.ogg`;
+    return normalizeOggAudioPath(path) || path;
   }
 
   private canPlayOggOpus(): boolean {

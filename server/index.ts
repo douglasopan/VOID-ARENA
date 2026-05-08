@@ -1,5 +1,9 @@
 import express from 'express';
 import http from 'node:http';
+import { spawn } from 'node:child_process';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { Server } from 'socket.io';
 import { MatchMode } from '../src/game/MatchMode';
 import { RoomManager } from './rooms/RoomManager';
@@ -21,8 +25,8 @@ const io = new Server(httpServer, {
 });
 const roomManager = new RoomManager();
 const socketRooms = new Map<string, string>();
+const ADMIN_DEV_FALLBACK_TOKEN = 'VOIDMASTER';
 
-app.use(express.json());
 app.use((request, response, next) => {
   const requestOrigin = request.headers.origin;
   const responseOrigin =
@@ -32,11 +36,47 @@ app.use((request, response, next) => {
         ? requestOrigin
         : allowedOrigins[0] ?? '*';
   response.header('Access-Control-Allow-Origin', responseOrigin);
-  response.header('Access-Control-Allow-Headers', 'Content-Type');
+  response.header('Access-Control-Allow-Headers', 'Content-Type,X-Admin-Token,X-Audio-Folder,X-File-Name');
   response.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   response.header('Vary', 'Origin');
   next();
 });
+app.post('/admin/audio', express.raw({ type: '*/*', limit: '80mb' }), async (request, response) => {
+  if (!hasAdminAccess(request.headers['x-admin-token'])) {
+    response.status(401).send('Admin master token is invalid.');
+    return;
+  }
+
+  const rawFolder = String(request.headers['x-audio-folder'] ?? 'sfx');
+  const folder = ['music', 'sfx', 'ui'].includes(rawFolder) ? rawFolder : 'sfx';
+  const rawFileName = decodeURIComponent(String(request.headers['x-file-name'] ?? 'audio.ogg'));
+  const safeBaseName = sanitizeAudioBaseName(rawFileName);
+  const sourceExtension = path.extname(rawFileName).toLowerCase();
+  const outputDir = path.resolve(process.cwd(), 'public', 'audio', folder);
+  const outputPath = path.join(outputDir, `${safeBaseName}.ogg`);
+
+  try {
+    await mkdir(outputDir, { recursive: true });
+    if (sourceExtension === '.ogg') {
+      await writeFile(outputPath, request.body);
+    } else if (sourceExtension === '.mp3') {
+      const tempPath = path.join(os.tmpdir(), `${safeBaseName}-${Date.now()}.mp3`);
+      await writeFile(tempPath, request.body);
+      await convertMp3ToOgg(tempPath, outputPath);
+      await rm(tempPath, { force: true });
+    } else {
+      response.status(400).send('Only .ogg and .mp3 audio files are accepted.');
+      return;
+    }
+
+    response.status(201).json({
+      path: `/audio/${folder}/${safeBaseName}.ogg`
+    });
+  } catch (error) {
+    response.status(500).send(error instanceof Error ? error.message : 'Audio conversion failed.');
+  }
+});
+app.use(express.json());
 app.options('*', (_request, response) => {
   response.sendStatus(204);
 });
@@ -54,6 +94,8 @@ roomManager.createRoom({
   objectDensityMultiplier: 1,
   powerUpCount: 14,
   respawnSafeRadius: 12,
+  itemRespawnEnabled: true,
+  powerUpRespawnEnabled: true,
   botDifficultyMix: 'balanced'
 });
 
@@ -85,6 +127,8 @@ app.post('/rooms', (request, response) => {
     objectDensityMultiplier: options.objectDensityMultiplier || 1,
     powerUpCount: options.powerUpCount ?? 14,
     respawnSafeRadius: options.respawnSafeRadius || 12,
+    itemRespawnEnabled: options.itemRespawnEnabled ?? true,
+    powerUpRespawnEnabled: options.powerUpRespawnEnabled ?? true,
     botDifficultyMix: options.botDifficultyMix || 'balanced'
   });
   response.status(201).json(room);
@@ -98,7 +142,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('room:create', (options: RoomCreateOptions, ack?: (room: unknown) => void) => {
-    const room = roomManager.createRoom(options);
+    const room = roomManager.createRoom({
+      ...options,
+      itemRespawnEnabled: options.itemRespawnEnabled ?? true,
+      powerUpRespawnEnabled: options.powerUpRespawnEnabled ?? true
+    });
     io.emit('rooms:list', roomManager.listRooms());
     ack?.(room);
   });
@@ -153,6 +201,53 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('state:players', roomManager.listPlayerStates(roomId));
   });
 });
+
+function hasAdminAccess(headerValue: string | string[] | undefined): boolean {
+  const configuredToken = process.env.ADMIN_MASTER_TOKEN || ADMIN_DEV_FALLBACK_TOKEN;
+  const providedToken = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  return Boolean(providedToken) && providedToken === configuredToken;
+}
+
+function sanitizeAudioBaseName(fileName: string): string {
+  const parsed = path.parse(fileName);
+  const base = parsed.name
+    .normalize('NFKD')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+  return base || `audio_${Date.now()}`;
+}
+
+function convertMp3ToOgg(inputPath: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn('ffmpeg', [
+      '-y',
+      '-i',
+      inputPath,
+      '-vn',
+      '-c:a',
+      'libopus',
+      '-b:a',
+      '128k',
+      outputPath
+    ], {
+      stdio: ['ignore', 'ignore', 'pipe']
+    });
+
+    let stderr = '';
+    ffmpeg.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    ffmpeg.on('error', reject);
+    ffmpeg.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr || `ffmpeg exited with code ${code}`));
+    });
+  });
+}
 
 httpServer.listen(PORT, HOST, () => {
   console.log(`Void Arena server listening on http://${HOST}:${PORT}`);

@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Void Arena Prebuild Admin</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Open Sans", Arial, sans-serif;
+        background: #080d14;
+        color: #f8fbff;
+        --panel: rgba(16, 24, 36, 0.92);
+        --line: rgba(255, 255, 255, 0.13);
+        --cyan: #5eead4;
+        --amber: #f6c453;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 20% 12%, rgba(94, 234, 212, 0.16), transparent 30%),
+          radial-gradient(circle at 80% 84%, rgba(246, 196, 83, 0.12), transparent 28%),
+          #080d14;
+      }
+
+      header,
+      main {
+        width: min(1280px, calc(100vw - 32px));
+        margin: 0 auto;
+      }
+
+      header {
+        padding: 24px 0 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: Orbitron, Arial, sans-serif;
+        letter-spacing: 0;
+      }
+
+      p {
+        color: #b8c2d8;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        gap: 16px;
+        padding-bottom: 24px;
+      }
+
+      nav,
+      section {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 18px 80px rgba(0, 0, 0, 0.26);
+      }
+
+      nav {
+        align-self: start;
+        padding: 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      button {
+        min-height: 40px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #f8fbff;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      button.active,
+      button.primary {
+        border-color: rgba(94, 234, 212, 0.8);
+        background: rgba(94, 234, 212, 0.18);
+      }
+
+      section {
+        padding: 16px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: #b8c2d8;
+        font-size: 0.9rem;
+      }
+
+      input,
+      textarea,
+      select {
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+        color: #f8fbff;
+        background: rgba(0, 0, 0, 0.28);
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 460px;
+        font-family: Consolas, monospace;
+        font-size: 0.88rem;
+        resize: vertical;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 14px 0 0;
+      }
+
+      .status {
+        color: var(--amber);
+        font-weight: 700;
+      }
+
+      .spawn-tool {
+        display: grid;
+        grid-template-columns: minmax(260px, 0.8fr) minmax(300px, 1.2fr);
+        gap: 14px;
+        margin: 14px 0;
+        padding: 14px;
+        border: 1px solid rgba(94, 234, 212, 0.18);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .spawn-tool h3 {
+        margin: 0 0 10px;
+      }
+
+      .spawn-controls {
+        display: grid;
+        gap: 10px;
+        align-self: start;
+      }
+
+      .spawn-row {
+        display: grid;
+        grid-template-columns: 1fr 96px;
+        gap: 8px;
+        align-items: end;
+      }
+
+      .spawn-preview-card {
+        min-height: 260px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: linear-gradient(180deg, rgba(10, 18, 30, 0.9), rgba(2, 7, 12, 0.9));
+        overflow: hidden;
+      }
+
+      #spawn-preview {
+        display: block;
+        width: 100%;
+        height: 260px;
+      }
+
+      .hint {
+        margin: 8px 0 0;
+        color: #91a0bb;
+        font-size: 0.84rem;
+      }
+
+      @media (max-width: 800px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .spawn-tool {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Void Arena Prebuild Admin</h1>
+      <p>Edita defaults que entram no build: engine, textos, audio e registro de assets. Isso fica fora do jogo final.</p>
+    </header>
+    <main class="layout">
+      <nav>
+        <button data-section="engine" class="active">Engine</button>
+        <button data-section="text">Texts</button>
+        <button data-section="assets">Assets</button>
+      </nav>
+      <section>
+        <h2 id="title">Engine</h2>
+        <div id="quick"></div>
+        <textarea id="editor" spellcheck="false"></textarea>
+        <div class="toolbar">
+          <button class="primary" id="save">Save section</button>
+          <button id="reload">Reload</button>
+          <span class="status" id="status"></span>
+        </div>
+      </section>
+    </main>
+    <script type="module">
+      const WORLD_OBJECT_KINDS = [
+        'crate',
+        'post',
+        'tree',
+        'rock',
+        'car',
+        'truck',
+        'bus',
+        'emergency',
+        'trailerTruck',
+        'trafficLight',
+        'building',
+        'structure',
+        'billboard',
+        'screen',
+        'bench',
+        'hydrant',
+        'trash',
+        'pedestrian',
+        'cone',
+        'mailbox',
+        'bike',
+        'planter',
+        'kiosk',
+        'fountain',
+        'statue'
+      ];
+
+      const OBJECT_PREVIEW = {
+        crate: { w: 1, h: 1, bottom: -0.5, top: 0.5, shape: 'box' },
+        post: { w: 0.36, h: 4.4, bottom: -2.2, top: 2.2, shape: 'post' },
+        tree: { w: 1.25, h: 3.6, bottom: -1.62, top: 1.72, shape: 'tree' },
+        rock: { w: 1.5, h: 0.95, bottom: -0.5, top: 0.5, shape: 'rock' },
+        car: { w: 3.05, h: 0.78, bottom: -0.53, top: 0.58, shape: 'vehicle' },
+        truck: { w: 4.35, h: 1.28, bottom: -0.7, top: 0.72, shape: 'vehicle' },
+        bus: { w: 6.25, h: 1.58, bottom: -0.85, top: 0.85, shape: 'vehicle' },
+        emergency: { w: 3.5, h: 0.95, bottom: -0.58, top: 0.62, shape: 'vehicle' },
+        trailerTruck: { w: 6.65, h: 1.36, bottom: -0.76, top: 0.78, shape: 'vehicle' },
+        trafficLight: { w: 0.9, h: 3.05, bottom: -1.525, top: 1.525, shape: 'post' },
+        building: { w: 8, h: 11, bottom: -5.5, top: 5.5, shape: 'building' },
+        structure: { w: 3.2, h: 2.1, bottom: -1.05, top: 1.05, shape: 'box' },
+        billboard: { w: 13.1, h: 5.95, bottom: -2.98, top: 2.98, shape: 'ad' },
+        screen: { w: 12.55, h: 6.35, bottom: -3.18, top: 3.18, shape: 'ad' },
+        bench: { w: 1.7, h: 0.55, bottom: -0.4, top: 0.3, shape: 'bench' },
+        hydrant: { w: 0.38, h: 0.75, bottom: -0.27, top: 0.55, shape: 'post' },
+        trash: { w: 0.62, h: 0.88, bottom: -0.44, top: 0.56, shape: 'box' },
+        pedestrian: { w: 0.45, h: 1.55, bottom: -0.5, top: 0.85, shape: 'person' },
+        cone: { w: 0.46, h: 0.72, bottom: -0.36, top: 0.36, shape: 'cone' },
+        mailbox: { w: 0.58, h: 1.05, bottom: -0.53, top: 0.55, shape: 'box' },
+        bike: { w: 1.45, h: 0.82, bottom: -0.43, top: 0.34, shape: 'bike' },
+        planter: { w: 1.2, h: 0.95, bottom: -0.4, top: 0.55, shape: 'box' },
+        kiosk: { w: 2.05, h: 2.2, bottom: -0.98, top: 1.18, shape: 'box' },
+        fountain: { w: 2.35, h: 1.25, bottom: -0.52, top: 0.62, shape: 'round' },
+        statue: { w: 1.15, h: 2.35, bottom: -1.15, top: 1.18, shape: 'person' }
+      };
+
+      const state = { section: 'engine', config: { engine: {}, text: {}, assets: {} } };
+      let selectedSpawnKind = 'bike';
+      const editor = document.querySelector('#editor');
+      const statusEl = document.querySelector('#status');
+      const titleEl = document.querySelector('#title');
+      const quickEl = document.querySelector('#quick');
+
+      document.querySelectorAll('nav button').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.section = button.dataset.section;
+          document.querySelectorAll('nav button').forEach((item) => item.classList.toggle('active', item === button));
+          render();
+        });
+      });
+      document.querySelector('#save').addEventListener('click', save);
+      document.querySelector('#reload').addEventListener('click', load);
+
+      await load();
+
+      async function load() {
+        const response = await fetch('/api/config');
+        state.config = await response.json();
+        render();
+        setStatus('Loaded');
+      }
+
+      async function save() {
+        let value;
+        try {
+          value = JSON.parse(editor.value || '{}');
+        } catch (error) {
+          setStatus(`JSON error: ${error.message}`);
+          return;
+        }
+        const response = await fetch(`/api/config/${state.section}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(value)
+        });
+        if (!response.ok) {
+          setStatus('Could not save');
+          return;
+        }
+        state.config[state.section] = value;
+        setStatus('Saved. Next build will use this.');
+      }
+
+      function render() {
+        titleEl.textContent = state.section[0].toUpperCase() + state.section.slice(1);
+        editor.value = JSON.stringify(state.config[state.section] ?? {}, null, 2);
+        renderQuick();
+      }
+
+      function renderQuick() {
+        if (state.section !== 'engine') {
+          quickEl.innerHTML = '';
+          return;
+        }
+        const engine = state.config.engine ?? {};
+        const gameplay = engine.gameplay ?? {};
+        const branding = engine.branding ?? {};
+        const generation = engine.generation ?? {};
+        const offsets = generation.spawnHeightOffsets ?? {};
+        quickEl.innerHTML = `
+          <div class="grid">
+            <label>Title <input data-path="branding.title" value="${escapeHtml(branding.title ?? '')}" placeholder="VOID ARENA" /></label>
+            <label>Menu font <input data-path="branding.menuFont" value="${escapeHtml(branding.menuFont ?? '')}" placeholder="Orbitron" /></label>
+            <label>Text font <input data-path="branding.textFont" value="${escapeHtml(branding.textFont ?? '')}" placeholder="Open Sans" /></label>
+            <label>Start speed multiplier <input data-path="gameplay.startSpeedMultiplier" type="number" step="0.05" value="${gameplay.startSpeedMultiplier ?? ''}" /></label>
+            <label>Boost multiplier <input data-path="gameplay.boostMultiplier" type="number" step="0.05" value="${gameplay.boostMultiplier ?? ''}" /></label>
+            <label>Magnet strength <input data-path="gameplay.magnetStrengthMultiplier" type="number" step="0.05" value="${gameplay.magnetStrengthMultiplier ?? ''}" /></label>
+          </div>
+          <div class="spawn-tool">
+            <div class="spawn-controls">
+              <h3>Spawn height editor</h3>
+              <label>Object kind
+                <select id="spawn-kind">
+                  ${WORLD_OBJECT_KINDS.map((kind) => `<option value="${kind}" ${kind === selectedSpawnKind ? 'selected' : ''}>${kind}</option>`).join('')}
+                </select>
+              </label>
+              <label>Height offset from map
+                <div class="spawn-row">
+                  <input id="spawn-height-range" type="range" min="-0.35" max="1.5" step="0.01" value="${Number(offsets[selectedSpawnKind] ?? 0)}" />
+                  <input id="spawn-height-number" type="number" min="-0.35" max="1.5" step="0.01" value="${Number(offsets[selectedSpawnKind] ?? 0)}" />
+                </div>
+              </label>
+              <p class="hint">A linha cyan e o mapa. Se a base ficar vermelha, o item esta atravessando o chao. Salve a secao Engine para aplicar no proximo build.</p>
+            </div>
+            <div class="spawn-preview-card">
+              <canvas id="spawn-preview" width="640" height="320"></canvas>
+            </div>
+          </div>
+        `;
+        quickEl.querySelectorAll('input').forEach((input) => {
+          if (input.id === 'spawn-height-range' || input.id === 'spawn-height-number') {
+            return;
+          }
+          input.addEventListener('input', () => {
+            const draft = JSON.parse(editor.value || '{}');
+            setDeep(draft, input.dataset.path, input.type === 'number' && input.value !== '' ? Number(input.value) : input.value);
+            editor.value = JSON.stringify(draft, null, 2);
+          });
+        });
+        bindSpawnHeightEditor();
+      }
+
+      function bindSpawnHeightEditor() {
+        const kindSelect = quickEl.querySelector('#spawn-kind');
+        const range = quickEl.querySelector('#spawn-height-range');
+        const number = quickEl.querySelector('#spawn-height-number');
+        const canvas = quickEl.querySelector('#spawn-preview');
+        if (!kindSelect || !range || !number || !canvas) {
+          return;
+        }
+
+        const updateOffset = (rawValue) => {
+          const value = clamp(Number(rawValue), -0.35, 1.5);
+          range.value = value.toFixed(2);
+          number.value = value.toFixed(2);
+          const draft = JSON.parse(editor.value || '{}');
+          setDeep(draft, `generation.spawnHeightOffsets.${selectedSpawnKind}`, value);
+          editor.value = JSON.stringify(draft, null, 2);
+          drawSpawnPreview(canvas, selectedSpawnKind, value);
+        };
+
+        kindSelect.addEventListener('change', () => {
+          selectedSpawnKind = kindSelect.value;
+          const draft = JSON.parse(editor.value || '{}');
+          const value = Number(draft.generation?.spawnHeightOffsets?.[selectedSpawnKind] ?? 0);
+          range.value = value.toFixed(2);
+          number.value = value.toFixed(2);
+          drawSpawnPreview(canvas, selectedSpawnKind, value);
+        });
+        range.addEventListener('input', () => updateOffset(range.value));
+        number.addEventListener('input', () => updateOffset(number.value));
+        drawSpawnPreview(canvas, selectedSpawnKind, Number(range.value));
+      }
+
+      function drawSpawnPreview(canvas, kind, offset) {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const data = OBJECT_PREVIEW[kind] ?? OBJECT_PREVIEW.crate;
+        const centerY = data.h * 0.5 + offset;
+        const bottomY = centerY + data.bottom;
+        const topY = centerY + data.top;
+        const unitScale = Math.min(58, Math.max(16, 210 / Math.max(1, topY - Math.min(-0.35, bottomY))));
+        const groundY = Math.round(height * 0.74);
+        const centerX = width * 0.5;
+        const toScreenY = (worldY) => groundY - worldY * unitScale;
+        const objectWidth = Math.max(28, Math.min(width * 0.72, data.w * unitScale));
+        const yBottom = toScreenY(bottomY);
+        const yTop = toScreenY(topY);
+        const penetratesGround = bottomY < -0.005;
+
+        ctx.clearRect(0, 0, width, height);
+        const gradient = ctx.createLinearGradient(0, 0, 0, height);
+        gradient.addColorStop(0, '#0e1b2b');
+        gradient.addColorStop(1, '#03070d');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.fillStyle = '#172316';
+        ctx.fillRect(0, groundY, width, height - groundY);
+        ctx.strokeStyle = '#5eead4';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(24, groundY);
+        ctx.lineTo(width - 24, groundY);
+        ctx.stroke();
+
+        ctx.setLineDash([8, 8]);
+        ctx.strokeStyle = penetratesGround ? '#fb7185' : '#91e88c';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(36, yBottom);
+        ctx.lineTo(width - 36, yBottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.save();
+        ctx.translate(centerX, toScreenY(centerY));
+        drawObjectSilhouette(ctx, data, objectWidth, (topY - bottomY) * unitScale, penetratesGround);
+        ctx.restore();
+
+        ctx.fillStyle = '#f8fbff';
+        ctx.font = '700 20px Arial';
+        ctx.fillText(kind, 24, 34);
+        ctx.font = '14px Arial';
+        ctx.fillStyle = penetratesGround ? '#fb7185' : '#91e88c';
+        ctx.fillText(`offset ${offset.toFixed(2)}m | bottom ${bottomY.toFixed(2)}m`, 24, 58);
+      }
+
+      function drawObjectSilhouette(ctx, data, width, height, warning) {
+        const color = warning ? '#fb7185' : '#5eead4';
+        const fill = warning ? 'rgba(251, 113, 133, 0.34)' : 'rgba(94, 234, 212, 0.28)';
+        ctx.strokeStyle = color;
+        ctx.fillStyle = fill;
+        ctx.lineWidth = 4;
+        const x = -width * 0.5;
+        const y = -height * 0.5;
+
+        if (data.shape === 'bike') {
+          const radius = Math.max(16, width * 0.18);
+          const wheelY = height * 0.28;
+          for (const wheelX of [-width * 0.28, width * 0.28]) {
+            ctx.beginPath();
+            ctx.arc(wheelX, wheelY, radius, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.beginPath();
+          ctx.moveTo(-width * 0.28, wheelY);
+          ctx.lineTo(0, -height * 0.02);
+          ctx.lineTo(width * 0.28, wheelY);
+          ctx.lineTo(-width * 0.04, wheelY);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.fillRect(width * 0.22, -height * 0.22, width * 0.24, 5);
+          return;
+        }
+
+        if (data.shape === 'vehicle') {
+          ctx.fillRect(x, y + height * 0.24, width, height * 0.5);
+          ctx.strokeRect(x, y + height * 0.24, width, height * 0.5);
+          ctx.fillRect(x + width * 0.28, y + height * 0.02, width * 0.36, height * 0.28);
+          ctx.strokeRect(x + width * 0.28, y + height * 0.02, width * 0.36, height * 0.28);
+          ctx.fillStyle = '#111318';
+          for (const wheelX of [x + width * 0.22, x + width * 0.78]) {
+            ctx.beginPath();
+            ctx.arc(wheelX, y + height * 0.82, Math.max(9, width * 0.055), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          return;
+        }
+
+        if (data.shape === 'post') {
+          ctx.fillRect(-width * 0.1, y, width * 0.2, height);
+          ctx.strokeRect(-width * 0.1, y, width * 0.2, height);
+          ctx.fillRect(-width * 0.1, y + height * 0.08, width * 0.75, 7);
+          return;
+        }
+
+        if (data.shape === 'tree') {
+          ctx.fillStyle = '#8b5e3c';
+          ctx.fillRect(-width * 0.08, y + height * 0.46, width * 0.16, height * 0.46);
+          ctx.fillStyle = fill;
+          ctx.beginPath();
+          ctx.arc(0, y + height * 0.34, width * 0.38, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          return;
+        }
+
+        if (data.shape === 'person') {
+          ctx.beginPath();
+          ctx.arc(0, y + height * 0.18, width * 0.18, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillRect(-width * 0.12, y + height * 0.32, width * 0.24, height * 0.48);
+          ctx.strokeRect(-width * 0.12, y + height * 0.32, width * 0.24, height * 0.48);
+          return;
+        }
+
+        if (data.shape === 'cone') {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(x + width, y + height);
+          ctx.lineTo(x, y + height);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          return;
+        }
+
+        ctx.fillRect(x, y, width, height);
+        ctx.strokeRect(x, y, width, height);
+      }
+
+      function setStatus(message) {
+        statusEl.textContent = message;
+        window.clearTimeout(setStatus.timer);
+        setStatus.timer = window.setTimeout(() => {
+          statusEl.textContent = '';
+        }, 2600);
+      }
+
+      function setDeep(target, path, value) {
+        const parts = path.split('.');
+        let cursor = target;
+        for (const part of parts.slice(0, -1)) {
+          cursor[part] ??= {};
+          cursor = cursor[part];
+        }
+        cursor[parts.at(-1)] = value;
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;'
+        })[char]);
+      }
+    </script>
+  </body>
+</html>

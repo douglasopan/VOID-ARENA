@@ -1,5 +1,13 @@
 import { AdManager } from '../ads/AdManager';
-import { MAP_SIZE_SETTINGS, POWERUP_RESPAWN_SECONDS, POWERUP_SETTINGS } from '../shared/constants';
+import { MAP_SIZE_SETTINGS, POWERUP_SETTINGS } from '../shared/constants';
+import {
+  getEnabledPowerUpTypes,
+  getEngineConfig,
+  getPowerUpEngineSettings,
+  getWorldObjectSpawnHeightOffset,
+  isWorldObjectKindEnabled,
+  runtimePowerUpRespawnSeconds
+} from '../admin/EngineConfig';
 import type {
   AdSurface,
   CityObjectCategory,
@@ -148,11 +156,11 @@ export class ProceduralMapGenerator {
     const adManager = new AdManager();
     const occupied: OccupiedFootprint[] = [];
 
+    this.addTrafficSignalObjects(objects, occupied, network.trafficSignals, rng);
     this.reserveCrosswalkFootprints(occupied, network.surfaces);
     this.addStreetlights(objects, occupied, network.surfaces, rng);
     this.addPlazas(objects, occupied, network.surfaces, network.roads, spawnPoints, rng, options.size);
     this.addBuildings(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
-    this.addTrafficSignalObjects(objects, occupied, network.trafficSignals, rng);
     this.addRoadsideObjects(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
     this.addTraffic(objects, occupied, network.trafficRoutes, network.surfaces, rng, objectBudget);
     this.addParkedVehicles(objects, occupied, network.roads, network.surfaces, spawnPoints, rng, objectBudget);
@@ -164,6 +172,12 @@ export class ProceduralMapGenerator {
       this.addAdPlacements(objects, adSurfaces, occupied, network.roads, spawnPoints, adManager, rng, options.size);
     }
 
+    const engineConfig = getEngineConfig();
+    const filteredObjects = objects.filter((object) => isWorldObjectKindEnabled(object.kind));
+    const filteredAdSurfaces = engineConfig.generation.adsEnabled
+      ? adSurfaces.filter((surface) => !surface.attachedObjectId || filteredObjects.some((object) => object.id === surface.attachedObjectId))
+      : [];
+
     return {
       seed,
       size: options.size,
@@ -173,10 +187,10 @@ export class ProceduralMapGenerator {
       trafficRoutes: network.trafficRoutes,
       trafficSignals: network.trafficSignals,
       pedestrianPaths: network.pedestrianPaths,
-      objects,
+      objects: filteredObjects,
       powerUps,
       spawnPoints,
-      adSurfaces
+      adSurfaces: filteredAdSurfaces
     };
   }
 
@@ -1267,20 +1281,28 @@ export class ProceduralMapGenerator {
     explicitCount?: number
   ): void {
     const countBySize = { small: 8, medium: 14, large: 28, huge: 44 } satisfies Record<MapSize, number>;
-    const types: PowerUpType[] = ['magnet', 'shrink', 'haste', 'shield', 'stamina', 'mass'];
+    const types: PowerUpType[] = getEnabledPowerUpTypes();
+    if (types.length === 0) {
+      return;
+    }
     const targetCount = explicitCount ?? countBySize[size];
+    const minimumSpacing = this.powerUpMinimumSpacing(size, targetCount);
     let attempts = 0;
-    while (powerUps.length < targetCount && attempts < targetCount * 80) {
+    let lastType: PowerUpType | null = null;
+    while (powerUps.length < targetCount && attempts < targetCount * 110) {
       attempts += 1;
       const candidate = this.powerUpCandidate(rng, spawnPoints, size);
+      const spacing = attempts > targetCount * 80 ? minimumSpacing * 0.74 : minimumSpacing;
       if (
         !candidate ||
-        this.overlapsOccupied(candidate.x, candidate.z, 0.82, occupied)
+        this.overlapsOccupied(candidate.x, candidate.z, 0.82, occupied) ||
+        this.isTooCloseToPlacedPowerUps(candidate.x, candidate.z, powerUps, spacing)
       ) {
         continue;
       }
-      const type = rng.pick(types);
+      const type = this.pickPowerUpType(types, rng, lastType);
       const settings = POWERUP_SETTINGS[type];
+      const engineSettings = getPowerUpEngineSettings(type);
       const index = powerUps.length;
       powerUps.push({
         id: `powerup-${index}`,
@@ -1289,11 +1311,42 @@ export class ProceduralMapGenerator {
         position: { x: candidate.x, y: 0.55, z: candidate.z },
         radius: 0.75,
         color: settings.color,
-        durationSeconds: settings.durationSeconds,
-        respawnDelay: POWERUP_RESPAWN_SECONDS
+        durationSeconds: engineSettings.durationSeconds,
+        respawnDelay: runtimePowerUpRespawnSeconds()
       });
+      lastType = type;
       occupied.push({ x: candidate.x, z: candidate.z, radius: 0.82 });
     }
+  }
+
+  private powerUpMinimumSpacing(size: MapSize, targetCount: number): number {
+    const baseSpacing = { small: 9, medium: 11, large: 13.5, huge: 16 } satisfies Record<MapSize, number>;
+    const defaultCount = { small: 8, medium: 14, large: 28, huge: 44 } satisfies Record<MapSize, number>;
+    const densityScale = Math.sqrt(defaultCount[size] / Math.max(1, targetCount));
+    return Math.max(6.25, Math.min(baseSpacing[size], baseSpacing[size] * densityScale));
+  }
+
+  private isTooCloseToPlacedPowerUps(
+    x: number,
+    z: number,
+    powerUps: PowerUpSpawnDefinition[],
+    minimumSpacing: number
+  ): boolean {
+    const minimumSpacingSq = minimumSpacing * minimumSpacing;
+    return powerUps.some((powerUp) => {
+      const dx = powerUp.position.x - x;
+      const dz = powerUp.position.z - z;
+      return dx * dx + dz * dz < minimumSpacingSq;
+    });
+  }
+
+  private pickPowerUpType(
+    types: PowerUpType[],
+    rng: SeededRandom,
+    previousType: PowerUpType | null
+  ): PowerUpType {
+    const available = previousType ? types.filter((type) => type !== previousType) : types;
+    return rng.pick(available.length > 0 ? available : types);
   }
 
   private roadsideCandidate(
@@ -1531,6 +1584,8 @@ export class ProceduralMapGenerator {
     mass: number,
     score: number
   ): ObjectSpawnDefinition {
+    const spawnHeightOffset = getWorldObjectSpawnHeightOffset(base.kind);
+    const centerY = Math.max(size.y * 0.5 + spawnHeightOffset, size.y * 0.5 + 0.01);
     return {
       ...base,
       label,
@@ -1541,7 +1596,7 @@ export class ProceduralMapGenerator {
       score,
       position: {
         ...base.position,
-        y: size.y * 0.5
+        y: centerY
       }
     };
   }

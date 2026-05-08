@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { getEnabledDisasterTypes, getEngineConfig, weightedDisasterType } from '../admin/EngineConfig';
 import type { PlayerManager } from './PlayerManager';
 import type { World } from './World';
 import type { WorldObject } from './WorldObject';
 
-export type NaturalDisasterType = 'clear' | 'rain' | 'thunderstorm' | 'earthquake' | 'meteorShower';
+export type NaturalDisasterType = 'clear' | 'rain' | 'thunderstorm' | 'earthquake' | 'meteorShower' | 'sandstorm';
 
 export interface NaturalDisasterSnapshot {
   type: NaturalDisasterType;
@@ -42,25 +43,35 @@ interface ActiveNaturalDisaster {
 }
 
 const DISASTER_WARNING_SECONDS = 15;
+const FIRST_DISASTER_DELAY_SECONDS = 60;
+const FIRST_DISASTER_RANDOM_SECONDS = 26;
+const NEXT_DISASTER_DELAY_SECONDS = 74;
+const NEXT_DISASTER_RANDOM_SECONDS = 54;
 
 export class NaturalDisasterSystem {
   private active: ActiveNaturalDisaster | null = null;
-  private nextEventInSeconds = 18 + Math.random() * 16;
+  private nextEventInSeconds = this.nextFirstDelay();
   private nextEventType: ActiveNaturalDisaster['type'] = this.pickNextEventType();
   private quakePhase = Math.random() * Math.PI * 2;
   private quakeImpulseCooldown = 0;
   private meteorSlowPulse = 0;
+  private meteorImpactCooldown = 0;
 
   reset(): void {
     this.active = null;
-    this.nextEventInSeconds = 18 + Math.random() * 16;
+    this.nextEventInSeconds = this.nextFirstDelay();
     this.nextEventType = this.pickNextEventType();
     this.quakePhase = Math.random() * Math.PI * 2;
     this.quakeImpulseCooldown = 0;
     this.meteorSlowPulse = 0;
+    this.meteorImpactCooldown = 0;
   }
 
   update(deltaSeconds: number, world: World, playerManager: PlayerManager): NaturalDisasterSnapshot {
+    if (getEnabledDisasterTypes().length === 0) {
+      return CLEAR_NATURAL_DISASTER;
+    }
+
     if (!this.active) {
       this.nextEventInSeconds -= deltaSeconds;
       if (this.nextEventInSeconds <= 0) {
@@ -108,7 +119,7 @@ export class NaturalDisasterSystem {
 
     if (remainingSeconds <= 0) {
       this.active = null;
-      this.nextEventInSeconds = 28 + Math.random() * 34;
+      this.nextEventInSeconds = this.nextFollowUpDelay();
       this.nextEventType = this.pickNextEventType();
     }
 
@@ -125,21 +136,42 @@ export class NaturalDisasterSystem {
     if (snapshot.type === 'rain') {
       return 1 - snapshot.intensity * 0.045;
     }
+    if (snapshot.type === 'sandstorm') {
+      return 1 - snapshot.intensity * 0.11;
+    }
     return 1;
   }
 
   private pickNextEventType(): ActiveNaturalDisaster['type'] {
+    const configured = weightedDisasterType();
+    if (configured) {
+      return configured;
+    }
+
     const roll = Math.random();
-    if (roll < 0.34) {
+    if (roll < 0.3) {
       return 'rain';
     }
-    if (roll < 0.62) {
+    if (roll < 0.52) {
       return 'thunderstorm';
     }
-    if (roll < 0.84) {
-      return 'earthquake';
+    if (roll < 0.74) {
+      return 'sandstorm';
     }
-    return 'meteorShower';
+    if (roll < 0.94) {
+      return 'meteorShower';
+    }
+    return 'earthquake';
+  }
+
+  private nextFirstDelay(): number {
+    const multiplier = getEngineConfig().disasters.firstDelayMultiplier;
+    return (FIRST_DISASTER_DELAY_SECONDS + Math.random() * FIRST_DISASTER_RANDOM_SECONDS) * multiplier;
+  }
+
+  private nextFollowUpDelay(): number {
+    const multiplier = getEngineConfig().disasters.nextDelayMultiplier;
+    return (NEXT_DISASTER_DELAY_SECONDS + Math.random() * NEXT_DISASTER_RANDOM_SECONDS) * multiplier;
   }
 
   private createEvent(type: ActiveNaturalDisaster['type']): ActiveNaturalDisaster {
@@ -167,6 +199,15 @@ export class NaturalDisasterSystem {
         elapsedSeconds: 0,
         durationSeconds: 8 + Math.random() * 5,
         baseIntensity: 0.64 + Math.random() * 0.22,
+        lightningCooldown: 999
+      };
+    }
+    if (type === 'sandstorm') {
+      return {
+        type: 'sandstorm',
+        elapsedSeconds: 0,
+        durationSeconds: 22 + Math.random() * 14,
+        baseIntensity: 0.5 + Math.random() * 0.24,
         lightningCooldown: 999
       };
     }
@@ -200,6 +241,9 @@ export class NaturalDisasterSystem {
     if (type === 'meteorShower') {
       return intensity * 0.38;
     }
+    if (type === 'sandstorm') {
+      return intensity * 0.72;
+    }
     return 0;
   }
 
@@ -213,6 +257,9 @@ export class NaturalDisasterSystem {
     if (type === 'meteorShower') {
       return intensity * 0.32;
     }
+    if (type === 'sandstorm') {
+      return intensity * 1.45;
+    }
     return 0;
   }
 
@@ -225,6 +272,9 @@ export class NaturalDisasterSystem {
     }
     if (type === 'meteorShower') {
       return intensity * 0.1;
+    }
+    if (type === 'sandstorm') {
+      return intensity * 0.035;
     }
     return 0;
   }
@@ -262,6 +312,7 @@ export class NaturalDisasterSystem {
 
     if (snapshot.type === 'meteorShower') {
       this.meteorSlowPulse += deltaSeconds;
+      this.applyMeteorImpacts(snapshot, deltaSeconds, world);
       if (this.meteorSlowPulse > 0.42) {
         this.meteorSlowPulse = 0;
         for (const object of world.objects) {
@@ -284,7 +335,94 @@ export class NaturalDisasterSystem {
     if (snapshot.type === 'rain') {
       return 1 - snapshot.intensity * 0.06;
     }
+    if (snapshot.type === 'sandstorm') {
+      return 1 - snapshot.intensity * 0.18;
+    }
     return 1;
+  }
+
+  private applyMeteorImpacts(snapshot: NaturalDisasterSnapshot, deltaSeconds: number, world: World): void {
+    this.meteorImpactCooldown -= deltaSeconds;
+    if (this.meteorImpactCooldown > 0) {
+      return;
+    }
+
+    this.meteorImpactCooldown = THREE.MathUtils.clamp(
+      0.64 + Math.random() * 0.78 - snapshot.intensity * 0.24,
+      0.38,
+      1.24
+    );
+    const impact = this.pickMeteorImpactPoint(world);
+    const radius = 5.4 + snapshot.intensity * 5.4;
+    const impactPower = 7.2 + snapshot.intensity * 10.5;
+
+    for (const object of world.objects) {
+      if (!object.active || object.swallowAnimation) {
+        continue;
+      }
+
+      const dx = object.position.x - impact.x;
+      const dz = object.position.z - impact.z;
+      const distance = Math.hypot(dx, dz);
+      const reach = radius + object.boundingRadius * 0.65;
+      if (distance > reach) {
+        continue;
+      }
+
+      const falloff = THREE.MathUtils.clamp(1 - distance / reach, 0, 1);
+      const direction = new THREE.Vector3(dx, 0, dz);
+      if (direction.lengthSq() < 0.001) {
+        direction.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+      }
+      direction.normalize();
+
+      const massDamping = 1 / Math.max(0.8, Math.sqrt(object.mass) * 0.25);
+      const categoryScale = object.category === 'building' ? 0.48 : object.category === 'traffic' ? 0.86 : 1.15;
+      const linear = direction.multiplyScalar(impactPower * falloff * massDamping * categoryScale);
+      linear.y = impactPower * falloff * massDamping * (object.category === 'building' ? 0.08 : object.category === 'traffic' ? 0.34 : 0.58);
+
+      const angularScale = impactPower * falloff * massDamping * 0.38;
+      const angular = new THREE.Vector3(
+        (Math.random() - 0.5) * angularScale,
+        (Math.random() - 0.5) * angularScale * 0.32,
+        (Math.random() - 0.5) * angularScale
+      );
+      const shouldTopple =
+        falloff > (object.category === 'building' ? 0.54 : 0.25) &&
+        Math.random() < falloff * (object.category === 'building' ? 0.52 : 0.9);
+      const fracture = object.category === 'building'
+        ? falloff * snapshot.intensity * (object.size.y > 6 ? 0.34 : 0.18)
+        : 0;
+
+      object.applyPhysicsImpulse({
+        linear,
+        angular,
+        topple: shouldTopple || fracture > 0.14,
+        fracture
+      });
+    }
+  }
+
+  private pickMeteorImpactPoint(world: World): THREE.Vector3 {
+    if (Math.random() < 0.68) {
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        const object = world.objects[Math.floor(Math.random() * world.objects.length)];
+        if (object?.active && !object.swallowAnimation) {
+          return new THREE.Vector3(
+            object.position.x + THREE.MathUtils.randFloatSpread(6),
+            0,
+            object.position.z + THREE.MathUtils.randFloatSpread(6)
+          );
+        }
+      }
+    }
+
+    const margin = world.halfExtent * 0.82;
+    return new THREE.Vector3(
+      THREE.MathUtils.randFloatSpread(margin * 2),
+      0,
+      THREE.MathUtils.randFloatSpread(margin * 2)
+    );
   }
 
   private applyEarthquakeObjectPhysics(snapshot: NaturalDisasterSnapshot, deltaSeconds: number, world: World): void {

@@ -4,8 +4,9 @@ import {
   ARENA_EDGE_OVERHANG_RATIO,
   ARENA_MIN_CORNER_CUT
 } from '../shared/constants';
+import { getEnabledPowerUpTypes } from '../admin/EngineConfig';
 import type { MapData } from '../shared/types';
-import type { RoutePoint, TrafficRoute, TrafficSignalDefinition } from '../shared/types';
+import type { PowerUpType, RoutePoint, TrafficRoute, TrafficSignalDefinition } from '../shared/types';
 import { PlayerManager } from './PlayerManager';
 import { PowerUp } from './PowerUp';
 import { SpatialGrid } from './SpatialGrid';
@@ -27,10 +28,13 @@ export class World {
   readonly objects: WorldObject[];
   readonly powerUps: PowerUp[];
   private readonly grid = new SpatialGrid<WorldObject>(12);
+  private readonly collisionGrid = new SpatialGrid<WorldObject>(10);
   private readonly routesById = new Map<string, TrafficRoute>();
   private readonly routeMetrics = new Map<string, RouteMetrics>();
   private readonly signalsByRoute = new Map<string, TrafficSignalDefinition[]>();
+  private readonly powerUpTypes: PowerUpType[] = getEnabledPowerUpTypes();
   private trafficElapsedSeconds = 0;
+  private lastPowerUpRespawnType: PowerUpType | null = null;
 
   constructor(readonly mapData: MapData) {
     this.halfExtent = mapData.halfExtent;
@@ -90,6 +94,8 @@ export class World {
         continue;
       }
 
+      object.spawnFade = Math.min(1, object.spawnFade + deltaSeconds * 1.85);
+
       if (object.isPhysicsControlled) {
         object.updateNaturalPhysics(deltaSeconds, this.halfExtent);
         continue;
@@ -123,6 +129,41 @@ export class World {
     }
 
     this.enforceTrafficSpacing(trafficByRoute);
+    this.resolveObjectCollisions(deltaSeconds);
+  }
+
+  resolveObjectCollisions(deltaSeconds: number): void {
+    const collidable = this.objects.filter((object) => object.active && !object.swallowAnimation);
+    if (collidable.length < 2) {
+      return;
+    }
+
+    const passes = collidable.length > 900 ? 1 : 2;
+    for (let pass = 0; pass < passes; pass += 1) {
+      this.collisionGrid.rebuild(collidable);
+      const resolvedPairs = new Set<string>();
+
+      for (const object of collidable) {
+        const candidates = this.collisionGrid.query(object.position, object.collisionRadius + 2.5);
+        for (const other of candidates) {
+          if (object === other || !other.active || other.swallowAnimation) {
+            continue;
+          }
+
+          const key = object.id < other.id ? `${object.id}:${other.id}` : `${other.id}:${object.id}`;
+          if (resolvedPairs.has(key)) {
+            continue;
+          }
+          resolvedPairs.add(key);
+          this.resolveObjectPairCollision(object, other, deltaSeconds);
+        }
+      }
+    }
+
+    for (const object of collidable) {
+      this.clampToArena(object.position, Math.max(0.4, object.collisionRadius));
+    }
+    this.rebuildObjectGrid();
   }
 
   updateRespawns(now: number, playerManager?: PlayerManager, safeRadius = 8): WorldObject[] {
@@ -139,6 +180,9 @@ export class World {
       }
 
       object.respawn();
+      if (playerManager && object.category === 'traffic') {
+        this.placeTrafficRespawnAwayFromPlayers(object, playerManager);
+      }
       respawned.push(object);
     }
 
@@ -159,7 +203,10 @@ export class World {
           powerUp.respawnAt = now + 1.5;
           continue;
         }
+        const nextType = this.nextPowerUpType(powerUp.type);
+        powerUp.changeType(nextType);
         powerUp.respawn(position);
+        this.lastPowerUpRespawnType = nextType;
         respawned.push(powerUp);
       }
     }
@@ -204,7 +251,7 @@ export class World {
       if (powerUp === candidate || !powerUp.active) continue;
       const dx = powerUp.position.x - x;
       const dz = powerUp.position.z - z;
-      const minDistance = powerUp.radius + candidate.radius + 4;
+      const minDistance = Math.max(powerUp.radius + candidate.radius + 4, this.powerUpMinimumSpacing());
       if (dx * dx + dz * dz < minDistance * minDistance) {
         return true;
       }
@@ -222,6 +269,26 @@ export class World {
     }
 
     return false;
+  }
+
+  private powerUpMinimumSpacing(): number {
+    const baseSpacing = { small: 9, medium: 11, large: 13.5, huge: 16 } satisfies Record<MapData['size'], number>;
+    const defaultCount = { small: 8, medium: 14, large: 28, huge: 44 } satisfies Record<MapData['size'], number>;
+    const densityScale = Math.sqrt(defaultCount[this.mapData.size] / Math.max(1, this.powerUps.length));
+    return Math.max(6.25, Math.min(baseSpacing[this.mapData.size], baseSpacing[this.mapData.size] * densityScale));
+  }
+
+  private nextPowerUpType(previousType: PowerUpType): PowerUpType {
+    const availableTypes = getEnabledPowerUpTypes();
+    const powerUpTypes = availableTypes.length ? availableTypes : this.powerUpTypes;
+    let available = powerUpTypes.filter((type) => type !== previousType && type !== this.lastPowerUpRespawnType);
+    if (available.length === 0) {
+      available = powerUpTypes.filter((type) => type !== previousType);
+    }
+    if (available.length === 0) {
+      available = powerUpTypes;
+    }
+    return available[Math.floor(Math.random() * available.length)];
   }
 
   queryPowerUps(position: THREE.Vector3, radius: number): PowerUp[] {
@@ -264,15 +331,81 @@ export class World {
     playerManager: PlayerManager,
     safeRadius: number
   ): boolean {
+    const respawnPosition = this.respawnSafetyPosition(object, playerManager);
     for (const player of playerManager.alivePlayers()) {
-      const dx = object.homePosition.x - player.position.x;
-      const dz = object.homePosition.z - player.position.z;
-      const minDistance = player.radius + object.boundingRadius + safeRadius;
+      const dx = respawnPosition.x - player.position.x;
+      const dz = respawnPosition.z - player.position.z;
+      const extraTrafficBuffer = object.category === 'traffic' ? 20 : 0;
+      const minDistance = player.radius + object.boundingRadius + safeRadius + extraTrafficBuffer;
       if (dx * dx + dz * dz < minDistance * minDistance) {
         return true;
       }
     }
     return false;
+  }
+
+  private respawnSafetyPosition(object: WorldObject, playerManager: PlayerManager): THREE.Vector3 {
+    if (object.category === 'traffic') {
+      const placement = this.bestTrafficRespawnPlacement(object, playerManager);
+      if (placement) {
+        return new THREE.Vector3(placement.position.x, object.homePosition.y, placement.position.z);
+      }
+    }
+
+    return object.homePosition;
+  }
+
+  private placeTrafficRespawnAwayFromPlayers(object: WorldObject, playerManager: PlayerManager): void {
+    const placement = this.bestTrafficRespawnPlacement(object, playerManager);
+    if (!placement) {
+      return;
+    }
+
+    object.routeT = placement.t;
+    object.position.set(placement.position.x, object.homePosition.y, placement.position.z);
+    object.rotation.y = placement.rotationY;
+  }
+
+  private bestTrafficRespawnPlacement(
+    object: WorldObject,
+    playerManager: PlayerManager
+  ): { t: number; position: RoutePoint; rotationY: number } | null {
+    if (!object.routeId) {
+      return null;
+    }
+
+    const route = this.routesById.get(object.routeId);
+    if (!route || route.points.length < 2) {
+      return null;
+    }
+
+    const lastT = Math.max(0, route.points.length - 1.001);
+    const candidateTs = route.loop
+      ? [0, lastT * 0.25, lastT * 0.5, lastT * 0.75]
+      : [0, lastT];
+    let best: { t: number; position: RoutePoint; rotationY: number; score: number } | null = null;
+
+    for (const t of candidateTs) {
+      const placement = this.advanceRoute(route, t, 0);
+      const closestPlayerDistance = this.closestPlayerDistanceSq(placement.position, playerManager);
+      const edgeFavor = Math.max(Math.abs(placement.position.x), Math.abs(placement.position.z)) * 4;
+      const score = closestPlayerDistance + edgeFavor;
+      if (!best || score > best.score) {
+        best = { ...placement, score };
+      }
+    }
+
+    return best ? { t: best.t, position: best.position, rotationY: best.rotationY } : null;
+  }
+
+  private closestPlayerDistanceSq(position: RoutePoint, playerManager: PlayerManager): number {
+    let best = Number.POSITIVE_INFINITY;
+    for (const player of playerManager.alivePlayers()) {
+      const dx = position.x - player.position.x;
+      const dz = position.z - player.position.z;
+      best = Math.min(best, dx * dx + dz * dz);
+    }
+    return best;
   }
 
   private groupTrafficObjectsByRoute(): Map<string, WorldObject[]> {
@@ -286,6 +419,138 @@ export class World {
       grouped.set(object.routeId, objects);
     }
     return grouped;
+  }
+
+  private resolveObjectPairCollision(a: WorldObject, b: WorldObject, deltaSeconds: number): void {
+    const radiusA = a.collisionRadius;
+    const radiusB = b.collisionRadius;
+    const minDistance = radiusA + radiusB;
+    const dx = b.position.x - a.position.x;
+    const dz = b.position.z - a.position.z;
+    const distanceSq = dx * dx + dz * dz;
+    if (distanceSq >= minDistance * minDistance) {
+      return;
+    }
+
+    const verticalOverlap =
+      a.collisionBottom < b.collisionTop &&
+      a.collisionTop > b.collisionBottom;
+    if (!verticalOverlap) {
+      this.resolveStackSupport(a, b);
+      return;
+    }
+
+    const distance = Math.max(0.0001, Math.sqrt(distanceSq));
+    const nx = distance > 0.001 ? dx / distance : this.stablePairNormal(a, b).x;
+    const nz = distance > 0.001 ? dz / distance : this.stablePairNormal(a, b).z;
+    const normal = new THREE.Vector3(nx, 0, nz).normalize();
+
+    if (this.tryStackOnCollision(a, b, normal)) {
+      return;
+    }
+    if (this.tryStackOnCollision(b, a, normal.clone().multiplyScalar(-1))) {
+      return;
+    }
+
+    const penetration = minDistance - distance + 0.004;
+    const inverseMassA = a.collisionInverseMass;
+    const inverseMassB = b.collisionInverseMass;
+    const totalInverseMass = inverseMassA + inverseMassB;
+    if (totalInverseMass <= 0) {
+      return;
+    }
+
+    const moveA = penetration * (inverseMassA / totalInverseMass);
+    const moveB = penetration * (inverseMassB / totalInverseMass);
+    a.position.x -= normal.x * moveA;
+    a.position.z -= normal.z * moveA;
+    b.position.x += normal.x * moveB;
+    b.position.z += normal.z * moveB;
+
+    const relativeVelocity = new THREE.Vector3().subVectors(b.physicsVelocity, a.physicsVelocity);
+    const closingSpeed = -relativeVelocity.dot(normal);
+    const impactStrength = Math.max(0, closingSpeed + penetration / Math.max(0.016, deltaSeconds) * 0.08);
+    const toppleA = impactStrength > 0.75 && this.canToppleFromCollision(a);
+    const toppleB = impactStrength > 0.75 && this.canToppleFromCollision(b);
+    a.applyCollisionResponse(normal.clone().multiplyScalar(-1), impactStrength * (inverseMassA / totalInverseMass), toppleA);
+    b.applyCollisionResponse(normal, impactStrength * (inverseMassB / totalInverseMass), toppleB);
+
+    const sharedVelocity = (a.physicsVelocity.dot(normal) + b.physicsVelocity.dot(normal)) * 0.5;
+    a.physicsVelocity.addScaledVector(normal, sharedVelocity - a.physicsVelocity.dot(normal));
+    b.physicsVelocity.addScaledVector(normal, sharedVelocity - b.physicsVelocity.dot(normal));
+    a.physicsVelocity.multiplyScalar(0.96);
+    b.physicsVelocity.multiplyScalar(0.96);
+
+    if (a.routeId) {
+      a.routeVelocity = Math.min(a.routeVelocity, Math.max(0, b.routeVelocity * 0.45));
+    }
+    if (b.routeId) {
+      b.routeVelocity = Math.min(b.routeVelocity, Math.max(0, a.routeVelocity * 0.45));
+    }
+  }
+
+  private tryStackOnCollision(top: WorldObject, bottom: WorldObject, normalFromBottomToTop: THREE.Vector3): boolean {
+    const topBottom = top.collisionBottom;
+    const bottomTop = bottom.collisionTop;
+    const topIsAbove = top.position.y > bottom.position.y + Math.min(0.45, bottom.collisionHalfHeight * 0.55);
+    const verticalContact = topBottom <= bottomTop + Math.max(0.18, top.collisionHalfHeight * 0.24);
+    const fallingOrSettling = top.physicsVelocity.y <= 0.18 || top.physicsAwake || top.physicsToppled;
+    if (!topIsAbove || !verticalContact || !fallingOrSettling) {
+      return false;
+    }
+
+    top.position.y = bottomTop + top.collisionHalfHeight + 0.012;
+    top.physicsVelocity.y = Math.max(0, top.physicsVelocity.y) * 0.12;
+    top.physicsVelocity.x += normalFromBottomToTop.x * 0.12;
+    top.physicsVelocity.z += normalFromBottomToTop.z * 0.12;
+    top.physicsAngularVelocity.multiplyScalar(0.72);
+    top.physicsAwake = true;
+    top.physicsToppled = top.physicsToppled || top.category !== 'building';
+    return true;
+  }
+
+  private resolveStackSupport(a: WorldObject, b: WorldObject): void {
+    if (this.isSupportedBy(a, b)) {
+      a.position.y = b.collisionTop + a.collisionHalfHeight + 0.012;
+      a.physicsVelocity.y = Math.max(0, a.physicsVelocity.y) * 0.12;
+      return;
+    }
+    if (this.isSupportedBy(b, a)) {
+      b.position.y = a.collisionTop + b.collisionHalfHeight + 0.012;
+      b.physicsVelocity.y = Math.max(0, b.physicsVelocity.y) * 0.12;
+    }
+  }
+
+  private isSupportedBy(top: WorldObject, bottom: WorldObject): boolean {
+    const dx = top.position.x - bottom.position.x;
+    const dz = top.position.z - bottom.position.z;
+    const horizontalDistance = Math.hypot(dx, dz);
+    const supportRadius = Math.max(0.18, Math.min(top.collisionRadius, bottom.collisionRadius) * 0.82);
+    const verticalGap = top.collisionBottom - bottom.collisionTop;
+    return (
+      top.position.y > bottom.position.y &&
+      horizontalDistance < supportRadius &&
+      verticalGap >= -0.05 &&
+      verticalGap <= 0.24
+    );
+  }
+
+  private stablePairNormal(a: WorldObject, b: WorldObject): THREE.Vector3 {
+    let hash = 2166136261;
+    const key = `${a.id}:${b.id}`;
+    for (let index = 0; index < key.length; index += 1) {
+      hash ^= key.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    const angle = ((hash >>> 0) / 4294967296) * Math.PI * 2;
+    return new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+  }
+
+  private canToppleFromCollision(object: WorldObject): boolean {
+    if (object.category === 'building') {
+      return object.fractureLevel > 0.12 || object.physicsAwake;
+    }
+    return object.category !== 'ad';
   }
 
   private arenaCornerCut(): number {

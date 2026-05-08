@@ -231,6 +231,8 @@ export class ObjectFactory {
   }
 
   updateWorldObjectVisual(root: THREE.Object3D, object: WorldObject): void {
+    this.updateUtilityLightState(root, object);
+
     if (object.category !== 'building') {
       return;
     }
@@ -288,6 +290,52 @@ export class ObjectFactory {
     });
   }
 
+  private updateUtilityLightState(root: THREE.Object3D, object: WorldObject): void {
+    if (object.kind !== 'post' && object.kind !== 'trafficLight') {
+      return;
+    }
+
+    const off = object.utilityLightFailed;
+    const flicker = off ? 0 : this.utilityFlickerFor(object);
+    root.traverse((child) => {
+      if (child instanceof THREE.PointLight || child instanceof THREE.SpotLight) {
+        if (child.userData.cityPointLight) {
+          child.userData.cityLightOff = off;
+          child.userData.cityLightFlicker = flicker;
+        }
+        return;
+      }
+
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) {
+        return;
+      }
+
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const hasCityLight = Boolean(mesh.userData.cityLight || materials.some((material) => material.userData.cityLight));
+      if (!hasCityLight) {
+        return;
+      }
+      mesh.userData.cityLightOff = off;
+      mesh.userData.cityLightFlicker = flicker;
+    });
+  }
+
+  private utilityFlickerFor(object: WorldObject): number {
+    if (!object.physicsToppled) {
+      return 1;
+    }
+
+    const t = object.physicsToppledSeconds;
+    if (t < 0.18) {
+      return 1;
+    }
+
+    const blink = Math.sin(t * 34) + Math.sin(t * 19.5) * 0.7;
+    const decay = THREE.MathUtils.clamp(1 - t / 2.35, 0.1, 1);
+    return blink > 0.2 ? THREE.MathUtils.clamp(decay, 0.12, 1) : 0;
+  }
+
   disposeObject(object: THREE.Object3D): void {
     object.traverse((child) => {
       const mesh = child as THREE.Mesh;
@@ -334,6 +382,7 @@ export class ObjectFactory {
     );
     ring.rotation.x = Math.PI / 2;
     group.add(core, ring);
+    group.userData.powerUpType = powerUp.type;
     return group;
   }
 
@@ -455,7 +504,7 @@ export class ObjectFactory {
       new THREE.BoxGeometry(1.05, 0.06, 0.06),
       this.getMaterial('#b6c3ce', 0.5, 0.2)
     );
-    const lampY = object.size.y * 0.5 - 0.24;
+    const lampY = object.size.y * 0.5 - 0.42;
     arm.position.set(0.47, lampY + 0.05, 0);
     const lampHead = new THREE.Mesh(
       new THREE.BoxGeometry(0.34, 0.13, 0.22),
@@ -468,9 +517,9 @@ export class ObjectFactory {
     );
     bulb.position.set(0.98, lampY - 0.13, 0);
     this.markCityLight(bulb, 0.16, 1);
-    const light = this.createCityPointLight('#ffe4a3', 0.04, 3.45, 34, 1.45, 7);
+    const light = this.createCityPointLight('#ffe4a3', 0.05, 3.95, 38, 1.35, 7);
     light.position.copy(bulb.position);
-    const groundGlow = this.createGroundGlow('#ffd98f', 8.2, 0.035, 0.38);
+    const groundGlow = this.createGroundGlow('#ffd98f', 9.0, 0.045, 0.48);
     groundGlow.position.set(0.92, 0.095, 0);
     pole.castShadow = true;
     base.castShadow = true;
@@ -1044,43 +1093,39 @@ export class ObjectFactory {
     frontSign: -1 | 1 = 1
   ): void {
     const glowMaterial = this.createCityLightMaterial('#fff4bc', 0.08, 0.9);
-    const beamLength = emergency ? 16.5 : 12.6;
-    const beamWidth = Math.max(width * 2.15, emergency ? 4.7 : 3.35);
+    const beamLength = emergency ? 14.4 : 11.2;
+    const beamWidth = Math.max(width * 2.42, emergency ? 5.1 : 3.75);
     const frontZ = frontSign * length * 0.58;
     const groundSpill = this.createDirectionalGroundGlow(
       '#fff1a8',
-      beamWidth * 0.92,
-      beamLength * 0.72,
-      0.022,
-      emergency ? 0.56 : 0.44,
+      Math.max(width * 1.7, beamWidth * 0.82),
+      beamLength * 0.78,
+      0.028,
+      emergency ? 0.64 : 0.52,
       frontSign
     );
-    groundSpill.position.set(0, 0.13, frontZ + frontSign * beamLength * 0.34);
+    groundSpill.position.set(0, 0.082, frontZ + frontSign * beamLength * 0.22);
     group.add(groundSpill);
 
-    const broadSpill = this.createForwardLightBeam(
-      '#fff1a8',
-      Math.max(0.85, width * 0.62),
-      beamWidth,
-      beamLength,
-      0.018,
-      emergency ? 0.52 : 0.42,
-      frontSign
+    const frontWash = new THREE.Mesh(
+      new THREE.BoxGeometry(Math.max(width * 0.74, 0.75), 0.055, 0.08),
+      glowMaterial
     );
-    broadSpill.position.set(0, 0.125, frontZ + frontSign * 0.08);
-    group.add(broadSpill);
+    frontWash.position.set(0, height * 0.055, frontSign * length * 0.615);
+    this.markCityLight(frontWash, 0.1, 0.95);
+    group.add(frontWash);
 
     for (const x of [-width * 0.28, width * 0.28]) {
       const beam = this.createForwardLightBeam(
         '#fff4bc',
-        Math.max(0.2, width * 0.13),
-        Math.max(width * 0.82, emergency ? 1.72 : 1.34),
-        beamLength * (emergency ? 0.96 : 0.88),
-        0.035,
-        emergency ? 0.96 : 0.88,
+        Math.max(0.24, width * 0.16),
+        Math.max(width * 0.96, emergency ? 1.95 : 1.48),
+        beamLength * (emergency ? 0.84 : 0.76),
+        0.04,
+        emergency ? 1 : 0.92,
         frontSign
       );
-      beam.position.set(x, 0.136, frontZ + frontSign * 0.16);
+      beam.position.set(x, 0.086, frontZ + frontSign * 0.06);
       const glow = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.08), glowMaterial);
       glow.position.set(x, height * 0.08, frontSign * length * 0.62);
       this.markCityLight(glow, 0.08, 0.9);
@@ -1090,14 +1135,14 @@ export class ObjectFactory {
     const spot = this.createCitySpotLight(
       '#fff4bc',
       0.02,
-      emergency ? 2.9 : 2.05,
-      emergency ? 42 : 34,
+      emergency ? 3.3 : 2.45,
+      emergency ? 43 : 36,
       emergency ? 0.48 : 0.38,
       1.02,
       emergency ? 9.2 : 7.35
     );
-    spot.position.set(0, height * 0.16, frontSign * length * 0.58);
-    spot.target.position.set(0, 0.04, frontSign * (length * 0.58 + beamLength + 5));
+    spot.position.set(0, height * 0.14, frontSign * length * 0.55);
+    spot.target.position.set(0, 0.03, frontSign * (length * 0.55 + beamLength * 0.92));
     group.add(spot, spot.target);
   }
 

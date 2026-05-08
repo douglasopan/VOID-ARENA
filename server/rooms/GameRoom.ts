@@ -66,6 +66,8 @@ export class GameRoom {
       objectDensityMultiplier: this.options.objectDensityMultiplier,
       powerUpCount: this.options.powerUpCount,
       respawnSafeRadius: this.options.respawnSafeRadius,
+      itemRespawnEnabled: this.options.itemRespawnEnabled,
+      powerUpRespawnEnabled: this.options.powerUpRespawnEnabled,
       botDifficultyMix: this.options.botDifficultyMix,
       seed: this.seed
     };

@@ -1,7 +1,7 @@
 import type { AudioManager } from '../audio/AudioManager';
 import { HOLE_RIM_STYLE_OPTIONS, LANGUAGE_OPTIONS, RIM_COLORS } from '../shared/constants';
 import { t } from '../i18n/I18n';
-import type { HoleRimStyle, LanguageCode } from '../shared/types';
+import type { GraphicsQuality, HoleRimStyle, LanguageCode } from '../shared/types';
 import type { HudDisplayKey, HudDisplaySettings } from './HUD';
 
 export interface PauseCallbacks {
@@ -11,6 +11,7 @@ export interface PauseCallbacks {
   onDeathCameraToggle?: (enabled: boolean) => void;
   onHudDisplayToggle?: (key: HudDisplayKey, visible: boolean) => void;
   onNextMusic?: () => void;
+  onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
   onHoleAppearanceChange?: (rimColor: string, rimStyle: HoleRimStyle) => void;
   onLanguageChange?: (language: LanguageCode) => void;
 }
@@ -32,6 +33,7 @@ export class PauseMenu {
       hudDisplaySettings?: HudDisplaySettings;
       holeRimColor?: string;
       holeRimStyle?: HoleRimStyle;
+      graphicsQuality?: GraphicsQuality;
       language?: LanguageCode;
     }
   ): void {
@@ -55,6 +57,14 @@ export class PauseMenu {
           <div class="field">
             <label>${t(language, 'musicTrack')}</label>
             <button class="next-music" type="button">${t(language, 'nextTrack')}</button>
+          </div>
+          <div class="field">
+            <label>${t(language, 'graphics')}</label>
+            <div class="segmented pause-graphics-segment">
+              <button class="${(options.graphicsQuality ?? 'balanced') === 'performance' ? 'active' : ''}" type="button" data-graphics-quality="performance">${t(language, 'fast')}</button>
+              <button class="${(options.graphicsQuality ?? 'balanced') === 'balanced' ? 'active' : ''}" type="button" data-graphics-quality="balanced">${t(language, 'balanced')}</button>
+              <button class="${(options.graphicsQuality ?? 'balanced') === 'quality' ? 'active' : ''}" type="button" data-graphics-quality="quality">${t(language, 'quality')}</button>
+            </div>
           </div>
           <div class="field">
             <label>${t(language, 'chat')}</label>
@@ -143,6 +153,17 @@ export class PauseMenu {
       syncValues();
     });
     element.querySelector<HTMLButtonElement>('.next-music')?.addEventListener('click', () => callbacks.onNextMusic?.());
+    element.querySelectorAll<HTMLButtonElement>('.pause-graphics-segment button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const quality = button.dataset.graphicsQuality as GraphicsQuality | undefined;
+        if (!quality) {
+          return;
+        }
+        element.querySelectorAll('.pause-graphics-segment button').forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+        callbacks.onGraphicsQualityChange?.(quality);
+      });
+    });
 
     let chatEnabled = options.chatEnabled;
     const chatToggle = element.querySelector<HTMLButtonElement>('.chat-toggle');

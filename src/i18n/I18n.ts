@@ -1,4 +1,5 @@
 import type { LanguageCode } from '../shared/types';
+import prebuildTextOverrides from '../admin/prebuildTextOverrides.json';
 
 export const SUPPORTED_LANGUAGES: LanguageCode[] = ['en', 'es', 'pt', 'fr', 'de', 'ru', 'ja', 'zh'];
 
@@ -42,6 +43,19 @@ const EN_STRINGS = {
   presetMediumDesc: 'Balanced arena with normal bots and more powerups.',
   presetHard: 'Hard',
   presetHardDesc: 'Large map, stronger bots, denser city.',
+  timeTrialMode: 'Time Trial',
+  timeTrialModeDesc: 'Eat the required buildings before time runs out. No item respawns.',
+  careerMode: 'Career',
+  careerBuildings: 'Downtown Bite',
+  careerBuildingsDesc: 'Start the career by clearing key buildings under pressure.',
+  careerCollector: 'Traffic Hunt',
+  careerCollectorDesc: 'Find and swallow a specific vehicle type across the city.',
+  careerHunter: 'Void Hunter',
+  careerHunterDesc: 'Eliminate rival holes before the clock runs out.',
+  careerScore: 'Score Rush',
+  careerScoreDesc: 'Build a huge score in a denser city challenge.',
+  creativeMode: 'Creative Freeroam',
+  creativeModeDesc: 'Infinite time to explore, test physics, and tune the city.',
   presetCustom: 'Custom',
   presetCustomDesc: 'Open all match options.',
   customMatchSetup: 'Solo Match Setup',
@@ -54,6 +68,7 @@ const EN_STRINGS = {
   matchMode: 'Match mode',
   timedMatch: 'Timed Match',
   lastHoleStanding: 'Last Hole Standing',
+  itemRespawn: 'Item respawn',
   matchDuration: 'Match duration',
   duration: 'Duration',
   twoMinutes: '2 minutes',
@@ -112,15 +127,30 @@ const EN_STRINGS = {
   show: 'Show',
   hide: 'Hide',
   matchStarted: 'Match started',
-  naturalDisasterWarningTitle: 'Natural disaster alert',
+  objective: 'Objective',
+  challenge: 'Challenge',
+  objectiveComplete: 'Objective complete',
+  objectiveFailed: 'Objective failed',
+  objectiveTimeTrialBuildingsTitle: 'Building Time Trial',
+  objectiveTimeTrialBuildingsDesc: 'Swallow 12 buildings before the timer reaches zero.',
+  objectiveCareerBuildingsTitle: 'Downtown Bite',
+  objectiveCareerBuildingsDesc: 'Swallow 8 buildings to clear the first career challenge.',
+  objectiveCareerCollectorTitle: 'Traffic Hunt',
+  objectiveCareerCollectorDesc: 'Find and swallow 10 city cars before time runs out.',
+  objectiveCareerHunterTitle: 'Void Hunter',
+  objectiveCareerHunterDesc: 'Swallow 3 rival holes to win the challenge.',
+  objectiveCareerScoreTitle: 'Score Rush',
+  objectiveCareerScoreDesc: 'Reach 2800 points before the timer ends.',
+  naturalDisasterWarningTitle: 'Event alert',
   naturalDisasterWarningIncoming: '{event} in {seconds}s',
   naturalDisasterWarningSeconds: '{seconds}s',
-  naturalDisasterStarted: '{event} is hitting the city',
+  naturalDisasterStarted: 'Event started: {event}',
   disasterClear: 'Clear weather',
   disasterRain: 'Heavy rain',
   disasterThunderstorm: 'Thunderstorm',
   disasterEarthquake: 'Earthquake',
   disasterMeteorShower: 'Meteor shower',
+  disasterSandstorm: 'Sandstorm',
   multiplayerRoom: 'Multiplayer room',
   localRoomPreview: 'Local room preview',
   respawned: '{player} respawned',
@@ -160,8 +190,12 @@ const EN_STRINGS = {
   powerupShrink: 'Shrink Pulse',
   powerupHaste: 'Overdrive',
   powerupShield: 'Void Shield',
+  spawnProtection: 'Spawn protection',
   powerupStamina: 'Stamina Cell',
-  powerupMass: 'Mass Core'
+  powerupMass: 'Mass Core',
+  powerupGust: 'Void Gust',
+  powerupOvercharge: 'Infinite Stamina',
+  powerupDash: 'Rift Dash'
 } as const;
 
 export type TranslationKey = keyof typeof EN_STRINGS;
@@ -195,6 +229,19 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     presetEasy: 'Fácil',
     presetMedium: 'Medio',
     presetHard: 'Difícil',
+    timeTrialMode: 'Time Trial',
+    timeTrialModeDesc: 'Engula a quantidade pedida antes do tempo acabar. Sem respawn de itens.',
+    careerMode: 'Carreira',
+    careerBuildings: 'Mordida no Centro',
+    careerBuildingsDesc: 'Comece a carreira limpando predios importantes sob pressao.',
+    careerCollector: 'Caca ao Transito',
+    careerCollectorDesc: 'Encontre e engula um tipo especifico de veiculo pela cidade.',
+    careerHunter: 'Cacador de Voids',
+    careerHunterDesc: 'Elimine buracos rivais antes do tempo acabar.',
+    careerScore: 'Corrida de Pontos',
+    careerScoreDesc: 'Faca uma pontuacao alta em uma cidade mais densa.',
+    creativeMode: 'Criativo/Freeroam',
+    creativeModeDesc: 'Tempo infinito para explorar, testar fisica e ajustar a cidade.',
     presetCustom: 'Personalizado',
     presetEasyDesc: 'Ciudad pequeña, bots tranquilos, puntuación rápida.',
     presetMediumDesc: 'Arena equilibrada con bots normales y más powerups.',
@@ -230,15 +277,30 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     controlsHint: 'WASD / Flechas mover - Shift correr - ESC menú - Enter chat - Rueda zoom',
     pressEnterToChat: 'Pulsa Enter para chatear',
     matchStarted: 'Partida iniciada',
-    naturalDisasterWarningTitle: 'Alerta de desastre natural',
+    objective: 'Objetivo',
+    challenge: 'Desafio',
+    objectiveComplete: 'Objetivo concluido',
+    objectiveFailed: 'Objetivo falhou',
+    objectiveTimeTrialBuildingsTitle: 'Time Trial de Predios',
+    objectiveTimeTrialBuildingsDesc: 'Engula 12 predios antes do cronometro zerar.',
+    objectiveCareerBuildingsTitle: 'Mordida no Centro',
+    objectiveCareerBuildingsDesc: 'Engula 8 predios para vencer o primeiro desafio da carreira.',
+    objectiveCareerCollectorTitle: 'Caca ao Transito',
+    objectiveCareerCollectorDesc: 'Encontre e engula 10 carros antes do tempo acabar.',
+    objectiveCareerHunterTitle: 'Cacador de Voids',
+    objectiveCareerHunterDesc: 'Engula 3 buracos rivais para vencer o desafio.',
+    objectiveCareerScoreTitle: 'Corrida de Pontos',
+    objectiveCareerScoreDesc: 'Chegue a 2800 pontos antes do cronometro acabar.',
+    naturalDisasterWarningTitle: 'Alerta de evento',
     naturalDisasterWarningIncoming: '{event} en {seconds}s',
     naturalDisasterWarningSeconds: '{seconds}s',
-    naturalDisasterStarted: '{event} golpea la ciudad',
+    naturalDisasterStarted: 'Evento iniciado: {event}',
     disasterClear: 'Clima limpio',
     disasterRain: 'Lluvia fuerte',
     disasterThunderstorm: 'Tormenta',
     disasterEarthquake: 'Terremoto',
     disasterMeteorShower: 'Lluvia de meteoros',
+    disasterSandstorm: 'Tormenta de arena',
     respawned: '{player} reapareció',
     swallowedBy: '{victim} fue devorado por {attacker}',
     eliminated: '{player} fue eliminado',
@@ -315,6 +377,7 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     lastHoleStanding: 'Último buraco vivo',
     matchDuration: 'Duração',
     duration: 'Duração',
+    itemRespawn: 'Respawn de itens',
     twoMinutes: '2 minutos',
     threeMinutes: '3 minutos',
     fiveMinutes: '5 minutos',
@@ -371,15 +434,16 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     show: 'Mostrar',
     hide: 'Ocultar',
     matchStarted: 'Partida iniciada',
-    naturalDisasterWarningTitle: 'Alerta de desastre natural',
+    naturalDisasterWarningTitle: 'Alerta de evento',
     naturalDisasterWarningIncoming: '{event} em {seconds}s',
     naturalDisasterWarningSeconds: '{seconds}s',
-    naturalDisasterStarted: '{event} atingindo a cidade',
+    naturalDisasterStarted: 'Evento iniciado: {event}',
     disasterClear: 'Ceu limpo',
     disasterRain: 'Chuva forte',
     disasterThunderstorm: 'Tempestade',
     disasterEarthquake: 'Terremoto',
     disasterMeteorShower: 'Chuva de meteoros',
+    disasterSandstorm: 'Tempestade de areia',
     multiplayerRoom: 'Sala multiplayer',
     localRoomPreview: 'Prévia local da sala',
     respawned: '{player} renasceu',
@@ -419,8 +483,12 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     powerupShrink: 'Pulso Redutor',
     powerupHaste: 'Overdrive',
     powerupShield: 'Escudo Void',
+    spawnProtection: 'Proteção de spawn',
     powerupStamina: 'Célula de Stamina',
-    powerupMass: 'Núcleo de Massa'
+    powerupMass: 'Núcleo de Massa',
+    powerupGust: 'Sopro Void',
+    powerupOvercharge: 'Stamina Infinita',
+    powerupDash: 'Dash de Fenda'
   },
   fr: {
     tagline: 'Avalez la ville, agrandissez le vide et survivez aux rivaux.',
@@ -453,15 +521,16 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     time: 'Temps',
     alive: 'Vivants',
     matchStarted: 'Partie lancée',
-    naturalDisasterWarningTitle: 'Alerte catastrophe naturelle',
+    naturalDisasterWarningTitle: 'Alerte evenement',
     naturalDisasterWarningIncoming: '{event} dans {seconds}s',
     naturalDisasterWarningSeconds: '{seconds}s',
-    naturalDisasterStarted: '{event} frappe la ville',
+    naturalDisasterStarted: 'Evenement lance : {event}',
     disasterClear: 'Temps clair',
     disasterRain: 'Forte pluie',
     disasterThunderstorm: 'Orage',
     disasterEarthquake: 'Séisme',
     disasterMeteorShower: 'Pluie de météores',
+    disasterSandstorm: 'Tempête de sable',
     swallowedBy: '{victim} a été avalé par {attacker}',
     eliminated: '{player} a été éliminé',
     pickedUp: '{player} a ramassé {powerup}',
@@ -502,15 +571,16 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     time: 'Zeit',
     alive: 'Lebend',
     matchStarted: 'Match gestartet',
-    naturalDisasterWarningTitle: 'Naturkatastrophenwarnung',
+    naturalDisasterWarningTitle: 'Event-Warnung',
     naturalDisasterWarningIncoming: '{event} in {seconds}s',
     naturalDisasterWarningSeconds: '{seconds}s',
-    naturalDisasterStarted: '{event} trifft die Stadt',
+    naturalDisasterStarted: 'Event gestartet: {event}',
     disasterClear: 'Klares Wetter',
     disasterRain: 'Starker Regen',
     disasterThunderstorm: 'Gewitter',
     disasterEarthquake: 'Erdbeben',
     disasterMeteorShower: 'Meteorschauer',
+    disasterSandstorm: 'Sandsturm',
     swallowedBy: '{victim} wurde von {attacker} verschlungen',
     eliminated: '{player} wurde eliminiert',
     pickedUp: '{player} nahm {powerup}',
@@ -560,6 +630,7 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     disasterThunderstorm: 'Гроза',
     disasterEarthquake: 'Землетрясение',
     disasterMeteorShower: 'Метеоритный дождь',
+    disasterSandstorm: 'Песчаная буря',
     swallowedBy: '{victim} был поглощен {attacker}',
     eliminated: '{player} уничтожен',
     pickedUp: '{player} взял {powerup}',
@@ -609,6 +680,7 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     disasterThunderstorm: '雷雨',
     disasterEarthquake: '地震',
     disasterMeteorShower: '流星雨',
+    disasterSandstorm: '砂嵐',
     swallowedBy: '{victim} は {attacker} に飲み込まれた',
     eliminated: '{player} は脱落した',
     pickedUp: '{player} が {powerup} を取った',
@@ -658,6 +730,7 @@ const STRINGS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
     disasterThunderstorm: '雷暴',
     disasterEarthquake: '地震',
     disasterMeteorShower: '流星雨',
+    disasterSandstorm: '沙尘暴',
     swallowedBy: '{victim} 被 {attacker} 吞噬',
     eliminated: '{player} 被淘汰',
     pickedUp: '{player} 获得 {powerup}',
@@ -679,6 +752,11 @@ export function isLanguageCode(value: string): value is LanguageCode {
 }
 
 export function t(language: LanguageCode, key: TranslationKey): string {
+  const overrides = prebuildTextOverrides as Partial<Record<LanguageCode, Partial<Record<TranslationKey, string>>>>;
+  const override = overrides[language]?.[key] ?? overrides.en?.[key];
+  if (override) {
+    return override;
+  }
   return STRINGS[language]?.[key] ?? EN_STRINGS[key];
 }
 
@@ -698,6 +776,12 @@ export function powerUpLabelKey(type: string): TranslationKey {
       return 'powerupShield';
     case 'stamina':
       return 'powerupStamina';
+    case 'gust':
+      return 'powerupGust';
+    case 'overcharge':
+      return 'powerupOvercharge';
+    case 'dash':
+      return 'powerupDash';
     case 'mass':
     default:
       return 'powerupMass';

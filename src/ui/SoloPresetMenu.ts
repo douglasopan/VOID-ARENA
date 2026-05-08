@@ -1,7 +1,16 @@
 import { t } from '../i18n/I18n';
 import type { DayNightMode, LanguageCode } from '../shared/types';
 
-export type SoloPreset = 'easy' | 'medium' | 'hard';
+export type SoloPreset =
+  | 'easy'
+  | 'medium'
+  | 'hard'
+  | 'timeTrial'
+  | 'careerBuildings'
+  | 'careerCollector'
+  | 'careerHunter'
+  | 'careerScore'
+  | 'creative';
 
 export interface SoloPresetCallbacks {
   onPreset: (preset: SoloPreset, dayNightMode: DayNightMode) => void;
@@ -35,10 +44,19 @@ export class SoloPresetMenu {
           ${this.presetButton('easy', t(language, 'presetEasy'), t(language, 'presetEasyDesc'))}
           ${this.presetButton('medium', t(language, 'presetMedium'), t(language, 'presetMediumDesc'))}
           ${this.presetButton('hard', t(language, 'presetHard'), t(language, 'presetHardDesc'))}
+          ${this.presetButton('timeTrial', t(language, 'timeTrialMode'), t(language, 'timeTrialModeDesc'))}
           <button class="preset-card custom-preset" type="button">
             <strong>${t(language, 'presetCustom')}</strong>
             <span>${t(language, 'presetCustomDesc')}</span>
           </button>
+        </div>
+        <h3 class="preset-section-title">${t(language, 'careerMode')}</h3>
+        <div class="preset-grid career-grid">
+          ${this.presetButton('careerBuildings', t(language, 'careerBuildings'), t(language, 'careerBuildingsDesc'))}
+          ${this.presetButton('careerCollector', t(language, 'careerCollector'), t(language, 'careerCollectorDesc'))}
+          ${this.presetButton('careerHunter', t(language, 'careerHunter'), t(language, 'careerHunterDesc'))}
+          ${this.presetButton('careerScore', t(language, 'careerScore'), t(language, 'careerScoreDesc'))}
+          ${this.presetButton('creative', t(language, 'creativeMode'), t(language, 'creativeModeDesc'))}
         </div>
         <div class="button-grid">
           <button class="back" type="button">${t(language, 'back')}</button>

@@ -1,11 +1,10 @@
 import {
   GROWTH_PER_MASS,
   HOLE_SWALLOW_RATIO,
-  MIN_SPEED,
   OBJECT_FIT_RATIO,
-  START_RADIUS,
-  START_SPEED
+  START_RADIUS
 } from '../shared/constants';
+import { runtimeMinSpeed, runtimeStartSpeed } from '../admin/EngineConfig';
 
 export const BOT_ATTACK_GRACE_SECONDS = 12;
 export const BOT_AGGRESSION_RAMP_SECONDS = 10;
@@ -15,8 +14,10 @@ export function calculateRadius(totalMass: number): number {
 }
 
 export function calculateSpeed(radius: number): number {
-  const growthBonus = Math.max(0, radius - START_RADIUS) * 0.72;
-  return Math.max(MIN_SPEED, START_SPEED + Math.min(7.5, growthBonus));
+  const growth = Math.max(0, radius - START_RADIUS);
+  const massDrag = 1 / (1 + growth * 0.16);
+  const heavyDrag = Math.min(2.1, growth * 0.055);
+  return Math.max(runtimeMinSpeed(), runtimeStartSpeed() * massDrag - heavyDrag);
 }
 
 export function canObjectFit(holeRadius: number, objectBoundingRadius: number): boolean {

@@ -1,6 +1,6 @@
 import type { MatchTimer } from '../game/MatchTimer';
 import type { Player } from '../game/Player';
-import { POWERUP_SETTINGS } from '../shared/constants';
+import { POWERUP_SETTINGS, SPAWN_PROTECTION_SECONDS } from '../shared/constants';
 import { powerUpLabelKey, t } from '../i18n/I18n';
 import type { LanguageCode, LeaderboardEntry, PowerUpType } from '../shared/types';
 
@@ -27,6 +27,13 @@ export interface HudDisasterWarning {
   secondsLabel: string;
 }
 
+export interface HudObjectiveStatus {
+  title: string;
+  description: string;
+  progressLabel: string;
+  complete: boolean;
+}
+
 const DISPLAY_STORAGE_KEY = 'void-arena-hud-display-v1';
 const DEFAULT_DISPLAY_SETTINGS: HudDisplaySettings = {
   stats: true,
@@ -43,7 +50,10 @@ const POWERUP_META: Record<PowerUpType, { label: string; icon: string; color: st
   haste: { label: 'Haste', icon: 'H', color: '#f6c453' },
   shield: { label: 'Shield', icon: 'D', color: '#93c5fd' },
   stamina: { label: 'Stamina', icon: 'E', color: '#91e88c' },
-  mass: { label: 'Mass', icon: 'G', color: '#c084fc' }
+  mass: { label: 'Mass', icon: 'G', color: '#c084fc' },
+  gust: { label: 'Gust', icon: 'W', color: '#a3e635' },
+  overcharge: { label: 'Infinite Stamina', icon: 'I', color: '#22d3ee' },
+  dash: { label: 'Dash', icon: 'D', color: '#f97316' }
 };
 
 export class HUD {
@@ -120,7 +130,8 @@ export class HUD {
     leaderboardEntries: LeaderboardEntry[],
     timer: MatchTimer | null,
     remainingPlayers: number,
-    disasterWarning: HudDisasterWarning | null = null
+    disasterWarning: HudDisasterWarning | null = null,
+    objective: HudObjectiveStatus | null = null
   ): void {
     if (!this.element) {
       this.show(this.callbacks ?? undefined);
@@ -139,6 +150,13 @@ export class HUD {
           </div>
           <div class="hud-row"><span>${t(this.language, 'score')}</span><strong>${player.score}</strong></div>
           <div class="hud-row"><span>${timer ? t(this.language, 'time') : t(this.language, 'alive')}</span><strong>${timer ? timer.format() : remainingPlayers}</strong></div>
+          ${objective ? `
+            <div class="objective-box ${objective.complete ? 'complete' : ''}">
+              <span>${this.escapeHtml(objective.title)}</span>
+              <strong>${this.escapeHtml(objective.progressLabel)}</strong>
+              <small>${this.escapeHtml(objective.description)}</small>
+            </div>
+          ` : ''}
         `;
       }
     }
@@ -199,7 +217,7 @@ export class HUD {
 
     const now = performance.now() / 1000;
     const active = player ? [...player.activePowerUps.entries()] : [];
-    this.powerUpTray.innerHTML = active
+    const cards = active
       .sort((a, b) => a[1] - b[1])
       .map(([type, expiresAt]) => {
         const meta = POWERUP_META[type];
@@ -216,9 +234,23 @@ export class HUD {
             <div class="powerup-meter"><span></span></div>
           </div>
         `;
-      })
-      .join('');
-    this.powerUpTray.classList.toggle('empty', active.length === 0);
+      });
+    const spawnProtectionRemaining = player?.spawnProtectionRemaining(now) ?? 0;
+    if (spawnProtectionRemaining > 0) {
+      const percent = Math.max(0, Math.min(100, (spawnProtectionRemaining / SPAWN_PROTECTION_SECONDS) * 100));
+      cards.unshift(`
+        <div class="powerup-card" style="--powerup-color: #5eead4; --powerup-progress: ${percent}%">
+          <div class="powerup-icon">P</div>
+          <div class="powerup-text">
+            <strong>${t(this.language, 'spawnProtection')}</strong>
+            <span>${spawnProtectionRemaining.toFixed(1)}s</span>
+          </div>
+          <div class="powerup-meter"><span></span></div>
+        </div>
+      `);
+    }
+    this.powerUpTray.innerHTML = cards.join('');
+    this.powerUpTray.classList.toggle('empty', cards.length === 0);
     this.applyDisplaySettings();
   }
 

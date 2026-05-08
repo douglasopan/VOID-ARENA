@@ -43,6 +43,7 @@ export class SceneManager {
   private readonly powerUpMeshes = new Map<string, THREE.Object3D>();
   private readonly powerUpLabels = new Map<string, THREE.Sprite>();
   private readonly objectById = new Map<string, WorldObject>();
+  private readonly objectBoundsBox = new THREE.Box3();
   private readonly skyRoot = new THREE.Group();
   private readonly skyTraffic: Array<{
     object: THREE.Object3D;
@@ -80,8 +81,19 @@ export class SceneManager {
   private rainPoints!: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
   private rainPositions!: Float32Array;
   private rainVelocities!: Float32Array;
+  private readonly meteorVisuals: Array<{
+    object: THREE.Group;
+    velocity: THREE.Vector3;
+    life: number;
+    maxLife: number;
+  }> = [];
+  private meteorVisualCooldown = 0;
   private lightningLight!: THREE.DirectionalLight;
   private readonly tempLightPosition = new THREE.Vector3();
+  private readonly groundRaycaster = new THREE.Raycaster();
+  private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private readonly groundPointer = new THREE.Vector2();
+  private readonly groundHit = new THREE.Vector3();
 
   constructor(private readonly container: HTMLElement) {
     this.scene.background = new THREE.Color('#0b2330');
@@ -127,6 +139,7 @@ export class SceneManager {
       const mesh = this.objectFactory.createWorldObjectMesh(object);
       mesh.position.copy(object.position);
       mesh.rotation.copy(object.rotation);
+      this.liftObjectMeshAboveGround(mesh, object);
       mesh.userData.objectId = object.id;
       object.mesh = mesh;
       this.objectMeshes.set(object.id, mesh);
@@ -143,12 +156,20 @@ export class SceneManager {
       this.powerUpMeshes.set(powerUp.id, mesh);
       this.worldRoot.add(mesh);
       const label = this.labelRenderer.createLabel(t(this.language, powerUpLabelKey(powerUp.type)), powerUp.color);
+      label.userData.powerUpType = powerUp.type;
       label.scale.set(6.65, 1.68, 1);
       this.powerUpLabels.set(powerUp.id, label);
       this.scene.add(label);
     }
 
     this.adSurfaceRenderer.setSurfaces(world.mapData.adSurfaces);
+  }
+
+  private liftObjectMeshAboveGround(mesh: THREE.Object3D, object: WorldObject): void {
+    mesh.updateMatrixWorld(true);
+    this.objectBoundsBox.setFromObject(mesh);
+    object.ensureVisualAboveGround(this.objectBoundsBox.min.y);
+    mesh.position.copy(object.position);
   }
 
   setGraphicsQuality(quality: GraphicsQuality): void {
@@ -266,6 +287,21 @@ export class SceneManager {
     this.renderer.render(this.scene, this.camera);
   }
 
+  clientPointToGround(clientX: number, clientY: number): THREE.Vector3 | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+
+    this.groundPointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -(((clientY - rect.top) / rect.height) * 2 - 1)
+    );
+    this.groundRaycaster.setFromCamera(this.groundPointer, this.camera);
+    const hit = this.groundRaycaster.ray.intersectPlane(this.groundPlane, this.groundHit);
+    return hit ? this.groundHit.clone() : null;
+  }
+
   clearWorld(): void {
     this.holeRenderer.clear();
     this.adSurfaceRenderer.clear();
@@ -369,9 +405,11 @@ export class SceneManager {
       ? this.currentDisaster.intensity * 0.42
       : this.currentDisaster.type === 'rain'
         ? this.currentDisaster.intensity * 0.18
-        : 0;
+        : this.currentDisaster.type === 'sandstorm'
+          ? this.currentDisaster.intensity * 0.12
+          : 0;
     if (stormDarkening > 0) {
-      sky.lerp(new THREE.Color('#182432'), stormDarkening);
+      sky.lerp(new THREE.Color(this.currentDisaster.type === 'sandstorm' ? '#4d4534' : '#182432'), stormDarkening);
     }
     this.scene.background = sky;
     if (this.scene.fog) {
@@ -393,7 +431,11 @@ export class SceneManager {
       if (!data) {
         continue;
       }
-      const opacity = THREE.MathUtils.lerp(data.dayOpacity, data.nightOpacity, lightFactor);
+      const disabled = Boolean(mesh.userData.cityLightOff);
+      const flicker = typeof mesh.userData.cityLightFlicker === 'number'
+        ? THREE.MathUtils.clamp(mesh.userData.cityLightFlicker, 0, 1)
+        : 1;
+      const opacity = disabled ? 0 : THREE.MathUtils.lerp(data.dayOpacity, data.nightOpacity, lightFactor) * flicker;
       mesh.visible = opacity > 0.012;
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const material of materials) {
@@ -407,7 +449,11 @@ export class SceneManager {
       this.lightSelectionAccumulator = 0;
     }
     for (const entry of this.cityPointLights) {
-      const intensity = THREE.MathUtils.lerp(entry.dayIntensity, entry.nightIntensity, lightFactor);
+      const disabled = Boolean(entry.light.userData.cityLightOff);
+      const flicker = typeof entry.light.userData.cityLightFlicker === 'number'
+        ? THREE.MathUtils.clamp(entry.light.userData.cityLightFlicker, 0, 1)
+        : 1;
+      const intensity = disabled ? 0 : THREE.MathUtils.lerp(entry.dayIntensity, entry.nightIntensity, lightFactor) * flicker;
       const active = entry.active && intensity > 0.01;
       entry.light.visible = active;
       entry.light.intensity = active ? intensity : 0;
@@ -416,9 +462,11 @@ export class SceneManager {
 
   private updateWeather(deltaSeconds: number): void {
     this.weatherElapsed += deltaSeconds;
+    this.updateMeteorFireballs(deltaSeconds);
     const precipitation = this.currentDisaster.precipitation;
     const isMeteor = this.currentDisaster.type === 'meteorShower';
-    if (precipitation <= 0.02 && !isMeteor) {
+    const isSandstorm = this.currentDisaster.type === 'sandstorm';
+    if (precipitation <= 0.02 && !isMeteor && !isSandstorm) {
       this.rainPoints.visible = false;
       this.rainPoints.material.opacity = 0;
       return;
@@ -429,27 +477,29 @@ export class SceneManager {
       : this.currentGraphicsQuality === 'quality'
         ? 320
         : 150;
-    const activeDrops = Math.max(0, Math.min(maxDrops, Math.floor(maxDrops * Math.max(precipitation, isMeteor ? 0.42 : 0))));
+    const activeDrops = Math.max(0, Math.min(maxDrops, Math.floor(maxDrops * Math.max(precipitation, isMeteor ? 0.42 : isSandstorm ? 0.38 : 0))));
     const positions = this.rainPositions;
-    const range = isMeteor ? 86 : 58;
-    const verticalSpeed = isMeteor ? 34 : 21 + precipitation * 15;
-    const wind = this.currentDisaster.wind * (isMeteor ? 12 : 5);
+    const range = isMeteor ? 86 : isSandstorm ? 74 : 58;
+    const verticalSpeed = isMeteor ? 34 : isSandstorm ? 4 + precipitation * 7 : 21 + precipitation * 15;
+    const wind = isSandstorm ? 12 + this.currentDisaster.wind * 18 : this.currentDisaster.wind * (isMeteor ? 12 : 5);
     const cameraX = this.camera.position.x;
     const cameraZ = this.camera.position.z;
 
     this.rainPoints.visible = activeDrops > 0;
     this.rainPoints.material.opacity = isMeteor
       ? 0.72 * this.currentDisaster.intensity
-      : THREE.MathUtils.clamp(0.18 + precipitation * 0.5, 0, 0.72);
-    this.rainPoints.material.color.set(isMeteor ? '#ffb86b' : '#bde7ff');
-    this.rainPoints.material.size = isMeteor ? 0.16 : 0.095;
+      : isSandstorm
+        ? THREE.MathUtils.clamp(0.12 + precipitation * 0.46, 0, 0.56)
+        : THREE.MathUtils.clamp(0.18 + precipitation * 0.5, 0, 0.72);
+    this.rainPoints.material.color.set(isMeteor ? '#ffb86b' : isSandstorm ? '#d7b474' : '#bde7ff');
+    this.rainPoints.material.size = isMeteor ? 0.16 : isSandstorm ? 0.14 : 0.095;
     this.rainPoints.position.set(cameraX, 0, cameraZ);
 
     for (let i = 0; i < activeDrops; i += 1) {
       const offset = i * 3;
       positions[offset] += wind * deltaSeconds;
       positions[offset + 1] -= verticalSpeed * this.rainVelocities[i] * deltaSeconds;
-      positions[offset + 2] += (isMeteor ? -verticalSpeed * 0.32 : 0) * deltaSeconds;
+      positions[offset + 2] += (isMeteor ? -verticalSpeed * 0.32 : isSandstorm ? wind * 0.42 : 0) * deltaSeconds;
       if (
         positions[offset + 1] < 0.4 ||
         positions[offset] < -range ||
@@ -461,6 +511,9 @@ export class SceneManager {
         if (isMeteor) {
           positions[offset] -= range * 0.32;
           positions[offset + 2] += range * 0.45;
+        } else if (isSandstorm) {
+          positions[offset] -= range * 0.72;
+          positions[offset + 2] -= range * 0.28;
         }
       }
     }
@@ -479,6 +532,100 @@ export class SceneManager {
     this.rainPositions[offset + 1] = THREE.MathUtils.randFloat(6, 34);
     this.rainPositions[offset + 2] = THREE.MathUtils.randFloatSpread(range * 2);
     this.rainVelocities[index] = THREE.MathUtils.randFloat(0.72, 1.35);
+  }
+
+  private updateMeteorFireballs(deltaSeconds: number): void {
+    this.meteorVisualCooldown -= deltaSeconds;
+    const canSpawn = this.currentDisaster.type === 'meteorShower' && this.currentDisaster.intensity > 0.08;
+    if (canSpawn && this.meteorVisualCooldown <= 0 && this.meteorVisuals.length < (this.currentGraphicsQuality === 'performance' ? 8 : 18)) {
+      this.spawnMeteorFireball();
+      this.meteorVisualCooldown = THREE.MathUtils.clamp(
+        0.34 - this.currentDisaster.intensity * 0.12 + Math.random() * 0.24,
+        0.16,
+        0.48
+      );
+    }
+
+    for (let index = this.meteorVisuals.length - 1; index >= 0; index -= 1) {
+      const meteor = this.meteorVisuals[index];
+      meteor.life += deltaSeconds;
+      meteor.velocity.y -= 5.6 * deltaSeconds;
+      meteor.object.position.addScaledVector(meteor.velocity, deltaSeconds);
+      meteor.object.rotation.y += deltaSeconds * 5.8;
+      meteor.object.rotation.x += deltaSeconds * 2.1;
+      const opacity = THREE.MathUtils.clamp(1 - meteor.life / meteor.maxLife, 0, 1);
+      meteor.object.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) {
+          return;
+        }
+        const material = mesh.material as THREE.Material & { opacity?: number; transparent?: boolean };
+        material.transparent = true;
+        material.opacity = opacity;
+      });
+      if (meteor.life >= meteor.maxLife || meteor.object.position.y < -1.2) {
+        this.disposeMeteorVisual(meteor.object);
+        this.weatherRoot.remove(meteor.object);
+        this.meteorVisuals.splice(index, 1);
+      }
+    }
+  }
+
+  private spawnMeteorFireball(): void {
+    const meteor = new THREE.Group();
+    const coreMaterial = new THREE.MeshBasicMaterial({ color: '#ffad42' });
+    const shellMaterial = new THREE.MeshBasicMaterial({
+      color: '#ff5a1f',
+      transparent: true,
+      opacity: 0.72,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.62, 12, 8), coreMaterial);
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(1.05, 12, 8), shellMaterial);
+    const trail = new THREE.Mesh(
+      new THREE.ConeGeometry(0.62, 5.2, 10),
+      new THREE.MeshBasicMaterial({
+        color: '#ffcf70',
+        transparent: true,
+        opacity: 0.5,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    trail.rotation.x = Math.PI * 0.5;
+    trail.position.z = 2.45;
+    meteor.add(trail, shell, core);
+
+    const range = 58;
+    meteor.position.set(
+      this.camera.position.x + THREE.MathUtils.randFloatSpread(range),
+      THREE.MathUtils.randFloat(34, 48),
+      this.camera.position.z + THREE.MathUtils.randFloatSpread(range) + 18
+    );
+    meteor.rotation.y = Math.PI * 0.25 + THREE.MathUtils.randFloatSpread(0.32);
+    this.weatherRoot.add(meteor);
+    this.meteorVisuals.push({
+      object: meteor,
+      velocity: new THREE.Vector3(
+        THREE.MathUtils.randFloat(-6, 5),
+        THREE.MathUtils.randFloat(-26, -34),
+        THREE.MathUtils.randFloat(-12, -6)
+      ),
+      life: 0,
+      maxLife: THREE.MathUtils.randFloat(1.25, 1.9)
+    });
+  }
+
+  private disposeMeteorVisual(object: THREE.Object3D): void {
+    object.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      mesh.geometry?.dispose();
+      if (mesh.material) {
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.forEach((material) => material.dispose());
+      }
+    });
   }
 
   private applyDisasterCameraShake(deltaSeconds: number): void {
@@ -624,6 +771,10 @@ export class SceneManager {
   private disposeWeather(): void {
     this.rainPoints.geometry.dispose();
     this.rainPoints.material.dispose();
+    for (const meteor of this.meteorVisuals) {
+      this.disposeMeteorVisual(meteor.object);
+    }
+    this.meteorVisuals.length = 0;
     this.weatherRoot.clear();
   }
 
@@ -645,18 +796,41 @@ export class SceneManager {
       mesh.visible = object.active || Boolean(object.swallowAnimation);
       mesh.position.copy(object.position);
       mesh.rotation.copy(object.rotation);
-      mesh.scale.setScalar(object.swallowScale * object.temporaryScale);
+      const spawnScale = THREE.MathUtils.lerp(0.22, 1, THREE.MathUtils.smoothstep(object.spawnFade, 0, 1));
+      mesh.scale.setScalar(object.swallowScale * object.temporaryScale * spawnScale);
       this.objectFactory.updateWorldObjectVisual(mesh, object);
     }
 
     for (const powerUp of world.powerUps) {
-      const mesh = this.powerUpMeshes.get(powerUp.id);
+      let mesh = this.powerUpMeshes.get(powerUp.id);
       if (!mesh) continue;
+      if (mesh.userData.powerUpType !== powerUp.type) {
+        this.objectFactory.disposeObject(mesh);
+        this.worldRoot.remove(mesh);
+        mesh = this.objectFactory.createPowerUpMesh(powerUp);
+        mesh.position.copy(powerUp.position);
+        powerUp.mesh = mesh;
+        this.powerUpMeshes.set(powerUp.id, mesh);
+        this.worldRoot.add(mesh);
+      }
       mesh.visible = powerUp.active;
       mesh.position.set(powerUp.position.x, powerUp.position.y + Math.sin(powerUp.rotation * 1.6) * 0.14, powerUp.position.z);
       mesh.rotation.y = powerUp.rotation;
       mesh.rotation.x = Math.sin(powerUp.rotation) * 0.22;
-      const label = this.powerUpLabels.get(powerUp.id);
+      let label = this.powerUpLabels.get(powerUp.id);
+      if (label && label.userData.powerUpType !== powerUp.type) {
+        this.disposeSprite(label);
+        this.scene.remove(label);
+        this.powerUpLabels.delete(powerUp.id);
+        label = undefined;
+      }
+      if (!label) {
+        label = this.labelRenderer.createLabel(t(this.language, powerUpLabelKey(powerUp.type)), powerUp.color);
+        label.userData.powerUpType = powerUp.type;
+        label.scale.set(6.65, 1.68, 1);
+        this.powerUpLabels.set(powerUp.id, label);
+        this.scene.add(label);
+      }
       if (label) {
         label.visible = powerUp.active;
         label.position.set(powerUp.position.x, powerUp.position.y + 1.58, powerUp.position.z);

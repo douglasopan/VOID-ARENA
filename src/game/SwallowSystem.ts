@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+import { getEngineConfig } from '../admin/EngineConfig';
 import type { MatchConfig } from './MatchConfig';
 import { MatchMode } from './MatchMode';
 import type { Player } from './Player';
@@ -24,7 +26,7 @@ export class SwallowSystem {
     this.matchStartedAt ??= now;
     const events: SwallowEvent[] = [];
     this.world.rebuildObjectGrid();
-    this.tryStartObjectSwallows();
+    this.tryStartObjectSwallows(deltaSeconds);
     this.tryStartHoleSwallows(now, events);
 
     const completedObjects = this.world.updateSwallowing(deltaSeconds, this.playerManager);
@@ -38,7 +40,9 @@ export class SwallowSystem {
       player.addMass(completed.object.mass);
       player.addScore(completed.object.score);
       player.swallowedObjects += 1;
-      completed.object.scheduleRespawn(now);
+      if (this.config.itemRespawnEnabled) {
+        completed.object.scheduleRespawn(now);
+      }
       events.push({ type: 'objectSwallowed', player, object: completed.object });
     }
 
@@ -57,23 +61,192 @@ export class SwallowSystem {
     return events;
   }
 
-  private tryStartObjectSwallows(): void {
+  private tryStartObjectSwallows(deltaSeconds: number): void {
+    const contactedObjects = new Set<string>();
+
     for (const player of this.playerManager.alivePlayers()) {
-      const candidates = this.world.queryObjects(player.position, Math.max(2.5, player.radius * 1.35));
+      const candidates = this.world.queryObjects(player.position, Math.max(4, player.radius * 1.6 + 8));
 
       for (const object of candidates) {
-        if (!object.active || !canObjectFit(player.radius, object.effectiveBoundingRadius)) {
+        if (!object.active) {
           continue;
         }
 
         const dx = object.position.x - player.position.x;
         const dz = object.position.z - player.position.z;
-        const swallowDistance = Math.max(0.72, player.radius * 0.95);
-        if (dx * dx + dz * dz <= swallowDistance * swallowDistance) {
-          object.startSwallow(player.id);
+        const distance = Math.hypot(dx, dz);
+        const objectRadius = object.effectiveBoundingRadius;
+        const rimDistance = this.objectHoleRimDistance(player.radius, objectRadius);
+
+        if (distance > rimDistance || object.swallowAnimation) {
+          continue;
         }
+
+        contactedObjects.add(object.id);
+        const physicallyFits = this.canObjectPhysicallyEnterHole(player.radius, objectRadius);
+        const insideFraction = this.objectInsideHoleFraction(player.radius, objectRadius, distance);
+        if (physicallyFits && insideFraction >= this.requiredObjectInsideFraction(object)) {
+          const contactSeconds = object.recordSwallowContact(player.id, deltaSeconds);
+          const requiredContactSeconds = this.requiredObjectSwallowContactSeconds(
+            player,
+            object,
+            objectRadius,
+            distance,
+            insideFraction
+          );
+          if (contactSeconds >= requiredContactSeconds) {
+            object.startSwallow(player.id, {
+              holeCenter: player.position,
+              holeRadius: player.radius,
+              playerVelocity: player.velocity,
+              insideFraction
+            });
+          }
+          continue;
+        }
+
+        object.resetSwallowContact();
+        this.applyHoleRimContact(player, object, distance, objectRadius, rimDistance, insideFraction, physicallyFits, deltaSeconds);
       }
     }
+
+    for (const object of this.world.objects) {
+      if (object.hasSwallowContact && !contactedObjects.has(object.id)) {
+        object.resetSwallowContact();
+      }
+    }
+  }
+
+  private canObjectPhysicallyEnterHole(holeRadius: number, objectRadius: number): boolean {
+    return canObjectFit(holeRadius, objectRadius) && objectRadius <= holeRadius * 0.98;
+  }
+
+  private objectHoleEntryDistance(holeRadius: number, objectRadius: number): number {
+    const rimTolerance = Math.min(0.18, Math.max(0.035, objectRadius * 0.045));
+    return Math.max(0.1, holeRadius - objectRadius + rimTolerance);
+  }
+
+  private objectHoleRimDistance(holeRadius: number, objectRadius: number): number {
+    return Math.max(holeRadius + objectRadius * 0.55, holeRadius * 1.04);
+  }
+
+  private requiredObjectSwallowContactSeconds(
+    player: Player,
+    object: WorldObject,
+    objectRadius: number,
+    distance: number,
+    insideFraction: number
+  ): number {
+    const tightFit = Math.min(1, objectRadius / Math.max(0.001, player.radius));
+    const coveragePenalty = THREE.MathUtils.clamp(1 - insideFraction, 0, 1);
+    const objectSpeed = Math.max(
+      Math.abs(object.routeVelocity || object.routeSpeed || 0),
+      Math.hypot(object.physicsVelocity.x, object.physicsVelocity.z)
+    );
+    const relativeSpeedPressure = Math.max(objectSpeed, player.getSpeed(player.isBoosting) * 0.26);
+    const speedPenalty = Math.min(1, Math.max(0, (relativeSpeedPressure - 3.2) / 9.5));
+    const centerPenalty = Math.min(1, distance / Math.max(0.1, player.radius));
+    return (0.05 + tightFit * 0.15 + coveragePenalty * 0.2 + centerPenalty * 0.06 + speedPenalty * 0.12) * getEngineConfig().gameplay.objectContactSecondsMultiplier;
+  }
+
+  private applyHoleRimContact(
+    player: Player,
+    object: WorldObject,
+    distance: number,
+    objectRadius: number,
+    rimDistance: number,
+    insideFraction: number,
+    physicallyFits: boolean,
+    deltaSeconds: number
+  ): void {
+    const canUseSpecialPush = player.hasPowerUp('gust');
+    const canUseNaturalRimPush = false;
+    if (distance <= 0.001 || (!canUseNaturalRimPush && !canUseSpecialPush)) {
+      return;
+    }
+
+    const overlapPressure = Math.min(1, Math.max(0, (rimDistance - distance) / Math.max(0.1, objectRadius * 0.55)));
+    if (overlapPressure <= 0.001) {
+      return;
+    }
+
+    const away = new THREE.Vector3(
+      (object.position.x - player.position.x) / distance,
+      0,
+      (object.position.z - player.position.z) / distance
+    );
+
+    const playerVelocity = player.velocity.clone();
+    playerVelocity.y = 0;
+    const playerSpeed = playerVelocity.length();
+    if (playerSpeed <= 0.05) {
+      return;
+    }
+
+    const movingIntoObject = playerVelocity.dot(away) > 0.05;
+    if (!movingIntoObject) {
+      return;
+    }
+
+    const moveDirection = playerVelocity.normalize();
+    const massDamping = 1 / Math.max(1, Math.sqrt(object.mass) * 0.26);
+    const timeScale = Math.min(1.6, Math.max(0.35, deltaSeconds * 60));
+    const glancingPenalty = canUseSpecialPush ? 1.35 : 0.62 + Math.min(0.28, insideFraction * 0.3);
+    const impact = (playerSpeed * 0.18 + player.radius * 0.34) * overlapPressure * glancingPenalty * massDamping * timeScale;
+    if (impact <= 0.001) {
+      return;
+    }
+
+    object.position.x += moveDirection.x * Math.min(0.08, impact * 0.018);
+    object.position.z += moveDirection.z * Math.min(0.08, impact * 0.018);
+    const linear = moveDirection.multiplyScalar(impact);
+    const angularScale = (0.1 + Math.min(0.18, objectRadius / Math.max(0.1, player.radius) * 0.08)) * impact;
+    const angular = new THREE.Vector3(linear.z * angularScale, 0, -linear.x * angularScale);
+    const topple =
+      overlapPressure > 0.32 &&
+      (object.category === 'traffic' ||
+        object.category === 'pedestrian' ||
+        object.kind === 'post' ||
+        object.kind === 'trafficLight' ||
+        object.size.y > Math.max(object.size.x, object.size.z) * 1.35);
+
+    object.applyPhysicsImpulse({
+      linear,
+      angular,
+      topple
+    });
+  }
+
+  private requiredObjectInsideFraction(object: WorldObject): number {
+    const massPenalty = THREE.MathUtils.clamp((Math.sqrt(object.mass) - 3) * 0.012, 0, 0.1);
+    const tallPenalty = object.size.y > Math.max(object.size.x, object.size.z) * 1.5 ? 0.04 : 0;
+    return THREE.MathUtils.clamp(0.56 + massPenalty + tallPenalty, 0.56, 0.72);
+  }
+
+  private minimumRimPushInsideFraction(object: WorldObject): number {
+    return Math.max(0.18, this.requiredObjectInsideFraction(object) * 0.42);
+  }
+
+  private objectInsideHoleFraction(holeRadius: number, objectRadius: number, distance: number): number {
+    const r = Math.max(0.001, objectRadius);
+    const R = Math.max(0.001, holeRadius);
+    const d = Math.max(0, distance);
+
+    if (d <= Math.abs(R - r)) {
+      return R >= r ? 1 : (R * R) / (r * r);
+    }
+    if (d >= R + r) {
+      return 0;
+    }
+
+    const objectTerm = (d * d + r * r - R * R) / Math.max(0.001, 2 * d * r);
+    const holeTerm = (d * d + R * R - r * r) / Math.max(0.001, 2 * d * R);
+    const area =
+      r * r * Math.acos(THREE.MathUtils.clamp(objectTerm, -1, 1)) +
+      R * R * Math.acos(THREE.MathUtils.clamp(holeTerm, -1, 1)) -
+      0.5 * Math.sqrt(Math.max(0, (-d + r + R) * (d + r - R) * (d - r + R) * (d + r + R)));
+
+    return THREE.MathUtils.clamp(area / (Math.PI * r * r), 0, 1);
   }
 
   private tryStartHoleSwallows(now: number, events: SwallowEvent[]): void {
@@ -89,6 +262,7 @@ export class SwallowSystem {
           attacker.id === victim.id ||
           !victim.alive ||
           victim.hasPowerUp('shield') ||
+          victim.isSpawnProtected(now) ||
           this.isBotAttackGraceActive(attacker, now) ||
           !canHoleSwallow(attacker.radius, victim.radius)
         ) {

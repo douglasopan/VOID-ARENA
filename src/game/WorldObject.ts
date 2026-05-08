@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getEngineConfig } from '../admin/EngineConfig';
 import type { CityObjectCategory, ObjectSpawnDefinition, WorldObjectKind } from '../shared/types';
 
 export interface ObjectSwallowAnimation {
@@ -6,15 +7,19 @@ export interface ObjectSwallowAnimation {
   elapsed: number;
   duration: number;
   startPosition: THREE.Vector3;
-  velocity: THREE.Vector3;
-  angularVelocity: THREE.Vector3;
-  swirlDirection: number;
   sinkDepth: number;
 }
 
 export interface ObjectSwallowTarget {
   position: THREE.Vector3;
   radius: number;
+}
+
+export interface ObjectVoidFallOptions {
+  holeCenter?: THREE.Vector3;
+  holeRadius?: number;
+  playerVelocity?: THREE.Vector3;
+  insideFraction?: number;
 }
 
 export interface ObjectPhysicsImpulse {
@@ -53,9 +58,14 @@ export class WorldObject {
   temporaryScale = 1;
   mesh: THREE.Object3D | null = null;
   swallowAnimation: ObjectSwallowAnimation | null = null;
+  spawnFade = 1;
   physicsAwake = false;
   physicsToppled = false;
+  physicsToppledSeconds = 0;
+  utilityLightFailed = false;
   fractureLevel = 0;
+  private swallowContactTargetId: string | null = null;
+  private swallowContactSeconds = 0;
   readonly physicsVelocity = new THREE.Vector3();
   readonly physicsAngularVelocity = new THREE.Vector3();
 
@@ -92,31 +102,132 @@ export class WorldObject {
     return this.boundingRadius * this.temporaryScale;
   }
 
-  startSwallow(targetPlayerId: string): void {
+  get collisionRadius(): number {
+    const toppledScale = this.physicsToppled ? 0.88 : 1;
+    const kindScale = this.category === 'building'
+      ? 0.84
+      : this.category === 'pedestrian'
+        ? 0.72
+        : this.kind === 'post' || this.kind === 'trafficLight'
+          ? 0.68
+          : 1;
+    return Math.max(0.24, this.effectiveBoundingRadius * kindScale * toppledScale);
+  }
+
+  get collisionHalfHeight(): number {
+    if (this.physicsToppled) {
+      return Math.max(0.14, Math.min(this.size.y * 0.26, Math.max(this.size.x, this.size.z) * 0.38));
+    }
+    return Math.max(0.16, this.size.y * 0.5 * this.temporaryScale);
+  }
+
+  get collisionBottom(): number {
+    return this.position.y - this.collisionHalfHeight;
+  }
+
+  get collisionTop(): number {
+    return this.position.y + this.collisionHalfHeight;
+  }
+
+  get collisionInverseMass(): number {
+    const base = 1 / Math.max(1, Math.sqrt(this.mass));
+    if (this.category === 'building') {
+      return base * (this.physicsAwake ? 0.18 : 0.045);
+    }
+    if (this.category === 'traffic') {
+      return base * 0.62;
+    }
+    if (this.kind === 'post' || this.kind === 'trafficLight') {
+      return base * 0.36;
+    }
+    if (this.category === 'pedestrian') {
+      return base * 1.25;
+    }
+    return base * (this.physicsAwake || this.physicsToppled ? 1 : 0.28);
+  }
+
+  get hasSwallowContact(): boolean {
+    return this.swallowContactSeconds > 0;
+  }
+
+  recordSwallowContact(targetPlayerId: string, deltaSeconds: number): number {
+    if (this.swallowContactTargetId !== targetPlayerId) {
+      this.swallowContactTargetId = targetPlayerId;
+      this.swallowContactSeconds = 0;
+    }
+
+    this.swallowContactSeconds += deltaSeconds;
+    return this.swallowContactSeconds;
+  }
+
+  resetSwallowContact(): void {
+    this.swallowContactTargetId = null;
+    this.swallowContactSeconds = 0;
+  }
+
+  startSwallow(targetPlayerId: string, options: ObjectVoidFallOptions = {}): void {
     this.active = false;
     this.swallowScale = 1;
+    this.resetSwallowContact();
+    const routeSpeed = Math.max(0, Math.abs(this.routeVelocity || this.routeSpeed || 0));
+    const forward = new THREE.Vector3(Math.sin(this.rotation.y), 0, Math.cos(this.rotation.y));
+    const toHole = options.holeCenter
+      ? new THREE.Vector3(options.holeCenter.x - this.position.x, 0, options.holeCenter.z - this.position.z)
+      : forward.clone();
+    if (toHole.lengthSq() < 0.0001) {
+      toHole.copy(forward);
+    }
+    toHole.normalize();
+
+    if (routeSpeed > 0.01 && Math.hypot(this.physicsVelocity.x, this.physicsVelocity.z) < routeSpeed * 0.22) {
+      this.physicsVelocity.addScaledVector(forward, routeSpeed * 0.38);
+    }
+    if (options.playerVelocity) {
+      this.physicsVelocity.x += options.playerVelocity.x * 0.035;
+      this.physicsVelocity.z += options.playerVelocity.z * 0.035;
+    }
+    this.physicsVelocity.addScaledVector(toHole, 0.08 + Math.min(0.16, this.boundingRadius * 0.025));
+
+    const insideLeverage = THREE.MathUtils.clamp(options.insideFraction ?? 0.62, 0.5, 1);
+    this.physicsVelocity.y = Math.min(
+      this.physicsVelocity.y,
+      -0.16 - insideLeverage * 0.48 - Math.min(0.65, this.boundingRadius * 0.075)
+    );
+
+    if (this.physicsAngularVelocity.lengthSq() < 0.04) {
+      const horizontalSpeed = Math.max(routeSpeed, Math.hypot(this.physicsVelocity.x, this.physicsVelocity.z));
+      const tumbleScale = THREE.MathUtils.clamp(0.46 + horizontalSpeed * 0.08 + this.boundingRadius * 0.055, 0.5, 2.35);
+      this.physicsAngularVelocity.set(
+        -toHole.z * tumbleScale + (Math.random() - 0.5) * 0.12,
+        (Math.random() - 0.5) * tumbleScale * 0.12,
+        toHole.x * tumbleScale + (Math.random() - 0.5) * 0.12
+      );
+      this.addRollingAngularImpulse(this.physicsVelocity);
+    }
+
+    this.physicsAwake = true;
+    this.physicsToppled = true;
     this.swallowAnimation = {
       targetPlayerId,
       elapsed: 0,
-      duration: THREE.MathUtils.clamp(0.58 + this.boundingRadius * 0.1 + this.mass * 0.002, 0.58, 1.45),
+      duration: THREE.MathUtils.clamp(0.84 + this.boundingRadius * 0.14 + Math.sqrt(this.mass) * 0.045, 0.9, 2.65),
       startPosition: this.position.clone(),
-      velocity: new THREE.Vector3(
-        (Math.random() - 0.5) * 0.35,
-        0.25 + Math.random() * 0.45,
-        (Math.random() - 0.5) * 0.35
-      ),
-      angularVelocity: new THREE.Vector3(
-        1.8 + Math.random() * 2.4,
-        2.2 + Math.random() * 3.2,
-        1.3 + Math.random() * 2.1
-      ),
-      swirlDirection: Math.random() < 0.5 ? -1 : 1,
-      sinkDepth: 2.4 + this.boundingRadius * 1.45
+      sinkDepth: Math.max(3.8 + this.boundingRadius * 2.2, this.size.y * 0.78 + 2.6)
     };
   }
 
   get isPhysicsControlled(): boolean {
     return this.physicsAwake || this.physicsToppled;
+  }
+
+  ensureVisualAboveGround(visualBottomY: number, clearance = 0.025): void {
+    const lift = clearance - visualBottomY;
+    if (lift <= 0 || !Number.isFinite(lift)) {
+      return;
+    }
+
+    this.position.y += lift;
+    this.homePosition.y += lift;
   }
 
   applyPhysicsImpulse(impulse: ObjectPhysicsImpulse): void {
@@ -132,12 +243,31 @@ export class WorldObject {
       this.physicsAngularVelocity.add(impulse.angular);
     }
     if (impulse.topple) {
+      if (!this.physicsToppled) {
+        this.physicsToppledSeconds = 0;
+        this.utilityLightFailed = false;
+      }
       this.physicsToppled = true;
     }
     if (impulse.fracture) {
       this.fracture(impulse.fracture);
     }
     this.physicsAwake = true;
+  }
+
+  applyCollisionResponse(normal: THREE.Vector3, impulseStrength: number, topple = false): void {
+    if (!this.active || this.swallowAnimation || impulseStrength <= 0) {
+      return;
+    }
+
+    const massDamping = 1 / Math.max(1, Math.sqrt(this.mass) * 0.42);
+    const linear = normal.clone().multiplyScalar(impulseStrength * massDamping);
+    const angular = new THREE.Vector3(
+      normal.z * impulseStrength * 0.045,
+      0,
+      -normal.x * impulseStrength * 0.045
+    );
+    this.applyPhysicsImpulse({ linear, angular, topple });
   }
 
   fracture(amount: number): void {
@@ -147,12 +277,16 @@ export class WorldObject {
 
     this.fractureLevel = THREE.MathUtils.clamp(this.fractureLevel + Math.max(0, amount), 0, 1);
     if (this.fractureLevel > 0.18) {
+      if (!this.physicsToppled) {
+        this.physicsToppledSeconds = 0;
+      }
       this.physicsToppled = true;
       this.physicsAwake = true;
     }
   }
 
   updateNaturalPhysics(deltaSeconds: number, halfExtent: number): void {
+    this.updateToppledState(deltaSeconds);
     if (!this.physicsAwake || this.swallowAnimation || !this.active) {
       return;
     }
@@ -235,58 +369,89 @@ export class WorldObject {
 
     const animation = this.swallowAnimation;
     animation.elapsed += deltaSeconds;
-    const t = Math.min(1, animation.elapsed / animation.duration);
     const targetPosition = target?.position ?? animation.startPosition;
     const targetRadius = target?.radius ?? Math.max(1, this.boundingRadius);
+    const engine = getEngineConfig().gameplay;
     const stepCount = Math.max(1, Math.ceil(deltaSeconds / 0.016));
     const step = deltaSeconds / stepCount;
+    const sinkDepth = Math.max(animation.sinkDepth, targetRadius * 1.15 + this.boundingRadius * 1.35);
 
     for (let i = 0; i < stepCount; i += 1) {
       const toCenter = new THREE.Vector3(targetPosition.x - this.position.x, 0, targetPosition.z - this.position.z);
       const distance = Math.max(0.001, toCenter.length());
-      const captureRadius = Math.max(targetRadius * 1.75 + this.boundingRadius * 0.9, 2.6);
-      const proximity = THREE.MathUtils.clamp(1 - distance / captureRadius, 0, 1);
+      const insideFraction = this.footprintInsideApertureFraction(targetRadius, this.effectiveBoundingRadius, distance);
+      const aperturePressure = THREE.MathUtils.clamp((insideFraction - 0.35) / 0.65, 0, 1);
       toCenter.normalize();
 
-      const tangent = new THREE.Vector3(-toCenter.z, 0, toCenter.x).multiplyScalar(animation.swirlDirection);
-      const suction = (24 + targetRadius * 9 + this.boundingRadius * 3) * (0.42 + proximity * 1.65);
-      const gravity = 15 + targetRadius * 3.4 + proximity * 24;
-      animation.velocity.x += (toCenter.x * suction + tangent.x * suction * 0.18 * (1 - t)) * step;
-      animation.velocity.z += (toCenter.z * suction + tangent.z * suction * 0.18 * (1 - t)) * step;
-      animation.velocity.y -= gravity * step;
-      animation.velocity.multiplyScalar(Math.max(0, 1 - step * (2.1 + proximity * 1.7)));
+      const massDamping = 1 / Math.max(0.75, Math.sqrt(this.mass) * 0.14);
+      const settlePressure = Math.max(0, aperturePressure - 0.72);
+      const centering = targetRadius * 0.075 * settlePressure * settlePressure * massDamping * engine.rimSuctionMultiplier;
+      const gravity = (9.8 + aperturePressure * 5.6) * engine.swallowGravityMultiplier;
+      if (centering > 0) {
+        this.physicsVelocity.x += toCenter.x * centering * step;
+        this.physicsVelocity.z += toCenter.z * centering * step;
+      }
+      this.physicsVelocity.y -= gravity * step * Math.max(0.48, aperturePressure);
 
-      this.position.x += animation.velocity.x * step;
-      this.position.y += animation.velocity.y * step;
-      this.position.z += animation.velocity.z * step;
+      const horizontalDrag = Math.max(0, 1 - step * (0.28 + aperturePressure * 0.42));
+      this.physicsVelocity.x *= horizontalDrag;
+      this.physicsVelocity.z *= horizontalDrag;
+      this.physicsVelocity.y *= Math.max(0, 1 - step * 0.05);
 
-      const centerLock = Math.max(0, (t - 0.45) / 0.55) * step * 7;
-      this.position.x = THREE.MathUtils.lerp(this.position.x, targetPosition.x, centerLock);
-      this.position.z = THREE.MathUtils.lerp(this.position.z, targetPosition.z, centerLock);
+      this.position.addScaledVector(this.physicsVelocity, step);
+      this.addRollingAngularImpulse(this.physicsVelocity.clone().multiplyScalar(step * 0.18));
+      this.rotation.x += this.physicsAngularVelocity.x * step;
+      this.rotation.y += this.physicsAngularVelocity.y * step;
+      this.rotation.z += this.physicsAngularVelocity.z * step;
+      this.physicsAngularVelocity.multiplyScalar(Math.max(0, 1 - step * 0.38));
     }
 
-    const finalDepth = Math.max(animation.sinkDepth, targetRadius * 0.8 + this.boundingRadius * 0.85);
-    const targetY = targetPosition.y - finalDepth;
-    const lateLock = Math.max(0, (t - 0.72) / 0.28);
-    this.position.y = THREE.MathUtils.lerp(this.position.y, targetY, lateLock * 0.25);
-    this.rotation.x += animation.angularVelocity.x * deltaSeconds * (1 + t * 5);
-    this.rotation.y += animation.angularVelocity.y * deltaSeconds * (1 + t * 5);
-    this.rotation.z += animation.angularVelocity.z * deltaSeconds * (1 + t * 5);
-    const dropProgress = THREE.MathUtils.clamp(
-      (animation.startPosition.y - this.position.y) / Math.max(0.001, finalDepth),
-      0,
-      1
-    );
-    const shrinkT = Math.max(dropProgress, Math.max(0, (t - 0.68) / 0.32));
-    this.swallowScale = Math.max(0.06, 1 - shrinkT * 0.92);
+    this.swallowScale = 1;
+    if (this.physicsToppled) {
+      this.physicsToppledSeconds += deltaSeconds;
+      if ((this.kind === 'post' || this.kind === 'trafficLight') && this.physicsToppledSeconds > 1.15) {
+        this.utilityLightFailed = true;
+      }
+    }
 
-    if (t >= 1) {
+    const targetY = targetPosition.y - sinkDepth;
+    const horizontalMissDistance = Math.hypot(this.position.x - targetPosition.x, this.position.z - targetPosition.z);
+    const missLimit = Math.max(0.18, targetRadius - this.boundingRadius * 0.18) * engine.objectMissForgiveness;
+    const tooWideToKeepFalling =
+      animation.elapsed > 0.22 &&
+      horizontalMissDistance > missLimit &&
+      this.position.y > targetPosition.y - Math.max(0.42, this.boundingRadius * 0.34);
+    const stalledAboveHole =
+      animation.elapsed > animation.duration * 1.65 &&
+      this.position.y > targetPosition.y - sinkDepth * 0.44;
+    if (tooWideToKeepFalling || stalledAboveHole) {
+      this.abortSwallow();
+      return false;
+    }
+
+    const deepEnough = this.position.y <= targetY;
+    const visibleLongEnough = animation.elapsed >= animation.duration;
+    if (deepEnough && visibleLongEnough) {
       this.swallowAnimation = null;
       this.swallowScale = 1;
+      this.physicsAwake = false;
+      this.physicsVelocity.set(0, 0, 0);
+      this.physicsAngularVelocity.set(0, 0, 0);
       return true;
     }
 
     return false;
+  }
+
+  abortSwallow(): void {
+    this.swallowAnimation = null;
+    this.active = true;
+    this.swallowScale = 1;
+    this.physicsAwake = true;
+    this.physicsToppled = true;
+    this.physicsVelocity.y = Math.max(this.physicsVelocity.y * -0.22, 0.08);
+    this.position.y = Math.max(this.position.y, this.homePosition.y + 0.04);
+    this.resetSwallowContact();
   }
 
   scheduleRespawn(now: number): void {
@@ -300,12 +465,27 @@ export class WorldObject {
     this.active = true;
     this.swallowAnimation = null;
     this.swallowScale = 1;
+    this.spawnFade = 0;
     this.temporaryScale = 1;
     this.physicsAwake = false;
     this.physicsToppled = false;
+    this.physicsToppledSeconds = 0;
+    this.utilityLightFailed = false;
     this.fractureLevel = 0;
+    this.resetSwallowContact();
     this.physicsVelocity.set(0, 0, 0);
     this.physicsAngularVelocity.set(0, 0, 0);
+  }
+
+  private updateToppledState(deltaSeconds: number): void {
+    if (!this.physicsToppled || !this.active || this.swallowAnimation) {
+      return;
+    }
+
+    this.physicsToppledSeconds += deltaSeconds;
+    if ((this.kind === 'post' || this.kind === 'trafficLight') && this.physicsToppledSeconds > 2.35) {
+      this.utilityLightFailed = true;
+    }
   }
 
   private addRollingAngularImpulse(linear: THREE.Vector3): void {
@@ -318,5 +498,27 @@ export class WorldObject {
     const rollScale = this.category === 'building' ? 0.12 : this.category === 'traffic' ? 0.28 : 0.46;
     this.physicsAngularVelocity.x += (linear.z / rollRadius) * rollScale;
     this.physicsAngularVelocity.z -= (linear.x / rollRadius) * rollScale;
+  }
+
+  private footprintInsideApertureFraction(holeRadius: number, objectRadius: number, distance: number): number {
+    const r = Math.max(0.001, objectRadius);
+    const R = Math.max(0.001, holeRadius);
+    const d = Math.max(0, distance);
+
+    if (d <= Math.abs(R - r)) {
+      return R >= r ? 1 : (R * R) / (r * r);
+    }
+    if (d >= R + r) {
+      return 0;
+    }
+
+    const objectTerm = (d * d + r * r - R * R) / Math.max(0.001, 2 * d * r);
+    const holeTerm = (d * d + R * R - r * r) / Math.max(0.001, 2 * d * R);
+    const area =
+      r * r * Math.acos(THREE.MathUtils.clamp(objectTerm, -1, 1)) +
+      R * R * Math.acos(THREE.MathUtils.clamp(holeTerm, -1, 1)) -
+      0.5 * Math.sqrt(Math.max(0, (-d + r + R) * (d + r - R) * (d - r + R) * (d + r + R)));
+
+    return THREE.MathUtils.clamp(area / (Math.PI * r * r), 0, 1);
   }
 }

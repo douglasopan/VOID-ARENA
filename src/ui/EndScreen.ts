@@ -30,11 +30,24 @@ export class EndScreen {
         `;
       })
       .join('');
+    const challengeRows = result.objectiveTitle
+      ? `
+          <div class="hud-row">
+            <span>${t(language, 'challenge')}</span>
+            <strong>${result.challengeCompleted ? t(language, 'objectiveComplete') : t(language, 'objectiveFailed')}</strong>
+          </div>
+          <div class="hud-row">
+            <span>${this.escapeHtml(result.objectiveTitle)}</span>
+            <strong>${Math.min(result.objectiveProgress ?? 0, result.objectiveTarget ?? 0)}/${result.objectiveTarget ?? 0}</strong>
+          </div>
+        `
+      : '';
     element.innerHTML = `
       <section class="menu-panel narrow">
         <h2>${t(language, 'matchComplete')}</h2>
         <p class="subtitle">${t(language, 'winner')}: <strong>${this.escapeHtml(result.winnerName)}</strong></p>
         <div class="form-grid">
+          ${challengeRows}
           <div class="hud-row"><span>${t(language, 'yourPlacement')}</span><strong>#${result.placement}</strong></div>
           <div class="hud-row"><span>${t(language, 'finalScore')}</span><strong>${result.finalScore}</strong></div>
           <div class="hud-row"><span>${t(language, 'finalSize')}</span><strong>${result.finalRadius.toFixed(2)}</strong></div>

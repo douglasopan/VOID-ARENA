@@ -21,7 +21,12 @@ export class RespawnSystem {
   ) {}
 
   update(now: number): RespawnEvent[] {
-    if (this.config.matchMode !== MatchMode.Timed) {
+    if (
+      this.config.matchMode !== MatchMode.Timed &&
+      this.config.matchMode !== MatchMode.TimeTrial &&
+      this.config.matchMode !== MatchMode.Career &&
+      this.config.matchMode !== MatchMode.Creative
+    ) {
       return [];
     }
 
@@ -35,6 +40,7 @@ export class RespawnSystem {
       player.mass = Math.max(0, player.mass * 0.35);
       player.radius = calculateRadius(player.mass);
       player.respawn(this.findSafeSpawn(player));
+      player.grantSpawnProtection(now);
       events.push({ type: 'playerRespawned', player });
     }
 

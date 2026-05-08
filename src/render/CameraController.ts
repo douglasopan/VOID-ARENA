@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Player } from '../game/Player';
+import { CAMERA_ZOOM_MAX, CAMERA_ZOOM_MIN } from '../shared/constants';
 
 export class CameraController {
   private readonly desiredPosition = new THREE.Vector3();
@@ -17,7 +18,7 @@ export class CameraController {
     }
 
     const radiusBoost = Math.min(26, target.radius * 4.2);
-    const zoomScale = THREE.MathUtils.clamp(zoom, 0.72, 1.42);
+    const zoomScale = THREE.MathUtils.clamp(zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
     this.desiredPosition.set(
       target.position.x,
       (24 + radiusBoost) * zoomScale,

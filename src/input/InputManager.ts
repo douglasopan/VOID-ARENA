@@ -3,6 +3,7 @@ import * as THREE from 'three';
 export interface InputCallbacks {
   onEscape: () => void;
   onEnter: () => void;
+  onPause?: () => void;
 }
 
 export class InputManager {
@@ -15,6 +16,10 @@ export class InputManager {
   private activeMovePointerId: number | null = null;
   private joystickOrigin = { x: 0, y: 0 };
   private readonly joystickRadius = 54;
+  private pointerMoveRoot: HTMLElement | null = null;
+  private pointerTarget: { x: number; y: number } | null = null;
+  private mouseBoost = false;
+  private activeMouseBoostPointerId: number | null = null;
 
   constructor(
     private readonly callbacks: InputCallbacks,
@@ -43,7 +48,31 @@ export class InputManager {
   }
 
   wantsBoost(): boolean {
-    return this.touchBoost || this.pressed.has('ShiftLeft') || this.pressed.has('ShiftRight') || this.pressed.has('Space');
+    return this.mouseBoost || this.touchBoost || this.pressed.has('ShiftLeft') || this.pressed.has('ShiftRight') || this.pressed.has('Space');
+  }
+
+  bindPointerMoveRoot(root: HTMLElement): void {
+    if (this.pointerMoveRoot === root) {
+      return;
+    }
+
+    this.unbindPointerMoveRoot();
+    this.pointerMoveRoot = root;
+    root.addEventListener('pointerdown', this.handlePointerTargetDown);
+    root.addEventListener('pointermove', this.handlePointerTargetMove);
+    root.addEventListener('pointerup', this.handlePointerTargetEnd);
+    root.addEventListener('pointercancel', this.handlePointerTargetEnd);
+    root.addEventListener('pointerleave', this.handlePointerTargetLeave);
+  }
+
+  getPointerTarget(): { x: number; y: number } | null {
+    return this.pointerTarget;
+  }
+
+  clearPointerTarget(): void {
+    this.pointerTarget = null;
+    this.activeMouseBoostPointerId = null;
+    this.mouseBoost = false;
   }
 
   setTouchControlsVisible(visible: boolean): void {
@@ -51,6 +80,7 @@ export class InputManager {
     if (!visible) {
       this.resetTouchMovement();
       this.touchBoost = false;
+      this.mouseBoost = false;
     }
   }
 
@@ -58,6 +88,7 @@ export class InputManager {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('blur', this.clear);
+    this.unbindPointerMoveRoot();
     this.touchControls?.remove();
   }
 
@@ -65,6 +96,8 @@ export class InputManager {
     this.pressed.clear();
     this.resetTouchMovement();
     this.touchBoost = false;
+    this.mouseBoost = false;
+    this.clearPointerTarget();
   };
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
@@ -106,12 +139,16 @@ export class InputManager {
       <div class="touch-stick-base" aria-label="Move">
         <div class="touch-stick"></div>
       </div>
-      <button class="touch-boost" type="button">BOOST</button>
+      <div class="touch-action-stack">
+        <button class="touch-menu" type="button">MENU</button>
+        <button class="touch-boost" type="button">BOOST</button>
+      </div>
     `;
 
     const base = controls.querySelector<HTMLDivElement>('.touch-stick-base');
     const stick = controls.querySelector<HTMLDivElement>('.touch-stick');
     const boost = controls.querySelector<HTMLButtonElement>('.touch-boost');
+    const menu = controls.querySelector<HTMLButtonElement>('.touch-menu');
     this.touchControls = controls;
     this.touchStick = stick;
 
@@ -154,7 +191,74 @@ export class InputManager {
     };
     boost?.addEventListener('pointerup', endBoost);
     boost?.addEventListener('pointercancel', endBoost);
+    let menuTriggeredAt = 0;
+    const triggerMenu = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      const now = performance.now();
+      if (now - menuTriggeredAt < 240) {
+        return;
+      }
+      menuTriggeredAt = now;
+      this.callbacks.onPause?.();
+    };
+    menu?.addEventListener('pointerdown', triggerMenu);
+    menu?.addEventListener('click', triggerMenu);
     root.appendChild(controls);
+  }
+
+  private readonly handlePointerTargetDown = (event: PointerEvent): void => {
+    if (!event.isPrimary || event.pointerType === 'touch' || this.isTypingTarget(event.target)) {
+      return;
+    }
+
+    this.setPointerTarget(event);
+    if (event.button === 0) {
+      event.preventDefault();
+      this.mouseBoost = true;
+      this.activeMouseBoostPointerId = event.pointerId;
+      this.pointerMoveRoot?.setPointerCapture(event.pointerId);
+    }
+  };
+
+  private readonly handlePointerTargetMove = (event: PointerEvent): void => {
+    if (!event.isPrimary || event.pointerType === 'touch' || this.isTypingTarget(event.target)) {
+      return;
+    }
+
+    this.setPointerTarget(event);
+  };
+
+  private readonly handlePointerTargetEnd = (event: PointerEvent): void => {
+    if (this.activeMouseBoostPointerId === event.pointerId || event.button === 0) {
+      this.activeMouseBoostPointerId = null;
+      this.mouseBoost = false;
+    }
+  };
+
+  private readonly handlePointerTargetLeave = (event: PointerEvent): void => {
+    if (event.pointerType === 'touch') {
+      return;
+    }
+
+    this.pointerTarget = null;
+  };
+
+  private setPointerTarget(event: PointerEvent): void {
+    this.pointerTarget = { x: event.clientX, y: event.clientY };
+  }
+
+  private unbindPointerMoveRoot(): void {
+    if (!this.pointerMoveRoot) {
+      return;
+    }
+
+    this.pointerMoveRoot.removeEventListener('pointerdown', this.handlePointerTargetDown);
+    this.pointerMoveRoot.removeEventListener('pointermove', this.handlePointerTargetMove);
+    this.pointerMoveRoot.removeEventListener('pointerup', this.handlePointerTargetEnd);
+    this.pointerMoveRoot.removeEventListener('pointercancel', this.handlePointerTargetEnd);
+    this.pointerMoveRoot.removeEventListener('pointerleave', this.handlePointerTargetLeave);
+    this.pointerMoveRoot = null;
   }
 
   private updateTouchMovement(clientX: number, clientY: number): void {

@@ -33,7 +33,9 @@ export class MatchSetupMenu {
           ], state.mapSize)}
           ${this.segment(t(language, 'matchMode'), 'matchMode', [
             [MatchMode.Timed, t(language, 'timedMatch')],
-            [MatchMode.LastHoleStanding, t(language, 'lastHoleStanding')]
+            [MatchMode.LastHoleStanding, t(language, 'lastHoleStanding')],
+            [MatchMode.TimeTrial, t(language, 'timeTrialMode')],
+            [MatchMode.Creative, t(language, 'creativeMode')]
           ], state.matchMode)}
           ${this.segment(t(language, 'matchDuration'), 'durationSeconds', [
             ['120', t(language, 'twoMinutes')],
@@ -74,7 +76,7 @@ export class MatchSetupMenu {
             ['cycle', t(language, 'dayNightCycle')]
           ], state.dayNightMode)}
           ${this.segment(t(language, 'camera'), 'cameraZoom', [
-            ['0.82', t(language, 'close')],
+            ['0.58', t(language, 'close')],
             ['1', t(language, 'normal')],
             ['1.18', t(language, 'far')]
           ], String(state.cameraZoom))}
@@ -104,6 +106,10 @@ export class MatchSetupMenu {
             ['18', '18m'],
             ['26', '26m']
           ], String(state.respawnSafeRadius))}
+          ${this.segment(t(language, 'itemRespawn'), 'itemRespawnEnabled', [
+            ['true', t(language, 'on')],
+            ['false', t(language, 'off')]
+          ], String(state.itemRespawnEnabled))}
         </div>
         <div class="button-grid">
           <button class="primary start-match">${t(language, 'startMatch')}</button>
@@ -180,6 +186,9 @@ export class MatchSetupMenu {
             break;
           case 'respawnSafeRadius':
             state.respawnSafeRadius = Number(value);
+            break;
+          case 'itemRespawnEnabled':
+            state.itemRespawnEnabled = value === 'true';
             break;
         }
 

@@ -1,13 +1,15 @@
 import * as THREE from 'three';
+import { POWERUP_SETTINGS } from '../shared/constants';
+import { getPowerUpEngineSettings } from '../admin/EngineConfig';
 import type { PowerUpSpawnDefinition, PowerUpType } from '../shared/types';
 
 export class PowerUp {
   readonly id: string;
-  readonly type: PowerUpType;
-  readonly label: string;
+  type: PowerUpType;
+  label: string;
   readonly radius: number;
-  readonly color: string;
-  readonly durationSeconds: number;
+  color: string;
+  durationSeconds: number;
   readonly respawnDelay: number;
   position: THREE.Vector3;
   active = true;
@@ -41,5 +43,14 @@ export class PowerUp {
     }
     this.active = true;
     this.rotation = 0;
+  }
+
+  changeType(type: PowerUpType): void {
+    const settings = POWERUP_SETTINGS[type];
+    const engineSettings = getPowerUpEngineSettings(type);
+    this.type = type;
+    this.label = settings.label;
+    this.color = settings.color;
+    this.durationSeconds = engineSettings.durationSeconds;
   }
 }

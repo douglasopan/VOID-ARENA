@@ -85,7 +85,7 @@ export class HostMenu {
             ['cycle', t(language, 'dayNightCycle')]
           ], state.dayNightMode)}
           ${this.segment(t(language, 'camera'), 'cameraZoom', [
-            ['0.82', t(language, 'close')],
+            ['0.58', t(language, 'close')],
             ['1', t(language, 'normal')],
             ['1.18', t(language, 'far')]
           ], String(state.cameraZoom))}

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "notes": "Pre-build asset registry. Use the local prebuild admin panel to plan/assign models, textures, and audio before building the game.",
+  "models": {},
+  "textures": {},
+  "audio": {}
+}

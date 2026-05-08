@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import {
   BOOST_STAMINA_DRAIN_PER_SECOND,
-  BOOST_MULTIPLIER,
   MAX_STAMINA,
   PLAYER_RESPAWN_SECONDS,
+  SPAWN_PROTECTION_SECONDS,
   STAMINA_REGEN_DELAY_SECONDS,
   STAMINA_REGEN_PER_SECOND,
   START_RADIUS
 } from '../shared/constants';
+import { getEngineConfig, getPowerUpEngineSettings } from '../admin/EngineConfig';
 import type { HoleRimStyle, PowerUpType } from '../shared/types';
 import { calculateRadius, calculateSpeed } from './BalanceConfig';
 import type { BotDifficulty } from './BotDifficulty';
@@ -36,6 +37,7 @@ export class Player {
   alive = true;
   renderVisible = true;
   respawnAt = 0;
+  spawnProtectionUntil = 0;
   visualY = 0;
   visualScale = 1;
   stamina = MAX_STAMINA;
@@ -67,12 +69,15 @@ export class Player {
   }
 
   getSpeed(boosting = false): number {
+    const config = getEngineConfig().gameplay;
     let speed = calculateSpeed(this.radius);
+    const growth = Math.max(0, this.radius - START_RADIUS);
+    const buffScale = THREE.MathUtils.clamp(1 - growth * 0.055, 0.42, 1);
     if (this.activePowerUps.has('haste')) {
-      speed *= 1.32;
+      speed *= 1 + 0.24 * buffScale;
     }
     if (boosting && this.stamina > 0) {
-      speed *= BOOST_MULTIPLIER;
+      speed *= 1 + (config.boostMultiplier - 1) * buffScale;
     }
     return speed;
   }
@@ -98,22 +103,33 @@ export class Player {
       return;
     }
 
-    this.activePowerUps.set(type, now + durationSeconds);
+    const settings = getPowerUpEngineSettings(type);
+    this.activePowerUps.set(type, now + (durationSeconds || settings.durationSeconds));
   }
 
   updateResources(deltaSeconds: number, wantsBoost: boolean): void {
     this.isBoosting = false;
 
+    if (this.activePowerUps.has('overcharge')) {
+      this.stamina = MAX_STAMINA;
+      if (wantsBoost && this.alive) {
+        this.isBoosting = true;
+        this.staminaRegenDelay = STAMINA_REGEN_DELAY_SECONDS;
+      }
+      return;
+    }
+
     if (wantsBoost && this.stamina > 1 && this.alive) {
+      const config = getEngineConfig().gameplay;
       this.isBoosting = true;
-      this.stamina = Math.max(0, this.stamina - BOOST_STAMINA_DRAIN_PER_SECOND * deltaSeconds);
+      this.stamina = Math.max(0, this.stamina - BOOST_STAMINA_DRAIN_PER_SECOND * config.staminaDrainMultiplier * deltaSeconds);
       this.staminaRegenDelay = STAMINA_REGEN_DELAY_SECONDS;
       return;
     }
 
     this.staminaRegenDelay = Math.max(0, this.staminaRegenDelay - deltaSeconds);
     if (this.staminaRegenDelay <= 0) {
-      this.stamina = Math.min(MAX_STAMINA, this.stamina + STAMINA_REGEN_PER_SECOND * deltaSeconds);
+      this.stamina = Math.min(MAX_STAMINA, this.stamina + STAMINA_REGEN_PER_SECOND * getEngineConfig().gameplay.staminaRegenMultiplier * deltaSeconds);
     }
   }
 
@@ -129,10 +145,23 @@ export class Player {
     return this.activePowerUps.has(type);
   }
 
+  grantSpawnProtection(now: number, durationSeconds = SPAWN_PROTECTION_SECONDS): void {
+    this.spawnProtectionUntil = Math.max(this.spawnProtectionUntil, now + durationSeconds);
+  }
+
+  isSpawnProtected(now: number): boolean {
+    return this.alive && now < this.spawnProtectionUntil;
+  }
+
+  spawnProtectionRemaining(now: number): number {
+    return Math.max(0, this.spawnProtectionUntil - now);
+  }
+
   markSwallowed(attackerId: string, now: number): void {
     this.alive = false;
     this.renderVisible = true;
     this.respawnAt = now + PLAYER_RESPAWN_SECONDS;
+    this.spawnProtectionUntil = 0;
     this.velocity.set(0, 0, 0);
     this.swallowAnimation = {
       attackerId,

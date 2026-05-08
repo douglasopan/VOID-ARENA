@@ -1,0 +1,42 @@
+{
+  "en": {
+    "naturalDisasterWarningTitle": "Event alert",
+    "naturalDisasterWarningIncoming": "{event} in {seconds}s",
+    "naturalDisasterStarted": "Event started: {event}"
+  },
+  "es": {
+    "naturalDisasterWarningTitle": "Alerta de evento",
+    "naturalDisasterWarningIncoming": "{event} en {seconds}s",
+    "naturalDisasterStarted": "Evento iniciado: {event}"
+  },
+  "pt": {
+    "naturalDisasterWarningTitle": "Alerta de evento",
+    "naturalDisasterWarningIncoming": "{event} em {seconds}s",
+    "naturalDisasterStarted": "Evento iniciado: {event}"
+  },
+  "fr": {
+    "naturalDisasterWarningTitle": "Alerte evenement",
+    "naturalDisasterWarningIncoming": "{event} dans {seconds}s",
+    "naturalDisasterStarted": "Evenement lance : {event}"
+  },
+  "de": {
+    "naturalDisasterWarningTitle": "Event-Warnung",
+    "naturalDisasterWarningIncoming": "{event} in {seconds}s",
+    "naturalDisasterStarted": "Event gestartet: {event}"
+  },
+  "ru": {
+    "naturalDisasterWarningTitle": "Предупреждение о событии",
+    "naturalDisasterWarningIncoming": "{event} через {seconds} с",
+    "naturalDisasterStarted": "Событие началось: {event}"
+  },
+  "ja": {
+    "naturalDisasterWarningTitle": "イベント警報",
+    "naturalDisasterWarningIncoming": "{event}まで{seconds}秒",
+    "naturalDisasterStarted": "イベント開始: {event}"
+  },
+  "zh": {
+    "naturalDisasterWarningTitle": "事件警报",
+    "naturalDisasterWarningIncoming": "{event}还有{seconds}秒",
+    "naturalDisasterStarted": "事件开始：{event}"
+  }
+}
