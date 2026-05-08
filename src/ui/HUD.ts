@@ -21,6 +21,12 @@ interface HudCallbacks {
   onChatVisibilityChange?: (visible: boolean) => void;
 }
 
+export interface HudDisasterWarning {
+  title: string;
+  message: string;
+  secondsLabel: string;
+}
+
 const DISPLAY_STORAGE_KEY = 'void-arena-hud-display-v1';
 const DEFAULT_DISPLAY_SETTINGS: HudDisplaySettings = {
   stats: true,
@@ -45,6 +51,8 @@ export class HUD {
   private playerStats: HTMLDivElement | null = null;
   private leaderboard: HTMLDivElement | null = null;
   private powerUpTray: HTMLDivElement | null = null;
+  private disasterWarning: HTMLDivElement | null = null;
+  private disasterWarningLastText = '';
   private callbacks: HudCallbacks | null = null;
   private displaySettings = this.loadDisplaySettings();
   private language: LanguageCode = 'en';
@@ -69,6 +77,11 @@ export class HUD {
         <div class="leaderboard-list"></div>
       </section>
       <section class="powerup-tray" data-display="powerups" aria-label="${t(this.language, 'activePowerups')}"></section>
+      <section class="disaster-warning hidden" role="status" aria-live="polite">
+        <span class="disaster-warning-title"></span>
+        <strong class="disaster-warning-message"></strong>
+        <span class="disaster-warning-count"></span>
+      </section>
       <section class="zoom-controls" data-display="zoom" aria-label="${t(this.language, 'cameraZoom')}">
         <button class="zoom-out" type="button" aria-label="${t(this.language, 'zoomOut')}">-</button>
         <button class="zoom-in" type="button" aria-label="${t(this.language, 'zoomIn')}">+</button>
@@ -80,6 +93,7 @@ export class HUD {
     this.playerStats = element.querySelector('.player-stats');
     this.leaderboard = element.querySelector('.leaderboard-list');
     this.powerUpTray = element.querySelector('.powerup-tray');
+    this.disasterWarning = element.querySelector('.disaster-warning');
     element.querySelector<HTMLButtonElement>('.zoom-in')?.addEventListener('click', () => this.callbacks?.onZoomIn());
     element.querySelector<HTMLButtonElement>('.zoom-out')?.addEventListener('click', () => this.callbacks?.onZoomOut());
     element.addEventListener('pointerup', (event) => this.handleHudPointer(event));
@@ -105,7 +119,8 @@ export class HUD {
     player: Player | undefined,
     leaderboardEntries: LeaderboardEntry[],
     timer: MatchTimer | null,
-    remainingPlayers: number
+    remainingPlayers: number,
+    disasterWarning: HudDisasterWarning | null = null
   ): void {
     if (!this.element) {
       this.show(this.callbacks ?? undefined);
@@ -143,6 +158,7 @@ export class HUD {
     }
 
     this.updatePowerUpTray(player);
+    this.updateDisasterWarning(disasterWarning);
   }
 
   hide(): void {
@@ -151,6 +167,8 @@ export class HUD {
     this.playerStats = null;
     this.leaderboard = null;
     this.powerUpTray = null;
+    this.disasterWarning = null;
+    this.disasterWarningLastText = '';
   }
 
   getDisplaySetting(key: HudDisplayKey): boolean {
@@ -202,6 +220,32 @@ export class HUD {
       .join('');
     this.powerUpTray.classList.toggle('empty', active.length === 0);
     this.applyDisplaySettings();
+  }
+
+  private updateDisasterWarning(warning: HudDisasterWarning | null): void {
+    if (!this.disasterWarning) {
+      return;
+    }
+
+    const visible = Boolean(warning);
+    this.disasterWarning.classList.toggle('hidden', !visible);
+    if (!warning) {
+      this.disasterWarningLastText = '';
+      return;
+    }
+
+    const signature = `${warning.title}|${warning.message}|${warning.secondsLabel}`;
+    if (signature === this.disasterWarningLastText) {
+      return;
+    }
+    this.disasterWarningLastText = signature;
+
+    const title = this.disasterWarning.querySelector('.disaster-warning-title');
+    const message = this.disasterWarning.querySelector('.disaster-warning-message');
+    const count = this.disasterWarning.querySelector('.disaster-warning-count');
+    if (title) title.textContent = warning.title;
+    if (message) message.textContent = warning.message;
+    if (count) count.textContent = warning.secondsLabel;
   }
 
   private applyDisplaySettings(): void {

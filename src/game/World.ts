@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import {
+  ARENA_CORNER_CUT_RATIO,
+  ARENA_EDGE_OVERHANG_RATIO,
+  ARENA_MIN_CORNER_CUT
+} from '../shared/constants';
 import type { MapData } from '../shared/types';
 import type { RoutePoint, TrafficRoute, TrafficSignalDefinition } from '../shared/types';
 import { PlayerManager } from './PlayerManager';
@@ -230,9 +235,23 @@ export class World {
   }
 
   clampToArena(position: THREE.Vector3, radius: number): void {
-    const limit = this.halfExtent - radius * 1.1;
-    position.x = THREE.MathUtils.clamp(position.x, -limit, limit);
-    position.z = THREE.MathUtils.clamp(position.z, -limit, limit);
+    const inset = Math.max(0, radius * (1 - ARENA_EDGE_OVERHANG_RATIO));
+    const axisLimit = Math.max(0, this.halfExtent - inset);
+    position.x = THREE.MathUtils.clamp(position.x, -axisLimit, axisLimit);
+    position.z = THREE.MathUtils.clamp(position.z, -axisLimit, axisLimit);
+
+    const cornerCut = this.arenaCornerCut();
+    const diagonalLimit = Math.max(0, this.halfExtent * 2 - cornerCut - inset * Math.SQRT2);
+    const absX = Math.abs(position.x);
+    const absZ = Math.abs(position.z);
+    const cornerAmount = absX + absZ;
+    if (cornerAmount <= diagonalLimit) {
+      return;
+    }
+
+    const correction = (cornerAmount - diagonalLimit) * 0.5;
+    position.x = Math.sign(position.x) * Math.max(0, absX - correction);
+    position.z = Math.sign(position.z) * Math.max(0, absZ - correction);
   }
 
   getSpawnPoint(index: number): THREE.Vector3 {
@@ -267,6 +286,10 @@ export class World {
       grouped.set(object.routeId, objects);
     }
     return grouped;
+  }
+
+  private arenaCornerCut(): number {
+    return Math.min(this.halfExtent * 0.28, Math.max(ARENA_MIN_CORNER_CUT, this.halfExtent * ARENA_CORNER_CUT_RATIO));
   }
 
   private desiredTrafficSpeed(object: WorldObject, route: TrafficRoute, routeObjects: WorldObject[]): number {

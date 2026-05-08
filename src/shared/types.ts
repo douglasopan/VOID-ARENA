@@ -3,6 +3,7 @@ import type { BotDifficultyMix } from '../game/BotDifficulty';
 
 export type MapSize = 'small' | 'medium' | 'large' | 'huge';
 export type GraphicsQuality = 'performance' | 'balanced' | 'quality';
+export type DayNightMode = 'day' | 'night' | 'cycle';
 export type LanguageCode = 'en' | 'es' | 'pt' | 'fr' | 'de' | 'ru' | 'ja' | 'zh';
 export type CityObjectCategory =
   | 'building'

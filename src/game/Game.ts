@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { AudioManager } from '../audio/AudioManager';
 import { detectLanguage, powerUpLabelKey, t, tf, type TranslationKey } from '../i18n/I18n';
 import { BOT_NAMES, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
-import type { ChatMessage, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary } from '../shared/types';
+import type { ChatMessage, DayNightMode, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary } from '../shared/types';
 import { InputManager } from '../input/InputManager';
 import { NetworkClient } from '../network/NetworkClient';
 import { PlayerProfileStore } from '../player/PlayerProfileStore';
@@ -11,7 +11,7 @@ import { ChatUI } from '../ui/ChatUI';
 import { EndScreen } from '../ui/EndScreen';
 import { FindGamesMenu } from '../ui/FindGamesMenu';
 import { HostMenu } from '../ui/HostMenu';
-import { HUD } from '../ui/HUD';
+import { HUD, type HudDisasterWarning } from '../ui/HUD';
 import { MainMenu } from '../ui/MainMenu';
 import { MatchSetupMenu } from '../ui/MatchSetupMenu';
 import { PauseMenu } from '../ui/PauseMenu';
@@ -35,6 +35,7 @@ import { ProceduralMapGenerator } from './ProceduralMapGenerator';
 import { RespawnSystem } from './RespawnSystem';
 import { SwallowSystem, type SwallowEvent } from './SwallowSystem';
 import { World } from './World';
+import type { WorldObject } from './WorldObject';
 import type { RoomCreateOptions, ServerPlayerState, ServerRoomSummary } from '../../server/shared/serverTypes';
 
 type GameState = 'booting' | 'menu' | 'setup' | 'playing' | 'paused' | 'ended';
@@ -265,7 +266,7 @@ export class Game {
     this.audioManager.startMenuMusic();
     this.hideMenus();
     this.soloPresetMenu.show({
-      onPreset: (preset) => this.startMatch(this.createSoloPresetConfig(playerName, preset)),
+      onPreset: (preset, dayNightMode) => this.startMatch(this.createSoloPresetConfig(playerName, preset, dayNightMode)),
       onCustom: () => this.showCustomSoloSetup(playerName),
       onBack: () => this.showMainMenu()
     }, this.language);
@@ -287,13 +288,14 @@ export class Game {
     }, this.language);
   }
 
-  private createSoloPresetConfig(playerName: string, preset: SoloPreset): MatchConfig {
+  private createSoloPresetConfig(playerName: string, preset: SoloPreset, dayNightMode: DayNightMode = 'cycle'): MatchConfig {
     const config = {
       ...createDefaultMatchConfig(playerName),
       holeRimColor: this.holeRimColor,
       holeRimStyle: this.holeRimStyle,
       cameraZoom: this.cameraZoom,
-      deathCameraEnabled: this.deathCameraEnabled
+      deathCameraEnabled: this.deathCameraEnabled,
+      dayNightMode
     };
 
     switch (preset) {
@@ -397,6 +399,7 @@ export class Game {
         durationSeconds: config.durationSeconds,
         enableChat: config.enableChat,
         enableAds: config.enableAds,
+        dayNightMode: config.dayNightMode,
         objectDensityMultiplier: config.objectDensityMultiplier,
         powerUpCount: config.powerUpCount,
         respawnSafeRadius: config.respawnSafeRadius,
@@ -443,6 +446,7 @@ export class Game {
         durationSeconds: room.durationSeconds,
         enableAds: room.enableAds,
         enableChat: room.enableChat,
+        dayNightMode: room.dayNightMode ?? 'cycle',
         multiplayer: true,
         roomId: room.id,
         roomName: room.roomName,
@@ -516,6 +520,7 @@ export class Game {
     }
 
     this.sceneManager.loadWorld(this.world, this.language);
+    this.sceneManager.setDayNightMode(preparedConfig.dayNightMode);
     this.swallowSystem = new SwallowSystem(this.world, this.playerManager, this.currentConfig);
     this.respawnSystem = new RespawnSystem(this.world, this.playerManager, this.currentConfig);
     this.timer =
@@ -583,7 +588,9 @@ export class Game {
     }
 
     this.botManager.update(deltaSeconds, this.world, this.playerManager);
-    this.applyPowerUpEffects(deltaSeconds, now);
+    if (this.applyPowerUpEffects(deltaSeconds, now)) {
+      this.world.rebuildObjectGrid();
+    }
     this.collectPowerUps(now);
 
     const swallowEvents = this.swallowSystem.update(deltaSeconds, now);
@@ -662,10 +669,11 @@ export class Game {
     }
   }
 
-  private applyPowerUpEffects(deltaSeconds: number, now: number): void {
-    if (!this.world) return;
+  private applyPowerUpEffects(deltaSeconds: number, now: number): boolean {
+    if (!this.world) return false;
     const shrinkers = this.playerManager.alivePlayers().filter((player) => player.hasPowerUp('shrink'));
     const magnets = this.playerManager.alivePlayers().filter((player) => player.hasPowerUp('magnet'));
+    let appliedPhysics = false;
 
     for (const object of this.world.objects) {
       if (!object.active || object.swallowAnimation) continue;
@@ -692,13 +700,57 @@ export class Game {
         const distance = Math.max(0.1, direction.length());
         if (distance > range) continue;
         direction.normalize();
-        const pull = MAGNET_PULL_STRENGTH * (1 - distance / range) * deltaSeconds;
-        object.position.x += direction.x * pull;
-        object.position.z += direction.z * pull;
+        this.applyMagnetPhysics(object, direction, distance, range, player.radius, deltaSeconds);
+        appliedPhysics = true;
       }
     }
 
     void now;
+    return appliedPhysics;
+  }
+
+  private applyMagnetPhysics(
+    object: WorldObject,
+    direction: THREE.Vector3,
+    distance: number,
+    range: number,
+    playerRadius: number,
+    deltaSeconds: number
+  ): void {
+    const pullFactor = Math.max(0, 1 - distance / range);
+    const massDamping = 1 / Math.max(1, Math.sqrt(object.mass) * 0.28);
+    const categoryBoost = object.category === 'building'
+      ? 0.46
+      : object.category === 'traffic'
+        ? 0.92
+        : object.category === 'pedestrian'
+          ? 1.36
+          : 1.08;
+    const acceleration = MAGNET_PULL_STRENGTH * pullFactor * categoryBoost * massDamping;
+    const linear = direction.clone().multiplyScalar(acceleration * deltaSeconds);
+    linear.y = Math.min(1.3, pullFactor * deltaSeconds * (object.category === 'pedestrian' ? 3.4 : 1.2));
+
+    const side = new THREE.Vector3(-direction.z, 0, direction.x);
+    const angularScale = acceleration * deltaSeconds * (object.category === 'building' ? 0.08 : 0.36);
+    const angular = new THREE.Vector3(
+      direction.z * angularScale,
+      side.dot(object.physicsVelocity) * 0.012,
+      -direction.x * angularScale
+    );
+    const tallness = object.size.y / Math.max(0.35, Math.min(object.size.x, object.size.z));
+    const topple = pullFactor > 0.2 && (
+      object.category === 'pedestrian' ||
+      object.kind === 'tree' ||
+      object.kind === 'post' ||
+      object.kind === 'trafficLight' ||
+      object.category === 'traffic' && pullFactor > 0.55 ||
+      object.category === 'building' && playerRadius > object.boundingRadius * 0.85 && tallness > 1.25
+    );
+    const fracture = object.category === 'building' && playerRadius > object.boundingRadius
+      ? pullFactor * deltaSeconds * 0.16
+      : 0;
+
+    object.applyPhysicsImpulse({ linear, angular, topple, fracture });
   }
 
   private maybeAnnounceSize(playerId: string): void {
@@ -725,8 +777,22 @@ export class Game {
       local,
       this.playerManager.getLeaderboard(mode),
       this.timer,
-      this.playerManager.alivePlayers().length
+      this.playerManager.alivePlayers().length,
+      this.createDisasterWarning()
     );
+  }
+
+  private createDisasterWarning(): HudDisasterWarning | null {
+    if (this.currentDisasterSnapshot.warningType === 'clear' || this.currentDisasterSnapshot.warningSeconds <= 0) {
+      return null;
+    }
+
+    const seconds = Math.max(1, Math.ceil(this.currentDisasterSnapshot.warningSeconds));
+    return {
+      title: t(this.language, 'naturalDisasterWarningTitle'),
+      message: t(this.language, this.naturalDisasterNameKey(this.currentDisasterSnapshot.warningType)),
+      secondsLabel: tf(this.language, 'naturalDisasterWarningSeconds', { seconds })
+    };
   }
 
   private checkMatchEnd(): void {
@@ -1297,6 +1363,7 @@ export class Game {
     this.menuWorld = new World(mapData);
     this.sceneManager.setGraphicsQuality('balanced');
     this.sceneManager.loadWorld(this.menuWorld, this.language);
+    this.sceneManager.setDayNightMode('cycle');
   }
 
   private showDeathNotice(attackerName: string): void {

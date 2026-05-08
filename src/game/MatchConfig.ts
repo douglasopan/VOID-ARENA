@@ -1,5 +1,5 @@
 import { MATCH_DURATION_SECONDS } from '../shared/constants';
-import type { GraphicsQuality, HoleRimStyle, MapSize } from '../shared/types';
+import type { DayNightMode, GraphicsQuality, HoleRimStyle, MapSize } from '../shared/types';
 import type { BotDifficultyMix } from './BotDifficulty';
 import { MatchMode } from './MatchMode';
 
@@ -13,6 +13,7 @@ export interface MatchConfig {
   enableAds: boolean;
   enableChat: boolean;
   graphicsQuality: GraphicsQuality;
+  dayNightMode: DayNightMode;
   cameraZoom: number;
   deathCameraEnabled: boolean;
   holeRimColor: string;
@@ -39,6 +40,7 @@ export function createDefaultMatchConfig(playerName = ''): MatchConfig {
     enableAds: true,
     enableChat: true,
     graphicsQuality: 'balanced',
+    dayNightMode: 'cycle',
     cameraZoom: 1,
     deathCameraEnabled: true,
     holeRimColor: '#5eead4',

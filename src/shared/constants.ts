@@ -15,6 +15,9 @@ export const STAMINA_REGEN_PER_SECOND = 22;
 export const STAMINA_REGEN_DELAY_SECONDS = 0.75;
 export const MAGNET_PULL_STRENGTH = 22;
 export const POWERUP_RESPAWN_SECONDS = 18;
+export const ARENA_EDGE_OVERHANG_RATIO = 0.1;
+export const ARENA_CORNER_CUT_RATIO = 0.12;
+export const ARENA_MIN_CORNER_CUT = 7;
 
 export const MAP_SIZE_SETTINGS = {
   small: {

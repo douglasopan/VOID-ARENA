@@ -21,6 +21,7 @@ export interface ObjectPhysicsImpulse {
   linear?: THREE.Vector3;
   angular?: THREE.Vector3;
   topple?: boolean;
+  fracture?: number;
 }
 
 export class WorldObject {
@@ -54,6 +55,7 @@ export class WorldObject {
   swallowAnimation: ObjectSwallowAnimation | null = null;
   physicsAwake = false;
   physicsToppled = false;
+  fractureLevel = 0;
   readonly physicsVelocity = new THREE.Vector3();
   readonly physicsAngularVelocity = new THREE.Vector3();
 
@@ -124,6 +126,7 @@ export class WorldObject {
 
     if (impulse.linear) {
       this.physicsVelocity.add(impulse.linear);
+      this.addRollingAngularImpulse(impulse.linear);
     }
     if (impulse.angular) {
       this.physicsAngularVelocity.add(impulse.angular);
@@ -131,7 +134,22 @@ export class WorldObject {
     if (impulse.topple) {
       this.physicsToppled = true;
     }
+    if (impulse.fracture) {
+      this.fracture(impulse.fracture);
+    }
     this.physicsAwake = true;
+  }
+
+  fracture(amount: number): void {
+    if (this.category !== 'building') {
+      return;
+    }
+
+    this.fractureLevel = THREE.MathUtils.clamp(this.fractureLevel + Math.max(0, amount), 0, 1);
+    if (this.fractureLevel > 0.18) {
+      this.physicsToppled = true;
+      this.physicsAwake = true;
+    }
   }
 
   updateNaturalPhysics(deltaSeconds: number, halfExtent: number): void {
@@ -144,10 +162,18 @@ export class WorldObject {
     const groundY = this.physicsToppled
       ? Math.max(0.12, this.homePosition.y - Math.min(this.size.y * 0.36, Math.max(0.18, this.size.y * 0.28)))
       : this.homePosition.y;
+    const restitution = this.category === 'traffic'
+      ? 0.22
+      : this.category === 'building'
+        ? 0.06
+        : this.category === 'pedestrian'
+          ? 0.12
+          : 0.18;
 
     for (let i = 0; i < stepCount; i += 1) {
       this.physicsVelocity.y -= 9.8 * step;
       this.position.addScaledVector(this.physicsVelocity, step);
+      this.addRollingAngularImpulse(this.physicsVelocity.clone().multiplyScalar(step * 0.7));
       this.rotation.x += this.physicsAngularVelocity.x * step;
       this.rotation.y += this.physicsAngularVelocity.y * step;
       this.rotation.z += this.physicsAngularVelocity.z * step;
@@ -155,8 +181,8 @@ export class WorldObject {
       if (this.position.y <= groundY) {
         this.position.y = groundY;
         if (this.physicsVelocity.y < -1.2) {
-          this.physicsVelocity.y *= -0.18;
-          this.physicsAngularVelocity.multiplyScalar(0.82);
+          this.physicsVelocity.y *= -restitution;
+          this.physicsAngularVelocity.multiplyScalar(0.9);
         } else {
           this.physicsVelocity.y = 0;
         }
@@ -166,15 +192,18 @@ export class WorldObject {
     const limit = halfExtent - Math.max(1.2, this.boundingRadius);
     this.position.x = THREE.MathUtils.clamp(this.position.x, -limit, limit);
     this.position.z = THREE.MathUtils.clamp(this.position.z, -limit, limit);
-    this.physicsVelocity.x *= Math.max(0, 1 - deltaSeconds * 3.2);
-    this.physicsVelocity.z *= Math.max(0, 1 - deltaSeconds * 3.2);
-    this.physicsAngularVelocity.multiplyScalar(Math.max(0, 1 - deltaSeconds * 2.2));
+    const groundFriction = this.physicsToppled
+      ? this.category === 'building' ? 2.15 : 1.45
+      : this.category === 'traffic' ? 1.05 : 2.75;
+    this.physicsVelocity.x *= Math.max(0, 1 - deltaSeconds * groundFriction);
+    this.physicsVelocity.z *= Math.max(0, 1 - deltaSeconds * groundFriction);
+    this.physicsAngularVelocity.multiplyScalar(Math.max(0, 1 - deltaSeconds * (this.physicsToppled ? 1.15 : 2.05)));
 
     if (!this.physicsToppled) {
       this.rotation.x = THREE.MathUtils.lerp(this.rotation.x, 0, Math.min(1, deltaSeconds * 2.5));
       this.rotation.z = THREE.MathUtils.lerp(this.rotation.z, 0, Math.min(1, deltaSeconds * 2.5));
     } else {
-      const maxTilt = this.category === 'building' ? 1.18 : 1.48;
+      const maxTilt = this.category === 'building' ? 1.42 : 1.58;
       this.rotation.x = THREE.MathUtils.clamp(this.rotation.x, -maxTilt, maxTilt);
       this.rotation.z = THREE.MathUtils.clamp(this.rotation.z, -maxTilt, maxTilt);
     }
@@ -274,7 +303,20 @@ export class WorldObject {
     this.temporaryScale = 1;
     this.physicsAwake = false;
     this.physicsToppled = false;
+    this.fractureLevel = 0;
     this.physicsVelocity.set(0, 0, 0);
     this.physicsAngularVelocity.set(0, 0, 0);
+  }
+
+  private addRollingAngularImpulse(linear: THREE.Vector3): void {
+    const horizontalSpeed = Math.hypot(linear.x, linear.z);
+    if (horizontalSpeed < 0.0001) {
+      return;
+    }
+
+    const rollRadius = Math.max(0.35, Math.min(this.size.x, this.size.z) * 0.5);
+    const rollScale = this.category === 'building' ? 0.12 : this.category === 'traffic' ? 0.28 : 0.46;
+    this.physicsAngularVelocity.x += (linear.z / rollRadius) * rollScale;
+    this.physicsAngularVelocity.z -= (linear.x / rollRadius) * rollScale;
   }
 }

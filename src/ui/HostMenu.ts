@@ -3,7 +3,7 @@ import { createDefaultMatchConfig } from '../game/MatchConfig';
 import { MatchMode } from '../game/MatchMode';
 import type { BotDifficultyMix } from '../game/BotDifficulty';
 import { t } from '../i18n/I18n';
-import type { GraphicsQuality, LanguageCode, MapSize } from '../shared/types';
+import type { DayNightMode, GraphicsQuality, LanguageCode, MapSize } from '../shared/types';
 
 export interface HostCallbacks {
   onHost: (config: MatchConfig) => void;
@@ -79,6 +79,11 @@ export class HostMenu {
             ['balanced', t(language, 'balanced')],
             ['quality', t(language, 'quality')]
           ], state.graphicsQuality)}
+          ${this.segment(t(language, 'dayNightMode'), 'dayNightMode', [
+            ['day', t(language, 'dayOnly')],
+            ['night', t(language, 'nightOnly')],
+            ['cycle', t(language, 'dayNightCycle')]
+          ], state.dayNightMode)}
           ${this.segment(t(language, 'camera'), 'cameraZoom', [
             ['0.82', t(language, 'close')],
             ['1', t(language, 'normal')],
@@ -176,6 +181,9 @@ export class HostMenu {
             break;
           case 'graphicsQuality':
             state.graphicsQuality = value as GraphicsQuality;
+            break;
+          case 'dayNightMode':
+            state.dayNightMode = value as DayNightMode;
             break;
           case 'cameraZoom':
             state.cameraZoom = Number(value);

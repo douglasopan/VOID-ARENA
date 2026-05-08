@@ -3,7 +3,7 @@ import type { Player } from '../game/Player';
 import type { PlayerManager } from '../game/PlayerManager';
 import type { World } from '../game/World';
 import type { WorldObject } from '../game/WorldObject';
-import type { GraphicsQuality } from '../shared/types';
+import type { DayNightMode, GraphicsQuality } from '../shared/types';
 import type { LanguageCode } from '../shared/types';
 import { powerUpLabelKey, t } from '../i18n/I18n';
 import { trafficSignalState, type TrafficSignalState } from '../game/TrafficSignalSystem';
@@ -69,6 +69,7 @@ export class SceneManager {
   private sunLight!: THREE.DirectionalLight;
   private skyElapsed = 0;
   private dayNightElapsed = 0;
+  private dayNightMode: DayNightMode = 'cycle';
   private weatherElapsed = 0;
   private lightSelectionAccumulator = 999;
   private adaptivePixelRatioScale = 1;
@@ -158,6 +159,12 @@ export class SceneManager {
     this.renderer.shadowMap.type = quality === 'quality' ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
     this.lightSelectionAccumulator = 999;
     this.resize();
+  }
+
+  setDayNightMode(mode: DayNightMode): void {
+    this.dayNightMode = mode;
+    this.lightSelectionAccumulator = 999;
+    this.updateDayNight(0);
   }
 
   reduceRenderingCost(): boolean {
@@ -337,11 +344,22 @@ export class SceneManager {
     this.lightSelectionAccumulator += deltaSeconds;
     const cycleSeconds = 150;
     const phase = (this.dayNightElapsed / cycleSeconds + 0.18) % 1;
-    const angle = phase * Math.PI * 2;
+    const cycleAngle = phase * Math.PI * 2;
+    const angle = this.dayNightMode === 'day'
+      ? Math.PI * 0.42
+      : this.dayNightMode === 'night'
+        ? Math.PI * 1.5
+        : cycleAngle;
     const sunHeight = Math.sin(angle);
-    const dayFactor = THREE.MathUtils.smoothstep(sunHeight, -0.14, 0.42);
+    const dayFactor = this.dayNightMode === 'day'
+      ? 1
+      : this.dayNightMode === 'night'
+        ? 0
+        : THREE.MathUtils.smoothstep(sunHeight, -0.14, 0.42);
     const nightFactor = 1 - dayFactor;
-    const twilightFactor = Math.max(0, 1 - Math.abs(sunHeight) * 3.1) * 0.32;
+    const twilightFactor = this.dayNightMode === 'cycle'
+      ? Math.max(0, 1 - Math.abs(sunHeight) * 3.1) * 0.32
+      : 0;
 
     const daySky = new THREE.Color('#8bc7df');
     const twilightSky = new THREE.Color('#624761');
@@ -628,6 +646,7 @@ export class SceneManager {
       mesh.position.copy(object.position);
       mesh.rotation.copy(object.rotation);
       mesh.scale.setScalar(object.swallowScale * object.temporaryScale);
+      this.objectFactory.updateWorldObjectVisual(mesh, object);
     }
 
     for (const powerUp of world.powerUps) {
@@ -684,9 +703,9 @@ export class SceneManager {
       return 5;
     }
     if (this.currentGraphicsQuality === 'quality') {
-      return 30;
+      return 34;
     }
-    return 14;
+    return 16;
   }
 
   private applyRendererPixelRatio(): void {

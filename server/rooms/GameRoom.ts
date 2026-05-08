@@ -62,6 +62,7 @@ export class GameRoom {
       durationSeconds: this.options.durationSeconds,
       enableChat: this.options.enableChat,
       enableAds: this.options.enableAds,
+      dayNightMode: this.options.dayNightMode,
       objectDensityMultiplier: this.options.objectDensityMultiplier,
       powerUpCount: this.options.powerUpCount,
       respawnSafeRadius: this.options.respawnSafeRadius,

@@ -1,4 +1,4 @@
-import type { HoleRimStyle, MapSize } from '../../src/shared/types';
+import type { DayNightMode, HoleRimStyle, MapSize } from '../../src/shared/types';
 import type { BotDifficultyMix } from '../../src/game/BotDifficulty';
 import { MatchMode } from '../../src/game/MatchMode';
 
@@ -17,6 +17,7 @@ export interface RoomCreateOptions {
   durationSeconds: number;
   enableChat: boolean;
   enableAds: boolean;
+  dayNightMode: DayNightMode;
   objectDensityMultiplier: number;
   powerUpCount: number;
   respawnSafeRadius: number;
@@ -35,6 +36,7 @@ export interface ServerRoomSummary {
   durationSeconds: number;
   enableChat: boolean;
   enableAds: boolean;
+  dayNightMode: DayNightMode;
   objectDensityMultiplier: number;
   powerUpCount: number;
   respawnSafeRadius: number;

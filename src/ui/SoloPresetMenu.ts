@@ -1,10 +1,10 @@
 import { t } from '../i18n/I18n';
-import type { LanguageCode } from '../shared/types';
+import type { DayNightMode, LanguageCode } from '../shared/types';
 
 export type SoloPreset = 'easy' | 'medium' | 'hard';
 
 export interface SoloPresetCallbacks {
-  onPreset: (preset: SoloPreset) => void;
+  onPreset: (preset: SoloPreset, dayNightMode: DayNightMode) => void;
   onCustom: () => void;
   onBack: () => void;
 }
@@ -16,12 +16,21 @@ export class SoloPresetMenu {
 
   show(callbacks: SoloPresetCallbacks, language: LanguageCode): void {
     this.hide();
+    let dayNightMode: DayNightMode = 'cycle';
     const element = document.createElement('div');
     element.className = 'screen';
     element.innerHTML = `
       <section class="menu-panel preset-panel">
         <h2>${t(language, 'soloPresetTitle')}</h2>
         <p class="subtitle">${t(language, 'soloPresetSubtitle')}</p>
+        <div class="field preset-day-night">
+          <label>${t(language, 'dayNightMode')}</label>
+          <div class="segmented">
+            <button type="button" data-day-night="day">${t(language, 'dayOnly')}</button>
+            <button type="button" data-day-night="night">${t(language, 'nightOnly')}</button>
+            <button type="button" data-day-night="cycle" class="active">${t(language, 'dayNightCycle')}</button>
+          </div>
+        </div>
         <div class="preset-grid">
           ${this.presetButton('easy', t(language, 'presetEasy'), t(language, 'presetEasyDesc'))}
           ${this.presetButton('medium', t(language, 'presetMedium'), t(language, 'presetMediumDesc'))}
@@ -37,11 +46,18 @@ export class SoloPresetMenu {
       </section>
     `;
 
+    element.querySelectorAll<HTMLButtonElement>('[data-day-night]').forEach((button) => {
+      button.addEventListener('click', () => {
+        dayNightMode = (button.dataset.dayNight ?? 'cycle') as DayNightMode;
+        button.closest('.segmented')?.querySelectorAll('button').forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+      });
+    });
     element.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach((button) => {
       button.addEventListener('click', () => {
         const preset = button.dataset.preset as SoloPreset | undefined;
         if (preset) {
-          callbacks.onPreset(preset);
+          callbacks.onPreset(preset, dayNightMode);
         }
       });
     });

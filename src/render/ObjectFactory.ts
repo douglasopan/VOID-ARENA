@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import {
+  ARENA_CORNER_CUT_RATIO,
+  ARENA_MIN_CORNER_CUT
+} from '../shared/constants';
 import type { RoadSegment, SurfaceSegment } from '../shared/types';
 import type { PowerUp } from '../game/PowerUp';
 import type { WorldObject } from '../game/WorldObject';
@@ -8,7 +12,7 @@ export class ObjectFactory {
   private readonly glowTextureCache = new Map<string, THREE.CanvasTexture>();
 
   createGround(halfExtent: number): THREE.Mesh {
-    const geometry = new THREE.PlaneGeometry(halfExtent * 2, halfExtent * 2, 1, 1);
+    const geometry = this.createArenaShapeGeometry(halfExtent);
     const material = this.createTerrainCutoutMaterial('#263228', 0.95, 0);
     const ground = new THREE.Mesh(geometry, material);
     ground.position.y = 0.005;
@@ -27,22 +31,23 @@ export class ObjectFactory {
     water.rotation.x = -Math.PI / 2;
     water.position.y = -0.1;
 
-    const shoreMaterial = this.createTerrainCutoutMaterial('#8aa79d', 0.88, 0.02);
-    const edgeThickness = 2.6;
-    const length = halfExtent * 2 + edgeThickness;
-    const horizontal = new THREE.BoxGeometry(length, 0.08, edgeThickness);
-    const vertical = new THREE.BoxGeometry(edgeThickness, 0.08, length);
+      const shoreMaterial = this.createTerrainCutoutMaterial('#8aa79d', 0.88, 0.02);
+      const edgeThickness = 2.6;
+    for (const segment of this.createArenaEdgeSegments(halfExtent)) {
+      const shore = new THREE.Mesh(
+        new THREE.BoxGeometry(edgeThickness, 0.08, segment.length + edgeThickness * 0.8),
+        shoreMaterial
+      );
+      shore.position.set(
+        segment.centerX + segment.outwardX * edgeThickness * 0.45,
+        0.045,
+        segment.centerZ + segment.outwardZ * edgeThickness * 0.45
+      );
+      shore.rotation.y = segment.rotationY;
+      group.add(shore);
+    }
 
-    const north = new THREE.Mesh(horizontal, shoreMaterial);
-    north.position.set(0, 0.045, -halfExtent - edgeThickness * 0.45);
-    const south = north.clone();
-    south.position.z = halfExtent + edgeThickness * 0.45;
-    const west = new THREE.Mesh(vertical, shoreMaterial);
-    west.position.set(-halfExtent - edgeThickness * 0.45, 0.045, 0);
-    const east = west.clone();
-    east.position.x = halfExtent + edgeThickness * 0.45;
-
-    group.add(water, north, south, west, east);
+    group.add(water);
     return group;
   }
 
@@ -109,21 +114,70 @@ export class ObjectFactory {
     const material = this.getMaterial('#6f8083', 0.78, 0.03);
     const thickness = 1;
     const height = 0.35;
-    const length = halfExtent * 2 + thickness;
-    const wallGeometry = new THREE.BoxGeometry(length, height, thickness);
-    const sideGeometry = new THREE.BoxGeometry(thickness, height, length);
-
-    const north = new THREE.Mesh(wallGeometry, material);
-    north.position.set(0, height / 2 + 0.02, -halfExtent - thickness / 2);
-    const south = north.clone();
-    south.position.z = halfExtent + thickness / 2;
-    const west = new THREE.Mesh(sideGeometry, material);
-    west.position.set(-halfExtent - thickness / 2, height / 2, 0);
-    const east = west.clone();
-    east.position.x = halfExtent + thickness / 2;
-
-    group.add(north, south, west, east);
+    for (const segment of this.createArenaEdgeSegments(halfExtent)) {
+      const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(thickness, height, segment.length + thickness * 0.75),
+        material
+      );
+      wall.position.set(
+        segment.centerX + segment.outwardX * thickness * 0.5,
+        height / 2 + 0.02,
+        segment.centerZ + segment.outwardZ * thickness * 0.5
+      );
+      wall.rotation.y = segment.rotationY;
+      group.add(wall);
+    }
     return group;
+  }
+
+  private createArenaShapeGeometry(halfExtent: number): THREE.ShapeGeometry {
+    const shape = new THREE.Shape();
+    const points = this.createArenaPolygonPoints(halfExtent);
+    shape.moveTo(points[0].x, points[0].z);
+    for (const point of points.slice(1)) {
+      shape.lineTo(point.x, point.z);
+    }
+    shape.closePath();
+    return new THREE.ShapeGeometry(shape);
+  }
+
+  private createArenaEdgeSegments(halfExtent: number): Array<{
+    centerX: number;
+    centerZ: number;
+    length: number;
+    rotationY: number;
+    outwardX: number;
+    outwardZ: number;
+  }> {
+    const points = this.createArenaPolygonPoints(halfExtent);
+    return points.map((start, index) => {
+      const end = points[(index + 1) % points.length];
+      const dx = end.x - start.x;
+      const dz = end.z - start.z;
+      const length = Math.max(0.001, Math.hypot(dx, dz));
+      return {
+        centerX: (start.x + end.x) * 0.5,
+        centerZ: (start.z + end.z) * 0.5,
+        length,
+        rotationY: Math.atan2(dx, dz),
+        outwardX: dz / length,
+        outwardZ: -dx / length
+      };
+    });
+  }
+
+  private createArenaPolygonPoints(halfExtent: number): Array<{ x: number; z: number }> {
+    const cut = Math.min(halfExtent * 0.28, Math.max(ARENA_MIN_CORNER_CUT, halfExtent * ARENA_CORNER_CUT_RATIO));
+    return [
+      { x: -halfExtent + cut, z: -halfExtent },
+      { x: halfExtent - cut, z: -halfExtent },
+      { x: halfExtent, z: -halfExtent + cut },
+      { x: halfExtent, z: halfExtent - cut },
+      { x: halfExtent - cut, z: halfExtent },
+      { x: -halfExtent + cut, z: halfExtent },
+      { x: -halfExtent, z: halfExtent - cut },
+      { x: -halfExtent, z: -halfExtent + cut }
+    ];
   }
 
   createWorldObjectMesh(object: WorldObject): THREE.Object3D {
@@ -176,6 +230,64 @@ export class ObjectFactory {
     }
   }
 
+  updateWorldObjectVisual(root: THREE.Object3D, object: WorldObject): void {
+    if (object.category !== 'building') {
+      return;
+    }
+
+    const fractureLevel = object.fractureLevel;
+    const renderVisible = object.active || Boolean(object.swallowAnimation);
+    root.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      const solid = child.userData.fractureSolid as 'body' | 'roof' | undefined;
+      if (solid) {
+        const baseY = Number(child.userData.baseY ?? child.position.y);
+        const t = THREE.MathUtils.smoothstep(fractureLevel, 0.05, 0.9);
+        child.visible = renderVisible && fractureLevel < (solid === 'roof' ? 0.92 : 0.98);
+        child.position.y = baseY - object.size.y * (solid === 'roof' ? 0.03 : 0.08) * t;
+        if (mesh.isMesh) {
+          mesh.scale.set(1 + t * 0.025, 1 - t * (solid === 'roof' ? 0.06 : 0.22), 1 + t * 0.025);
+        }
+        if (solid === 'roof') {
+          child.rotation.x = Number(child.userData.baseRotX ?? 0) + t * 0.18;
+          child.rotation.z = Number(child.userData.baseRotZ ?? 0) - t * 0.14;
+        }
+      }
+
+      const chunk = child.userData.fractureChunk as {
+        threshold?: number;
+        baseX?: number;
+        baseY?: number;
+        baseZ?: number;
+        spreadX?: number;
+        spreadZ?: number;
+        drop?: number;
+        rotX?: number;
+        rotY?: number;
+        rotZ?: number;
+      } | undefined;
+      if (chunk) {
+        const threshold = chunk.threshold ?? 0.2;
+        const t = THREE.MathUtils.smoothstep(fractureLevel, threshold, 1);
+        child.visible = renderVisible && t > 0.01;
+        child.position.set(
+          (chunk.baseX ?? 0) + (chunk.spreadX ?? 0) * t,
+          (chunk.baseY ?? 0) - (chunk.drop ?? 0) * t,
+          (chunk.baseZ ?? 0) + (chunk.spreadZ ?? 0) * t
+        );
+        child.rotation.set(
+          (chunk.rotX ?? 0) * t,
+          (chunk.rotY ?? 0) * t,
+          (chunk.rotZ ?? 0) * t
+        );
+      }
+
+      if (child.userData.buildingFacade) {
+        child.visible = renderVisible && fractureLevel < 0.72;
+      }
+    });
+  }
+
   disposeObject(object: THREE.Object3D): void {
     object.traverse((child) => {
       const mesh = child as THREE.Mesh;
@@ -198,6 +310,10 @@ export class ObjectFactory {
       material.dispose();
     }
     this.materialCache.clear();
+    for (const texture of this.glowTextureCache.values()) {
+      texture.dispose();
+    }
+    this.glowTextureCache.clear();
   }
 
   createPowerUpMesh(powerUp: PowerUp): THREE.Object3D {
@@ -236,6 +352,8 @@ export class ObjectFactory {
       new THREE.BoxGeometry(object.size.x, object.size.y, object.size.z),
       this.getMaterial(object.color, 0.82, 0.06)
     );
+    body.userData.fractureSolid = 'body';
+    body.userData.baseY = body.position.y;
     body.castShadow = true;
     body.receiveShadow = true;
 
@@ -244,12 +362,59 @@ export class ObjectFactory {
       this.getMaterial('#313845', 0.75, 0.08)
     );
     roof.position.y = object.size.y * 0.5 + 0.12;
+    roof.userData.fractureSolid = 'roof';
+    roof.userData.baseY = roof.position.y;
+    roof.userData.baseRotX = roof.rotation.x;
+    roof.userData.baseRotZ = roof.rotation.z;
     roof.castShadow = true;
     group.add(body, roof);
     this.addBuildingFacadeLights(group, object, isIndustrial);
     this.addBuildingGlow(group, object, isIndustrial);
     this.addRooftopDetails(group, object, isIndustrial);
+    this.addBuildingFracturePieces(group, object, isIndustrial);
     return group;
+  }
+
+  private addBuildingFracturePieces(group: THREE.Group, object: WorldObject, isIndustrial: boolean): void {
+    const chunkCount = Math.max(5, Math.min(14, Math.floor(object.size.y / 2.4) + 4));
+    const colors = isIndustrial
+      ? ['#5f686d', '#4d565b', '#69737a']
+      : [object.color, '#68747a', '#59646a', '#737d82'];
+
+    for (let index = 0; index < chunkCount; index += 1) {
+      const rx = this.hashUnit(object.id, index * 11 + 1);
+      const ry = this.hashUnit(object.id, index * 11 + 2);
+      const rz = this.hashUnit(object.id, index * 11 + 3);
+      const sideX = this.hashUnit(object.id, index * 11 + 4) < 0.5 ? -1 : 1;
+      const sideZ = this.hashUnit(object.id, index * 11 + 5) < 0.5 ? -1 : 1;
+      const width = THREE.MathUtils.lerp(0.42, Math.max(0.8, object.size.x * 0.24), rx);
+      const height = THREE.MathUtils.lerp(0.28, Math.max(0.62, object.size.y * 0.13), ry);
+      const depth = THREE.MathUtils.lerp(0.42, Math.max(0.8, object.size.z * 0.24), rz);
+      const baseX = sideX * object.size.x * THREE.MathUtils.lerp(0.16, 0.43, rz);
+      const baseY = -object.size.y * 0.42 + object.size.y * THREE.MathUtils.lerp(0.08, 0.78, ry);
+      const baseZ = sideZ * object.size.z * THREE.MathUtils.lerp(0.16, 0.43, rx);
+      const chunk = new THREE.Mesh(
+        new THREE.BoxGeometry(width, height, depth),
+        this.getMaterial(colors[index % colors.length], 0.88, 0.04)
+      );
+      chunk.position.set(baseX, baseY, baseZ);
+      chunk.visible = false;
+      chunk.castShadow = true;
+      chunk.receiveShadow = true;
+      chunk.userData.fractureChunk = {
+        threshold: THREE.MathUtils.lerp(0.12, 0.64, this.hashUnit(object.id, index * 11 + 6)),
+        baseX,
+        baseY,
+        baseZ,
+        spreadX: sideX * THREE.MathUtils.lerp(0.8, object.size.x * 0.72, this.hashUnit(object.id, index * 11 + 7)),
+        spreadZ: sideZ * THREE.MathUtils.lerp(0.8, object.size.z * 0.72, this.hashUnit(object.id, index * 11 + 8)),
+        drop: THREE.MathUtils.lerp(0.18, Math.max(0.8, object.size.y * 0.28), this.hashUnit(object.id, index * 11 + 9)),
+        rotX: THREE.MathUtils.lerp(-1.2, 1.2, this.hashUnit(object.id, index * 11 + 10)),
+        rotY: THREE.MathUtils.lerp(-2.4, 2.4, this.hashUnit(object.id, index * 11 + 11)),
+        rotZ: THREE.MathUtils.lerp(-1.2, 1.2, this.hashUnit(object.id, index * 11 + 12))
+      };
+      group.add(chunk);
+    }
   }
 
   private createTree(object: WorldObject): THREE.Group {
@@ -290,17 +455,18 @@ export class ObjectFactory {
       new THREE.BoxGeometry(1.05, 0.06, 0.06),
       this.getMaterial('#b6c3ce', 0.5, 0.2)
     );
-    arm.position.set(0.47, object.size.y * 0.5 + 0.07, 0);
+    const lampY = object.size.y * 0.5 - 0.24;
+    arm.position.set(0.47, lampY + 0.05, 0);
     const lampHead = new THREE.Mesh(
       new THREE.BoxGeometry(0.34, 0.13, 0.22),
       this.getMaterial('#2e3943', 0.52, 0.18)
     );
-    lampHead.position.set(0.98, object.size.y * 0.5 + 0.02, 0);
+    lampHead.position.set(0.98, lampY, 0);
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.17, 12, 8),
       this.createCityLightMaterial('#ffe4a3', 0.16, 1)
     );
-    bulb.position.set(0.98, object.size.y * 0.5 - 0.08, 0);
+    bulb.position.set(0.98, lampY - 0.13, 0);
     this.markCityLight(bulb, 0.16, 1);
     const light = this.createCityPointLight('#ffe4a3', 0.04, 3.45, 34, 1.45, 7);
     light.position.copy(bulb.position);
@@ -548,7 +714,7 @@ export class ObjectFactory {
       new THREE.BoxGeometry(object.size.x * 0.72, object.size.y * 0.52, object.size.z * 0.38),
       this.getMaterial('#dce8ef', 0.4, 0.08)
     );
-    cabin.position.set(0, object.size.y * 0.32, -object.size.z * 0.12);
+    cabin.position.set(0, object.size.y * 0.32, object.size.z * 0.12);
 
     const wheelMaterial = this.getMaterial('#111318', 0.8, 0.1);
     const wheelGeometry = new THREE.CylinderGeometry(0.23, 0.23, 0.2, 10);
@@ -563,16 +729,18 @@ export class ObjectFactory {
 
     const headlightMaterial = this.createCityLightMaterial('#fff4bc', 0.18, 1);
     const tailLightMaterial = this.createCityLightMaterial('#ff4c4c', 0.1, 0.92);
+    const frontSign = this.getVehicleLightFrontSign(object);
+    const rearSign = frontSign * -1;
     for (const x of [-object.size.x * 0.28, object.size.x * 0.28]) {
       const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.05), headlightMaterial);
-      headlight.position.set(x, object.size.y * 0.06, object.size.z * 0.51);
+      headlight.position.set(x, object.size.y * 0.06, frontSign * object.size.z * 0.51);
       this.markCityLight(headlight, 0.18, 1);
       const tailLight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.05), tailLightMaterial);
-      tailLight.position.set(x, object.size.y * 0.02, -object.size.z * 0.51);
+      tailLight.position.set(x, object.size.y * 0.02, rearSign * object.size.z * 0.51);
       this.markCityLight(tailLight, 0.1, 0.92);
       group.add(headlight, tailLight);
     }
-    this.addVehicleHeadlightGlow(group, object.size.x, object.size.y, object.size.z);
+    this.addVehicleHeadlightGlow(group, object.size.x, object.size.y, object.size.z, false, frontSign);
 
     body.castShadow = true;
     cabin.castShadow = true;
@@ -592,7 +760,7 @@ export class ObjectFactory {
       new THREE.BoxGeometry(object.size.x * 0.55, object.size.y * 0.12, 0.05),
       this.createCityLightMaterial('#facc15', 0.18, 0.9)
     );
-    routeSign.position.set(0, object.size.y * 0.34, object.size.z * 0.51);
+    routeSign.position.set(0, object.size.y * 0.34, this.getVehicleLightFrontSign(object) * object.size.z * 0.51);
     this.markCityLight(routeSign, 0.18, 0.9);
     this.addVehicleWheels(group, object, [-object.size.z * 0.36, object.size.z * 0.36], 0.28);
     this.addVehicleLights(group, object, object.size.x, object.size.y, object.size.z);
@@ -699,19 +867,25 @@ export class ObjectFactory {
     }
   }
 
+  private getVehicleLightFrontSign(object: WorldObject): -1 | 1 {
+    return 1;
+  }
+
   private addVehicleLights(group: THREE.Group, object: WorldObject, width: number, height: number, length: number): void {
     const headlightMaterial = this.createCityLightMaterial('#fff4bc', 0.18, 1);
     const tailLightMaterial = this.createCityLightMaterial('#ff4c4c', 0.1, 0.92);
+    const frontSign = this.getVehicleLightFrontSign(object);
+    const rearSign = frontSign * -1;
     for (const x of [-width * 0.28, width * 0.28]) {
       const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.05), headlightMaterial);
-      headlight.position.set(x, height * 0.06, length * 0.51);
+      headlight.position.set(x, height * 0.06, frontSign * length * 0.51);
       this.markCityLight(headlight, 0.18, 1);
       const tailLight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.05), tailLightMaterial);
-      tailLight.position.set(x, height * 0.02, -length * 0.51);
+      tailLight.position.set(x, height * 0.02, rearSign * length * 0.51);
       this.markCityLight(tailLight, 0.1, 0.92);
       group.add(headlight, tailLight);
     }
-    this.addVehicleHeadlightGlow(group, width, height, length, object.kind === 'emergency');
+    this.addVehicleHeadlightGlow(group, width, height, length, object.kind === 'emergency', frontSign);
   }
 
   private createAdFrame(object: WorldObject): THREE.Group {
@@ -772,20 +946,22 @@ export class ObjectFactory {
 
       const y = -object.size.y * 0.5 + rowStep * floor;
       const rowOpacity = floor % 3 === 0 ? 0.82 : 1;
-      for (const z of [-object.size.z * 0.506, object.size.z * 0.506]) {
-        const strip = new THREE.Mesh(frontGeometry, material);
-        strip.position.set(0, y, z);
-        this.markCityLight(strip, 0.04, rowOpacity);
-        group.add(strip);
-      }
+        for (const z of [-object.size.z * 0.506, object.size.z * 0.506]) {
+          const strip = new THREE.Mesh(frontGeometry, material);
+          strip.position.set(0, y, z);
+          strip.userData.buildingFacade = true;
+          this.markCityLight(strip, 0.04, rowOpacity);
+          group.add(strip);
+        }
 
       if (object.size.z > 4.8 && floor % 2 === 1) {
         for (const x of [-object.size.x * 0.506, object.size.x * 0.506]) {
-          const strip = new THREE.Mesh(sideGeometry, material);
-          strip.position.set(x, y, 0);
-          this.markCityLight(strip, 0.03, rowOpacity * 0.9);
-          group.add(strip);
-        }
+            const strip = new THREE.Mesh(sideGeometry, material);
+            strip.position.set(x, y, 0);
+            strip.userData.buildingFacade = true;
+            this.markCityLight(strip, 0.03, rowOpacity * 0.9);
+            group.add(strip);
+          }
       }
     }
   }
@@ -801,6 +977,7 @@ export class ObjectFactory {
       this.createCityLightMaterial(color, 0.026, isIndustrial ? 0.72 : 0.82)
     );
     glow.position.set(0, Math.max(0.9, object.size.y * 0.08), -object.size.z * 0.53);
+    glow.userData.buildingFacade = true;
     this.markCityLight(glow, 0.026, isIndustrial ? 0.72 : 0.82);
     group.add(glow);
   }
@@ -863,40 +1040,64 @@ export class ObjectFactory {
     width: number,
     height: number,
     length: number,
-    emergency = false
+    emergency = false,
+    frontSign: -1 | 1 = 1
   ): void {
     const glowMaterial = this.createCityLightMaterial('#fff4bc', 0.08, 0.9);
-    const beamLength = emergency ? 13.5 : 10.5;
-    const beamWidth = Math.max(width * 1.85, emergency ? 3.8 : 2.9);
-    const beam = this.createForwardLightBeam(
+    const beamLength = emergency ? 16.5 : 12.6;
+    const beamWidth = Math.max(width * 2.15, emergency ? 4.7 : 3.35);
+    const frontZ = frontSign * length * 0.58;
+    const groundSpill = this.createDirectionalGroundGlow(
       '#fff1a8',
-      Math.max(0.75, width * 0.55),
+      beamWidth * 0.92,
+      beamLength * 0.72,
+      0.022,
+      emergency ? 0.56 : 0.44,
+      frontSign
+    );
+    groundSpill.position.set(0, 0.13, frontZ + frontSign * beamLength * 0.34);
+    group.add(groundSpill);
+
+    const broadSpill = this.createForwardLightBeam(
+      '#fff1a8',
+      Math.max(0.85, width * 0.62),
       beamWidth,
       beamLength,
-      0.025,
-      emergency ? 0.46 : 0.34
+      0.018,
+      emergency ? 0.52 : 0.42,
+      frontSign
     );
-    beam.position.set(0, 0.095, length * 0.56);
-    group.add(beam);
+    broadSpill.position.set(0, 0.125, frontZ + frontSign * 0.08);
+    group.add(broadSpill);
 
     for (const x of [-width * 0.28, width * 0.28]) {
+      const beam = this.createForwardLightBeam(
+        '#fff4bc',
+        Math.max(0.2, width * 0.13),
+        Math.max(width * 0.82, emergency ? 1.72 : 1.34),
+        beamLength * (emergency ? 0.96 : 0.88),
+        0.035,
+        emergency ? 0.96 : 0.88,
+        frontSign
+      );
+      beam.position.set(x, 0.136, frontZ + frontSign * 0.16);
       const glow = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.08), glowMaterial);
-      glow.position.set(x, height * 0.08, length * 0.6);
+      glow.position.set(x, height * 0.08, frontSign * length * 0.62);
       this.markCityLight(glow, 0.08, 0.9);
-      group.add(glow);
+      group.add(beam, glow);
     }
 
     const spot = this.createCitySpotLight(
       '#fff4bc',
       0.02,
-      emergency ? 1.85 : 1.2,
-      emergency ? 32 : 25,
-      emergency ? 0.48 : 0.42,
-      1.12,
-      emergency ? 6 : 4
+      emergency ? 2.9 : 2.05,
+      emergency ? 42 : 34,
+      emergency ? 0.48 : 0.38,
+      1.02,
+      emergency ? 9.2 : 7.35
     );
-    spot.position.set(0, height * 0.18, length * 0.55);
-    spot.target.position.set(0, 0.06, length * 0.55 + beamLength + 4);
+    spot.position.set(0, height * 0.16, frontSign * length * 0.58);
+    spot.target.position.set(0, 0.04, frontSign * (length * 0.58 + beamLength + 5));
     group.add(spot, spot.target);
   }
 
@@ -943,13 +1144,30 @@ export class ObjectFactory {
     return glow;
   }
 
+  private createDirectionalGroundGlow(
+    color: string,
+    width: number,
+    length: number,
+    dayOpacity: number,
+    nightOpacity: number,
+    frontSign: -1 | 1
+  ): THREE.Mesh {
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, length, 1, 1),
+      this.createGradientGlowMaterial(color, dayOpacity, nightOpacity, 'radial-soft')
+    );
+    glow.rotation.x = frontSign > 0 ? Math.PI / 2 : -Math.PI / 2;
+    return glow;
+  }
+
   private createGradientGlowMaterial(
     color: string,
     dayOpacity: number,
     nightOpacity: number,
-    textureKey: string
+    textureKey: string,
+    blending: THREE.Blending = THREE.NormalBlending
   ): THREE.MeshBasicMaterial {
-    const key = `gradient-glow:${color}:${dayOpacity}:${nightOpacity}:${textureKey}`;
+    const key = `gradient-glow:${color}:${dayOpacity}:${nightOpacity}:${textureKey}:${blending}`;
     const existing = this.materialCache.get(key);
     if (existing) {
       return existing as THREE.MeshBasicMaterial;
@@ -962,7 +1180,7 @@ export class ObjectFactory {
       opacity: dayOpacity,
       depthWrite: false,
       side: THREE.DoubleSide,
-      blending: THREE.NormalBlending
+      blending
     });
     material.userData.cityLight = { dayOpacity, nightOpacity };
     this.materialCache.set(key, material);
@@ -985,6 +1203,33 @@ export class ObjectFactory {
     }
 
     context.clearRect(0, 0, size, size);
+    if (key === 'forward-soft') {
+      const pixels = context.createImageData(size, size);
+      for (let y = 0; y < size; y += 1) {
+        const v = y / (size - 1);
+        const lengthFade = Math.pow(1 - v, 1.42);
+        const baseFeather = THREE.MathUtils.smoothstep(v, 0.02, 0.12);
+        const tipFeather = 1 - THREE.MathUtils.smoothstep(v, 0.84, 1);
+        for (let x = 0; x < size; x += 1) {
+          const u = Math.abs(x / (size - 1) - 0.5) * 2;
+          const sideFade = Math.pow(Math.max(0, 1 - u), 1.8);
+          const alpha = Math.round(255 * 0.92 * sideFade * lengthFade * baseFeather * tipFeather);
+          const index = (y * size + x) * 4;
+          pixels.data[index] = 255;
+          pixels.data[index + 1] = 255;
+          pixels.data[index + 2] = 255;
+          pixels.data[index + 3] = alpha;
+        }
+      }
+      context.putImageData(pixels, 0, 0);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.generateMipmaps = false;
+      this.glowTextureCache.set(key, texture);
+      return texture;
+    }
+
     const center = size * 0.5;
     const gradient = context.createRadialGradient(center, center, 0, center, center, center);
     gradient.addColorStop(0, 'rgba(255,255,255,0.92)');
@@ -1037,11 +1282,15 @@ export class ObjectFactory {
   }
 
   private shouldAddPedestrianFlashlight(id: string): boolean {
-    let hash = 0;
+    return this.hashUnit(id, 17) < 0.4;
+  }
+
+  private hashUnit(id: string, salt: number): number {
+    let hash = salt >>> 0;
     for (let index = 0; index < id.length; index += 1) {
-      hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+      hash = (hash * 31 + id.charCodeAt(index) + salt * 17) >>> 0;
     }
-    return hash % 5 < 2;
+    return (hash % 10000) / 10000;
   }
 
   private addPedestrianFlashlight(group: THREE.Group, object: WorldObject): void {
@@ -1050,11 +1299,7 @@ export class ObjectFactory {
       this.getMaterial('#111827', 0.48, 0.16)
     );
     flashlight.position.set(0.2, object.size.y * 0.08, 0.18);
-    const beam = new THREE.Mesh(
-      this.createForwardLightBeamGeometry(0.18, 1.25, 2.9),
-      this.createLightGlowMaterial('#fff7bd', 0.018, 0.28)
-    );
-    beam.rotation.x = -Math.PI / 2;
+    const beam = this.createForwardLightBeam('#fff7bd', 0.18, 1.25, 2.9, 0.012, 0.24, 1);
     beam.position.set(0.2, 0.09, 0.3);
     const spot = this.createCitySpotLight('#fff7bd', 0, 0.48, 8.5, 0.5, 1.35, 1.2);
     spot.position.set(0.2, object.size.y * 0.16, 0.24);
@@ -1068,13 +1313,14 @@ export class ObjectFactory {
     farWidth: number,
     length: number,
     dayOpacity: number,
-    nightOpacity: number
+    nightOpacity: number,
+    frontSign: -1 | 1 = 1
   ): THREE.Mesh {
     const beam = new THREE.Mesh(
       this.createForwardLightBeamGeometry(nearWidth, farWidth, length),
-      this.createLightGlowMaterial(color, dayOpacity, nightOpacity)
+      this.createGradientGlowMaterial(color, dayOpacity, nightOpacity, 'forward-soft', THREE.AdditiveBlending)
     );
-    beam.rotation.x = -Math.PI / 2;
+    beam.rotation.x = frontSign > 0 ? Math.PI / 2 : -Math.PI / 2;
     return beam;
   }
 

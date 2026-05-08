@@ -15,6 +15,8 @@ export interface NaturalDisasterSnapshot {
   cameraShake: number;
   lightningFlash: number;
   remainingSeconds: number;
+  warningType: NaturalDisasterType;
+  warningSeconds: number;
 }
 
 export const CLEAR_NATURAL_DISASTER: NaturalDisasterSnapshot = {
@@ -26,7 +28,9 @@ export const CLEAR_NATURAL_DISASTER: NaturalDisasterSnapshot = {
   wind: 0,
   cameraShake: 0,
   lightningFlash: 0,
-  remainingSeconds: 0
+  remainingSeconds: 0,
+  warningType: 'clear',
+  warningSeconds: 0
 };
 
 interface ActiveNaturalDisaster {
@@ -37,9 +41,12 @@ interface ActiveNaturalDisaster {
   lightningCooldown: number;
 }
 
+const DISASTER_WARNING_SECONDS = 15;
+
 export class NaturalDisasterSystem {
   private active: ActiveNaturalDisaster | null = null;
   private nextEventInSeconds = 18 + Math.random() * 16;
+  private nextEventType: ActiveNaturalDisaster['type'] = this.pickNextEventType();
   private quakePhase = Math.random() * Math.PI * 2;
   private quakeImpulseCooldown = 0;
   private meteorSlowPulse = 0;
@@ -47,6 +54,7 @@ export class NaturalDisasterSystem {
   reset(): void {
     this.active = null;
     this.nextEventInSeconds = 18 + Math.random() * 16;
+    this.nextEventType = this.pickNextEventType();
     this.quakePhase = Math.random() * Math.PI * 2;
     this.quakeImpulseCooldown = 0;
     this.meteorSlowPulse = 0;
@@ -56,12 +64,19 @@ export class NaturalDisasterSystem {
     if (!this.active) {
       this.nextEventInSeconds -= deltaSeconds;
       if (this.nextEventInSeconds <= 0) {
-        this.active = this.createEvent();
+        this.active = this.createEvent(this.nextEventType);
       }
     }
 
     if (!this.active) {
-      return CLEAR_NATURAL_DISASTER;
+      const warningSeconds = this.nextEventInSeconds <= DISASTER_WARNING_SECONDS
+        ? Math.max(0, this.nextEventInSeconds)
+        : 0;
+      return {
+        ...CLEAR_NATURAL_DISASTER,
+        warningType: warningSeconds > 0 ? this.nextEventType : 'clear',
+        warningSeconds
+      };
     }
 
     const event = this.active;
@@ -84,7 +99,9 @@ export class NaturalDisasterSystem {
       wind: this.windFor(event.type, intensity),
       cameraShake: this.cameraShakeFor(event.type, intensity),
       lightningFlash,
-      remainingSeconds
+      remainingSeconds,
+      warningType: 'clear',
+      warningSeconds: 0
     };
 
     this.applyWorldEffects(snapshot, deltaSeconds, world, playerManager);
@@ -92,6 +109,7 @@ export class NaturalDisasterSystem {
     if (remainingSeconds <= 0) {
       this.active = null;
       this.nextEventInSeconds = 28 + Math.random() * 34;
+      this.nextEventType = this.pickNextEventType();
     }
 
     return snapshot;
@@ -110,9 +128,22 @@ export class NaturalDisasterSystem {
     return 1;
   }
 
-  private createEvent(): ActiveNaturalDisaster {
+  private pickNextEventType(): ActiveNaturalDisaster['type'] {
     const roll = Math.random();
     if (roll < 0.34) {
+      return 'rain';
+    }
+    if (roll < 0.62) {
+      return 'thunderstorm';
+    }
+    if (roll < 0.84) {
+      return 'earthquake';
+    }
+    return 'meteorShower';
+  }
+
+  private createEvent(type: ActiveNaturalDisaster['type']): ActiveNaturalDisaster {
+    if (type === 'rain') {
       return {
         type: 'rain',
         elapsedSeconds: 0,
@@ -121,7 +152,7 @@ export class NaturalDisasterSystem {
         lightningCooldown: 999
       };
     }
-    if (roll < 0.62) {
+    if (type === 'thunderstorm') {
       return {
         type: 'thunderstorm',
         elapsedSeconds: 0,
@@ -130,7 +161,7 @@ export class NaturalDisasterSystem {
         lightningCooldown: 1.5 + Math.random() * 2
       };
     }
-    if (roll < 0.84) {
+    if (type === 'earthquake') {
       return {
         type: 'earthquake',
         elapsedSeconds: 0,
@@ -283,24 +314,31 @@ export class NaturalDisasterSystem {
       const massDamping = 1 / Math.max(1, Math.sqrt(object.mass) * 0.38);
       const linearStrength = snapshot.intensity * vulnerable * massDamping;
       const linear = direction.multiplyScalar(
-        object.category === 'building' ? linearStrength * 0.18 : linearStrength * (object.category === 'pedestrian' ? 2.6 : 4.2)
+        object.category === 'building' ? linearStrength * 0.72 : linearStrength * (object.category === 'pedestrian' ? 3.25 : 5.1)
       );
       linear.y = object.category === 'pedestrian'
-        ? snapshot.intensity * 0.55
-        : snapshot.intensity * 0.12 * massDamping;
+        ? snapshot.intensity * 0.72
+        : object.category === 'building'
+          ? snapshot.intensity * 0.04 * massDamping
+          : snapshot.intensity * 0.16 * massDamping;
 
       const tallness = object.size.y / Math.max(0.5, Math.min(object.size.x, object.size.z));
       const angularStrength = snapshot.intensity * vulnerable * THREE.MathUtils.clamp(tallness, 0.6, 6);
       const angular = new THREE.Vector3(
-        (Math.random() - 0.5) * angularStrength * (object.category === 'building' ? 0.34 : 1.6),
+        (Math.random() - 0.5) * angularStrength * (object.category === 'building' ? 0.72 : 1.9),
         (Math.random() - 0.5) * angularStrength * 0.2,
-        (Math.random() - 0.5) * angularStrength * (object.category === 'building' ? 0.34 : 1.6)
+        (Math.random() - 0.5) * angularStrength * (object.category === 'building' ? 0.72 : 1.9)
       );
+      const shouldTopple = this.shouldToppleFromEarthquake(object, snapshot.intensity);
+      const fracture = object.category === 'building'
+        ? this.buildingFractureAmount(object, snapshot.intensity, shouldTopple)
+        : 0;
 
       object.applyPhysicsImpulse({
         linear,
         angular,
-        topple: this.shouldToppleFromEarthquake(object, snapshot.intensity)
+        topple: shouldTopple || fracture > 0.16,
+        fracture
       });
     }
   }
@@ -316,7 +354,7 @@ export class NaturalDisasterSystem {
       return Math.min(0.72, intensity * 0.52);
     }
     if (object.category === 'building') {
-      return object.size.y > 6.5 ? Math.min(0.22, intensity * 0.16) : Math.min(0.1, intensity * 0.08);
+      return object.size.y > 6.5 ? Math.min(0.42, intensity * 0.32) : Math.min(0.18, intensity * 0.15);
     }
     if (object.category === 'nature' || object.category === 'utility') {
       return Math.min(0.58, intensity * 0.44);
@@ -354,8 +392,22 @@ export class NaturalDisasterSystem {
       return Math.random() < intensity * 0.34;
     }
     if (object.category === 'building') {
-      return object.size.y > 7.5 && Math.random() < intensity * 0.08;
+      return object.size.y > 7.5 && Math.random() < intensity * 0.18;
     }
     return Math.random() < intensity * 0.08;
+  }
+
+  private buildingFractureAmount(object: WorldObject, intensity: number, toppling: boolean): number {
+    if (object.category !== 'building' || object.size.y < 4.8) {
+      return 0;
+    }
+
+    const heightFactor = THREE.MathUtils.clamp((object.size.y - 4.5) / 18, 0.08, 1);
+    const randomHit = Math.random() < intensity * (toppling ? 0.82 : 0.34);
+    if (!randomHit) {
+      return 0;
+    }
+
+    return intensity * heightFactor * (toppling ? 0.34 : 0.16);
   }
 }

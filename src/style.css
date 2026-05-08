@@ -611,6 +611,79 @@ label {
   font-size: 0.72rem;
 }
 
+.disaster-warning {
+  position: absolute;
+  left: 50%;
+  top: max(16px, env(safe-area-inset-top));
+  z-index: 18;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: min(360px, calc(100vw - 32px));
+  max-width: min(520px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  border: 1px solid rgba(251, 113, 133, 0.55);
+  border-radius: 8px;
+  padding: 9px 15px 10px;
+  color: #fff8f8;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(251, 113, 133, 0.24), transparent 70%),
+    rgba(10, 4, 12, 0.68);
+  box-shadow:
+    0 16px 46px rgba(0, 0, 0, 0.38),
+    0 0 24px rgba(251, 113, 133, 0.18);
+  text-align: center;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  animation: disaster-warning-pulse 900ms ease-in-out infinite alternate;
+}
+
+.disaster-warning-title {
+  color: rgba(255, 216, 226, 0.86);
+  font-family: "Open Sans", sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.disaster-warning-message {
+  font-family: "Orbitron", "Open Sans", sans-serif;
+  font-size: clamp(0.92rem, 1.8vw, 1.2rem);
+  font-weight: 900;
+  line-height: 1.12;
+}
+
+.disaster-warning-count {
+  color: var(--amber);
+  font-family: "Orbitron", "Open Sans", sans-serif;
+  font-size: clamp(1.05rem, 2.2vw, 1.42rem);
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 14px rgba(246, 196, 83, 0.42);
+}
+
+@keyframes disaster-warning-pulse {
+  from {
+    border-color: rgba(251, 113, 133, 0.44);
+    box-shadow:
+      0 16px 46px rgba(0, 0, 0, 0.36),
+      0 0 18px rgba(251, 113, 133, 0.14);
+  }
+  to {
+    border-color: rgba(246, 196, 83, 0.62);
+    box-shadow:
+      0 18px 52px rgba(0, 0, 0, 0.42),
+      0 0 30px rgba(251, 113, 133, 0.28);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disaster-warning {
+    animation: none;
+  }
+}
+
 .death-notice {
   position: absolute;
   left: 50%;
@@ -1007,6 +1080,25 @@ label {
   .leader-row {
     grid-template-columns: 20px 1fr auto;
     gap: 5px;
+  }
+
+  .disaster-warning {
+    top: 104px;
+    min-width: min(300px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    padding: 8px 12px;
+  }
+
+  .disaster-warning-title {
+    font-size: 0.62rem;
+  }
+
+  .disaster-warning-message {
+    font-size: 0.84rem;
+  }
+
+  .disaster-warning-count {
+    font-size: 1.02rem;
   }
 
   .zoom-controls {
