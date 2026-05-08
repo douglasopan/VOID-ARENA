@@ -5,6 +5,7 @@ import type { WorldObject } from '../game/WorldObject';
 
 export class ObjectFactory {
   private readonly materialCache = new Map<string, THREE.Material>();
+  private readonly glowTextureCache = new Map<string, THREE.CanvasTexture>();
 
   createGround(halfExtent: number): THREE.Mesh {
     const geometry = new THREE.PlaneGeometry(halfExtent * 2, halfExtent * 2, 1, 1);
@@ -303,7 +304,7 @@ export class ObjectFactory {
     this.markCityLight(bulb, 0.16, 1);
     const light = this.createCityPointLight('#ffe4a3', 0.04, 3.45, 34, 1.45, 7);
     light.position.copy(bulb.position);
-    const groundGlow = this.createGroundGlow('#ffd98f', 7.2, 0.05, 0.5);
+    const groundGlow = this.createGroundGlow('#ffd98f', 8.2, 0.035, 0.38);
     groundGlow.position.set(0.92, 0.095, 0);
     pole.castShadow = true;
     base.castShadow = true;
@@ -935,11 +936,72 @@ export class ObjectFactory {
     nightOpacity: number
   ): THREE.Mesh {
     const glow = new THREE.Mesh(
-      new THREE.CircleGeometry(radius, 28),
-      this.createLightGlowMaterial(color, dayOpacity, nightOpacity)
+      new THREE.PlaneGeometry(radius * 2.45, radius * 1.55, 1, 1),
+      this.createGradientGlowMaterial(color, dayOpacity, nightOpacity, 'radial-soft')
     );
     glow.rotation.x = -Math.PI / 2;
     return glow;
+  }
+
+  private createGradientGlowMaterial(
+    color: string,
+    dayOpacity: number,
+    nightOpacity: number,
+    textureKey: string
+  ): THREE.MeshBasicMaterial {
+    const key = `gradient-glow:${color}:${dayOpacity}:${nightOpacity}:${textureKey}`;
+    const existing = this.materialCache.get(key);
+    if (existing) {
+      return existing as THREE.MeshBasicMaterial;
+    }
+
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      map: this.getGlowTexture(textureKey),
+      transparent: true,
+      opacity: dayOpacity,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending
+    });
+    material.userData.cityLight = { dayOpacity, nightOpacity };
+    this.materialCache.set(key, material);
+    return material;
+  }
+
+  private getGlowTexture(key: string): THREE.CanvasTexture {
+    const existing = this.glowTextureCache.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Could not create glow texture context');
+    }
+
+    context.clearRect(0, 0, size, size);
+    const center = size * 0.5;
+    const gradient = context.createRadialGradient(center, center, 0, center, center, center);
+    gradient.addColorStop(0, 'rgba(255,255,255,0.92)');
+    gradient.addColorStop(0.14, 'rgba(255,255,255,0.66)');
+    gradient.addColorStop(0.34, 'rgba(255,255,255,0.28)');
+    gradient.addColorStop(0.58, 'rgba(255,255,255,0.10)');
+    gradient.addColorStop(0.82, 'rgba(255,255,255,0.025)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, size, size);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    this.glowTextureCache.set(key, texture);
+    return texture;
   }
 
   private createLightGlowMaterial(color: string, dayOpacity: number, nightOpacity: number): THREE.MeshBasicMaterial {
