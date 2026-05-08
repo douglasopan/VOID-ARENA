@@ -29,8 +29,8 @@
     }
   },
   "gameplay": {
-    "startSpeedMultiplier": 20000000,
-    "boostMultiplier": 10,
-    "magnetStrengthMultiplier": 100
+    "startSpeedMultiplier": 100,
+    "boostMultiplier": "",
+    "magnetStrengthMultiplier": ""
   }
 }
