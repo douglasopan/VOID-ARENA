@@ -1146,6 +1146,106 @@ label {
   backdrop-filter: blur(6px);
 }
 
+.pause-menu-panel {
+  width: min(940px, calc(100vw - 28px));
+  max-height: min(760px, calc(100vh - 28px));
+  overflow: hidden;
+}
+
+.pause-menu-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 14px;
+}
+
+.pause-menu-head span {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.pause-layout {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 420px;
+}
+
+.pause-category-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.pause-category-button {
+  justify-content: flex-start;
+  min-height: 44px;
+  padding: 0 12px;
+  text-align: left;
+  color: #dfe8f6;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.pause-category-button.active {
+  border-color: rgba(94, 234, 212, 0.78);
+  background: rgba(94, 234, 212, 0.16);
+  color: #ffffff;
+}
+
+.pause-category-content {
+  min-width: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.pause-category-panel {
+  display: none;
+  gap: 12px;
+}
+
+.pause-category-panel.active {
+  display: grid;
+}
+
+.pause-category-panel h3 {
+  margin: 0;
+  font-family: var(--menu-font);
+  font-size: 1rem;
+}
+
+.pause-option-card {
+  grid-template-columns: minmax(0, 1fr) minmax(118px, auto);
+  align-items: center;
+}
+
+.pause-track-card {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.pause-track-card span {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.pause-track-card strong {
+  color: var(--cyan);
+  font-family: var(--menu-font);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.button-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
 .hidden {
   display: none !important;
 }
@@ -1176,6 +1276,32 @@ label {
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
     padding: 16px;
+  }
+
+  .pause-menu-panel {
+    width: min(100%, calc(100vw - 20px));
+    max-height: calc(100vh - 20px);
+    overflow: auto;
+  }
+
+  .pause-layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .pause-category-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pause-category-button {
+    min-height: 40px;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.78rem;
+  }
+
+  .pause-option-card {
+    grid-template-columns: 1fr;
   }
 
   .main-menu-panel {

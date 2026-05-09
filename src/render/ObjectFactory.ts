@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
   ARENA_CORNER_CUT_RATIO,
   ARENA_MIN_CORNER_CUT
 } from '../shared/constants';
+import { getCustomObjectVariantById, getPrebuildModelAsset } from '../admin/PrebuildAssetRegistry';
 import type { RoadSegment, SurfaceSegment } from '../shared/types';
 import type { PowerUp } from '../game/PowerUp';
 import type { WorldObject } from '../game/WorldObject';
@@ -10,6 +12,8 @@ import type { WorldObject } from '../game/WorldObject';
 export class ObjectFactory {
   private readonly materialCache = new Map<string, THREE.Material>();
   private readonly glowTextureCache = new Map<string, THREE.CanvasTexture>();
+  private readonly gltfLoader = new GLTFLoader();
+  private readonly customModelCache = new Map<string, Promise<THREE.Group>>();
 
   createGround(halfExtent: number): THREE.Mesh {
     const geometry = this.createArenaShapeGeometry(halfExtent);
@@ -181,53 +185,74 @@ export class ObjectFactory {
   }
 
   createWorldObjectMesh(object: WorldObject): THREE.Object3D {
+    let fallback: THREE.Object3D;
     switch (object.kind) {
       case 'tree':
-        return this.createTree(object);
+        fallback = this.createTree(object);
+        break;
       case 'bench':
-        return this.createBench(object);
+        fallback = this.createBench(object);
+        break;
       case 'hydrant':
-        return this.createHydrant(object);
+        fallback = this.createHydrant(object);
+        break;
       case 'trash':
-        return this.createTrash(object);
+        fallback = this.createTrash(object);
+        break;
       case 'pedestrian':
-        return this.createPedestrian(object);
+        fallback = this.createPedestrian(object);
+        break;
       case 'post':
-        return this.createPost(object);
+        fallback = this.createPost(object);
+        break;
       case 'cone':
-        return this.createCone(object);
+        fallback = this.createCone(object);
+        break;
       case 'mailbox':
-        return this.createMailbox(object);
+        fallback = this.createMailbox(object);
+        break;
       case 'bike':
-        return this.createBike(object);
+        fallback = this.createBike(object);
+        break;
       case 'planter':
-        return this.createPlanter(object);
+        fallback = this.createPlanter(object);
+        break;
       case 'kiosk':
-        return this.createKiosk(object);
+        fallback = this.createKiosk(object);
+        break;
       case 'fountain':
-        return this.createFountain(object);
+        fallback = this.createFountain(object);
+        break;
       case 'statue':
-        return this.createStatue(object);
+        fallback = this.createStatue(object);
+        break;
       case 'rock':
-        return this.createRock(object);
+        fallback = this.createRock(object);
+        break;
       case 'car':
       case 'truck':
       case 'bus':
       case 'emergency':
       case 'trailerTruck':
-        return this.createVehicle(object);
+        fallback = this.createVehicle(object);
+        break;
       case 'trafficLight':
-        return this.createTrafficLight(object);
+        fallback = this.createTrafficLight(object);
+        break;
       case 'billboard':
       case 'screen':
-        return this.createAdFrame(object);
+        fallback = this.createAdFrame(object);
+        break;
       case 'building':
       case 'structure':
-        return this.createBuilding(object);
+        fallback = this.createBuilding(object);
+        break;
       case 'crate':
       default:
-        return this.createBoxObject(object);
+        fallback = this.createBoxObject(object);
+        break;
     }
+    return this.createPrebuildModelWrapper(fallback, object);
   }
 
   updateWorldObjectVisual(root: THREE.Object3D, object: WorldObject): void {
@@ -362,6 +387,65 @@ export class ObjectFactory {
       texture.dispose();
     }
     this.glowTextureCache.clear();
+    this.customModelCache.clear();
+  }
+
+  private createPrebuildModelWrapper(fallback: THREE.Object3D, object: WorldObject): THREE.Object3D {
+    const variantAsset = getCustomObjectVariantById(object.variantId);
+    const modelAsset = variantAsset?.source ? variantAsset : getPrebuildModelAsset(object.kind);
+    if (!modelAsset?.source || (modelAsset.format !== 'glb' && modelAsset.format !== 'gltf')) {
+      return fallback;
+    }
+
+    const wrapper = new THREE.Group();
+    wrapper.userData.prebuildModel = modelAsset.id;
+    fallback.userData.prebuildFallback = true;
+    wrapper.add(fallback);
+
+    this.loadCustomModel(modelAsset.source)
+      .then((modelTemplate) => {
+        const model = modelTemplate.clone(true);
+        this.prepareCustomModel(model);
+        model.scale.setScalar(modelAsset.scale);
+        model.position.y = modelAsset.offsetY;
+        model.rotation.y = modelAsset.rotationY;
+        fallback.visible = false;
+        wrapper.add(model);
+      })
+      .catch(() => {
+        fallback.visible = true;
+      });
+
+    return wrapper;
+  }
+
+  private loadCustomModel(source: string): Promise<THREE.Group> {
+    const existing = this.customModelCache.get(source);
+    if (existing) {
+      return existing;
+    }
+
+    const request = new Promise<THREE.Group>((resolve, reject) => {
+      this.gltfLoader.load(
+        source,
+        (gltf) => resolve(gltf.scene),
+        undefined,
+        reject
+      );
+    });
+    this.customModelCache.set(source, request);
+    return request;
+  }
+
+  private prepareCustomModel(root: THREE.Object3D): void {
+    root.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) {
+        return;
+      }
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    });
   }
 
   createPowerUpMesh(powerUp: PowerUp): THREE.Object3D {
@@ -981,10 +1065,22 @@ export class ObjectFactory {
   }
 
   private addBuildingFacadeLights(group: THREE.Group, object: WorldObject, isIndustrial: boolean): void {
-    const floorCount = Math.max(2, Math.min(isIndustrial ? 5 : 14, Math.floor(object.size.y / 1.18)));
+    const lighting = getCustomObjectVariantById(object.variantId)?.lighting ?? getPrebuildModelAsset(object.kind)?.lighting;
+    if (lighting?.enabled === false) {
+      return;
+    }
+
+    const intensity = lighting?.intensity ?? 1;
+    const floorCount = lighting?.windowRows
+      ? lighting.windowRows
+      : Math.max(2, Math.min(isIndustrial ? 5 : 14, Math.floor(object.size.y / 1.18)));
     const rowStep = object.size.y / (floorCount + 1);
-    const lightColor = isIndustrial ? '#ffd38a' : object.label === 'Office Building' ? '#dff6ff' : '#ffe6a7';
-    const material = this.createCityLightMaterial(lightColor, 0.04, isIndustrial ? 0.86 : 1);
+    const lightColor = lighting?.color || (isIndustrial ? '#ffd38a' : object.label === 'Office Building' ? '#dff6ff' : '#ffe6a7');
+    const material = this.createCityLightMaterial(
+      lightColor,
+      THREE.MathUtils.clamp(0.04 * intensity, 0, 0.16),
+      THREE.MathUtils.clamp((isIndustrial ? 0.86 : 1) * intensity, 0, 1)
+    );
     const frontGeometry = new THREE.BoxGeometry(object.size.x * 0.68, 0.12, 0.045);
     const sideGeometry = new THREE.BoxGeometry(0.045, 0.12, object.size.z * 0.58);
 
@@ -999,7 +1095,7 @@ export class ObjectFactory {
           const strip = new THREE.Mesh(frontGeometry, material);
           strip.position.set(0, y, z);
           strip.userData.buildingFacade = true;
-          this.markCityLight(strip, 0.04, rowOpacity);
+          this.markCityLight(strip, THREE.MathUtils.clamp(0.04 * intensity, 0, 0.16), THREE.MathUtils.clamp(rowOpacity * intensity, 0, 1));
           group.add(strip);
         }
 
@@ -1008,7 +1104,7 @@ export class ObjectFactory {
             const strip = new THREE.Mesh(sideGeometry, material);
             strip.position.set(x, y, 0);
             strip.userData.buildingFacade = true;
-            this.markCityLight(strip, 0.03, rowOpacity * 0.9);
+            this.markCityLight(strip, THREE.MathUtils.clamp(0.03 * intensity, 0, 0.14), THREE.MathUtils.clamp(rowOpacity * 0.9 * intensity, 0, 1));
             group.add(strip);
           }
       }

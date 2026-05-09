@@ -1478,7 +1478,10 @@ export class Game {
           }
         },
         onNextMusic: () => this.audioManager.nextMusicTrack(),
+        onStopMusic: () => this.audioManager.stopMusic(),
         onGraphicsQualityChange: (quality) => this.applyGraphicsQuality(quality),
+        onSkyEffectsToggle: (enabled) => this.applyVisualSetting('skyEffectsEnabled', enabled),
+        onLightingEffectsToggle: (enabled) => this.applyVisualSetting('lightingEffectsEnabled', enabled),
         onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle),
         onLanguageChange: (language) => this.applyLanguage(language),
         onControlConfigChange: (controls) => this.applyControlConfig(controls)
@@ -1492,7 +1495,9 @@ export class Game {
         holeRimStyle: this.holeRimStyle,
         graphicsQuality: this.currentConfig.graphicsQuality,
         language: this.language,
-        controlsConfig: getEngineConfig().controls
+        controlsConfig: getEngineConfig().controls,
+        skyEffectsEnabled: getEngineConfig().visual.skyEffectsEnabled,
+        lightingEffectsEnabled: getEngineConfig().visual.lightingEffectsEnabled
       }
     );
   }
@@ -1537,6 +1542,8 @@ export class Game {
     document.documentElement.style.setProperty('--menu-font', `"${config.branding.menuFont}", "Open Sans", sans-serif`);
     document.documentElement.style.setProperty('--text-font', `"${config.branding.textFont}", "Open Sans", sans-serif`);
     this.inputManager?.setControlsConfig(config.controls);
+    this.sceneManager?.setSkyEffectsEnabled(config.visual.skyEffectsEnabled);
+    this.sceneManager?.setLightingEffectsEnabled(config.visual.lightingEffectsEnabled);
     if (this.currentConfig) {
       this.currentConfig.enableAds = this.currentConfig.enableAds && config.generation.adsEnabled;
     }
@@ -1587,7 +1594,10 @@ export class Game {
           }
         },
         onNextMusic: () => this.audioManager.nextMusicTrack(),
+        onStopMusic: () => this.audioManager.stopMusic(),
         onGraphicsQualityChange: (quality) => this.applyGraphicsQuality(quality),
+        onSkyEffectsToggle: (enabled) => this.applyVisualSetting('skyEffectsEnabled', enabled),
+        onLightingEffectsToggle: (enabled) => this.applyVisualSetting('lightingEffectsEnabled', enabled),
         onHoleAppearanceChange: (rimColor, rimStyle) => this.applyHoleAppearance(rimColor, rimStyle),
         onLanguageChange: (language) => {
           this.applyLanguage(language);
@@ -1604,7 +1614,9 @@ export class Game {
         holeRimStyle: this.holeRimStyle,
         graphicsQuality: this.currentConfig?.graphicsQuality,
         language: this.language,
-        controlsConfig: getEngineConfig().controls
+        controlsConfig: getEngineConfig().controls,
+        skyEffectsEnabled: getEngineConfig().visual.skyEffectsEnabled,
+        lightingEffectsEnabled: getEngineConfig().visual.lightingEffectsEnabled
       }
     );
   }
@@ -1669,6 +1681,18 @@ export class Game {
     if (this.lastConfig) {
       this.lastConfig.graphicsQuality = quality;
     }
+  }
+
+  private applyVisualSetting(key: 'skyEffectsEnabled' | 'lightingEffectsEnabled', enabled: boolean): void {
+    const current = getEngineConfig();
+    const updated = saveEngineConfig({
+      ...current,
+      visual: {
+        ...current.visual,
+        [key]: enabled
+      }
+    });
+    this.applyEngineConfigRuntime(updated);
   }
 
   private handleEscape(): void {

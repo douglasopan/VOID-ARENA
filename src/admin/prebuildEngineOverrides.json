@@ -1,5 +1,54 @@
 {
+  "version": 1,
+  "branding": {
+    "title": "VOID ARENA",
+    "menuFont": "Orbitron",
+    "textFont": "Open Sans"
+  },
+  "gameplay": {
+    "startSpeedMultiplier": 1.5,
+    "minSpeedMultiplier": 1,
+    "boostMultiplier": 1.58,
+    "staminaDrainMultiplier": 1,
+    "staminaRegenMultiplier": 1,
+    "magnetStrengthMultiplier": 5,
+    "objectContactSecondsMultiplier": 1,
+    "rimSuctionMultiplier": 1,
+    "swallowGravityMultiplier": 1,
+    "objectMissForgiveness": 1
+  },
   "generation": {
+    "objectDensityMultiplier": 1,
+    "trafficEnabled": true,
+    "pedestriansEnabled": true,
+    "adsEnabled": true,
+    "enabledObjectKinds": {
+      "crate": true,
+      "post": true,
+      "tree": true,
+      "rock": true,
+      "car": true,
+      "truck": true,
+      "bus": true,
+      "emergency": true,
+      "trailerTruck": true,
+      "trafficLight": true,
+      "building": true,
+      "structure": true,
+      "billboard": true,
+      "screen": true,
+      "bench": true,
+      "hydrant": true,
+      "trash": true,
+      "pedestrian": true,
+      "cone": true,
+      "mailbox": true,
+      "bike": true,
+      "planter": true,
+      "kiosk": true,
+      "fountain": true,
+      "statue": true
+    },
     "spawnHeightOffsets": {
       "crate": 0,
       "post": 0,
@@ -26,11 +75,120 @@
       "kiosk": 0,
       "fountain": -0.07,
       "statue": -0.35
+    },
+    "mapTuning": {
+      "blockSizeMultiplier": 1,
+      "roadWidthMultiplier": 1,
+      "avenueCountMultiplier": 1,
+      "sideStreetMultiplier": 1,
+      "buildingDensityMultiplier": 3,
+      "trafficDensityMultiplier": 3,
+      "pedestrianDensityMultiplier": 3,
+      "propDensityMultiplier": 3,
+      "plazaDensityMultiplier": 3,
+      "adDensityMultiplier": 1,
+      "powerUpDensityMultiplier": 1
     }
   },
-  "gameplay": {
-    "startSpeedMultiplier": 2,
-    "boostMultiplier": "",
-    "magnetStrengthMultiplier": ""
+  "powerUps": {
+    "magnet": {
+      "enabled": true,
+      "durationSeconds": 9
+    },
+    "shrink": {
+      "enabled": true,
+      "durationSeconds": 8
+    },
+    "haste": {
+      "enabled": true,
+      "durationSeconds": 7
+    },
+    "shield": {
+      "enabled": true,
+      "durationSeconds": 8
+    },
+    "stamina": {
+      "enabled": true,
+      "durationSeconds": 0
+    },
+    "mass": {
+      "enabled": true,
+      "durationSeconds": 0
+    },
+    "gust": {
+      "enabled": true,
+      "durationSeconds": 8
+    },
+    "overcharge": {
+      "enabled": true,
+      "durationSeconds": 9
+    },
+    "dash": {
+      "enabled": true,
+      "durationSeconds": 9
+    }
+  },
+  "disasters": {
+    "enabled": true,
+    "firstDelayMultiplier": 1,
+    "nextDelayMultiplier": 1,
+    "events": {
+      "rain": {
+        "enabled": true,
+        "weight": 22
+      },
+      "thunderstorm": {
+        "enabled": true,
+        "weight": 22
+      },
+      "earthquake": {
+        "enabled": true,
+        "weight": 6
+      },
+      "meteorShower": {
+        "enabled": true,
+        "weight": 22
+      },
+      "sandstorm": {
+        "enabled": true,
+        "weight": 22
+      }
+    }
+  },
+  "controls": {
+    "mouseControlEnabled": true,
+    "bindings": {}
+  },
+  "audio": {
+    "menuMusic": [
+      "/audio/music/mainmenu1.ogg",
+      "/audio/music/mainmenu2.ogg"
+    ],
+    "mapMusic": [
+      "/audio/music/citymap1.ogg",
+      "/audio/music/citymap2.ogg",
+      "/audio/music/concrete_symphony.ogg",
+      "/audio/music/m2.ogg",
+      "/audio/music/m4.ogg",
+      "/audio/music/m5.ogg"
+    ],
+    "uiHover": "/audio/ui/hover_button.ogg",
+    "uiClick": "/audio/ui/click_button.ogg",
+    "playerDie": "/audio/sfx/die_sound.ogg",
+    "objectSfx": {
+      "car": [],
+      "building": [
+        "/audio/music/buildingnoise1.ogg"
+      ],
+      "crate": [
+        "/audio/music/cratesound1.ogg"
+      ],
+      "post": [
+        "/audio/sfx/1.ogg"
+      ],
+      "trafficLight": [
+        "/audio/sfx/2.ogg"
+      ]
+    }
   }
 }

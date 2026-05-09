@@ -77,6 +77,9 @@ export interface ObjectSpawnDefinition {
   score: number;
   respawnDelay: number;
   category: CityObjectCategory;
+  variantId?: string;
+  variantLabel?: string;
+  variantRole?: string;
   roadAligned?: boolean;
   routeId?: string;
   routeT?: number;

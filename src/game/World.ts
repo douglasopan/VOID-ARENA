@@ -422,6 +422,10 @@ export class World {
   }
 
   private resolveObjectPairCollision(a: WorldObject, b: WorldObject, deltaSeconds: number): void {
+    if (this.shouldKeepRouteTrafficAuthoritative(a, b)) {
+      return;
+    }
+
     const radiusA = a.collisionRadius;
     const radiusB = b.collisionRadius;
     const minDistance = radiusA + radiusB;
@@ -553,6 +557,25 @@ export class World {
     return object.category !== 'ad';
   }
 
+  private shouldKeepRouteTrafficAuthoritative(a: WorldObject, b: WorldObject): boolean {
+    const aGuidedTraffic = this.isGuidedTraffic(a);
+    const bGuidedTraffic = this.isGuidedTraffic(b);
+    if (aGuidedTraffic && bGuidedTraffic) {
+      return true;
+    }
+    if (aGuidedTraffic && b.kind === 'trafficLight') {
+      return true;
+    }
+    if (bGuidedTraffic && a.kind === 'trafficLight') {
+      return true;
+    }
+    return false;
+  }
+
+  private isGuidedTraffic(object: WorldObject): boolean {
+    return object.category === 'traffic' && Boolean(object.routeId) && !object.isPhysicsControlled;
+  }
+
   private arenaCornerCut(): number {
     return Math.min(this.halfExtent * 0.28, Math.max(ARENA_MIN_CORNER_CUT, this.halfExtent * ARENA_CORNER_CUT_RATIO));
   }
@@ -561,11 +584,11 @@ export class World {
     let desiredSpeed = object.routeSpeed;
     const signalDistance = this.distanceToNextStoppingSignal(object, route);
     if (signalDistance !== null) {
-      const stopBuffer = Math.max(1.1, object.size.z * 0.32);
+      const stopBuffer = Math.max(2.35, object.size.z * 0.62);
       if (signalDistance <= stopBuffer) {
         desiredSpeed = 0;
-      } else if (signalDistance < 18) {
-        desiredSpeed = Math.min(desiredSpeed, Math.max(0, (signalDistance - stopBuffer) * 0.78));
+      } else if (signalDistance < 28) {
+        desiredSpeed = Math.min(desiredSpeed, Math.max(0, (signalDistance - stopBuffer) * 0.62));
       }
     }
 

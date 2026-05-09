@@ -77,6 +77,8 @@ export class SceneManager {
   private firstCameraFrame = true;
   private language: LanguageCode = 'en';
   private currentGraphicsQuality: GraphicsQuality = 'balanced';
+  private skyEffectsEnabled = true;
+  private lightingEffectsEnabled = true;
   private currentDisaster: NaturalDisasterSnapshot = CLEAR_NATURAL_DISASTER;
   private rainPoints!: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
   private rainPositions!: Float32Array;
@@ -180,6 +182,27 @@ export class SceneManager {
     this.renderer.shadowMap.type = quality === 'quality' ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
     this.lightSelectionAccumulator = 999;
     this.resize();
+  }
+
+  setSkyEffectsEnabled(enabled: boolean): void {
+    this.skyEffectsEnabled = enabled;
+    if (!enabled) {
+      this.skyRoot.visible = false;
+    }
+  }
+
+  setLightingEffectsEnabled(enabled: boolean): void {
+    this.lightingEffectsEnabled = enabled;
+    this.lightSelectionAccumulator = 999;
+    if (!enabled) {
+      for (const mesh of this.cityLightMeshes) {
+        mesh.visible = false;
+      }
+      for (const entry of this.cityPointLights) {
+        entry.light.visible = false;
+        entry.light.intensity = 0;
+      }
+    }
   }
 
   setDayNightMode(mode: DayNightMode): void {
@@ -431,6 +454,10 @@ export class SceneManager {
       if (!data) {
         continue;
       }
+      if (!this.lightingEffectsEnabled) {
+        mesh.visible = false;
+        continue;
+      }
       const disabled = Boolean(mesh.userData.cityLightOff);
       const flicker = typeof mesh.userData.cityLightFlicker === 'number'
         ? THREE.MathUtils.clamp(mesh.userData.cityLightFlicker, 0, 1)
@@ -444,11 +471,16 @@ export class SceneManager {
       }
     }
 
-    if (this.lightSelectionAccumulator >= 0.24) {
+    if (this.lightingEffectsEnabled && this.lightSelectionAccumulator >= 0.24) {
       this.updateCityPointLightSelection();
       this.lightSelectionAccumulator = 0;
     }
     for (const entry of this.cityPointLights) {
+      if (!this.lightingEffectsEnabled) {
+        entry.light.visible = false;
+        entry.light.intensity = 0;
+        continue;
+      }
       const disabled = Boolean(entry.light.userData.cityLightOff);
       const flicker = typeof entry.light.userData.cityLightFlicker === 'number'
         ? THREE.MathUtils.clamp(entry.light.userData.cityLightFlicker, 0, 1)
@@ -737,7 +769,7 @@ export class SceneManager {
 
   private updateSkyTraffic(deltaSeconds: number, world: World | null, zoom: number): void {
     this.skyElapsed += deltaSeconds;
-    const visible = Boolean(world) && (zoom >= 1.05 || this.camera.position.y > 18);
+    const visible = this.skyEffectsEnabled && Boolean(world) && (zoom >= 1.05 || this.camera.position.y > 18);
     this.skyRoot.visible = visible;
     if (!visible) {
       return;

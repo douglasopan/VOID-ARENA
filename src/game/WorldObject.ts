@@ -42,6 +42,9 @@ export class WorldObject {
   readonly score: number;
   readonly respawnDelay: number;
   readonly category: CityObjectCategory;
+  readonly variantId?: string;
+  readonly variantLabel?: string;
+  readonly variantRole?: string;
   readonly routeId?: string;
   readonly pedestrianPathId?: string;
   readonly trafficSignalId?: string;
@@ -88,6 +91,9 @@ export class WorldObject {
     this.score = definition.score;
     this.respawnDelay = definition.respawnDelay;
     this.category = definition.category;
+    this.variantId = definition.variantId;
+    this.variantLabel = definition.variantLabel;
+    this.variantRole = definition.variantRole;
     this.routeId = definition.routeId;
     this.pedestrianPathId = definition.pedestrianPathId;
     this.trafficSignalId = definition.trafficSignalId;

@@ -8,6 +8,7 @@ import {
   isWorldObjectKindEnabled,
   runtimePowerUpRespawnSeconds
 } from '../admin/EngineConfig';
+import { getEnabledCustomObjectVariantsForKind } from '../admin/PrebuildAssetRegistry';
 import type {
   AdSurface,
   CityObjectCategory,
@@ -162,7 +163,7 @@ export class ProceduralMapGenerator {
     this.addPlazas(objects, occupied, network.surfaces, network.roads, spawnPoints, rng, options.size);
     this.addBuildings(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
     this.addRoadsideObjects(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
-    this.addTraffic(objects, occupied, network.trafficRoutes, network.surfaces, rng, objectBudget);
+    this.addTraffic(objects, occupied, network.trafficRoutes, network.roads, network.surfaces, rng, objectBudget);
     this.addParkedVehicles(objects, occupied, network.roads, network.surfaces, spawnPoints, rng, objectBudget);
     this.addPedestrians(objects, occupied, network.pedestrianPaths, rng, objectBudget);
     this.addLooseCityObjects(objects, occupied, network.roads, spawnPoints, rng, options.size, objectBudget);
@@ -1138,14 +1139,23 @@ export class ProceduralMapGenerator {
     objects: ObjectSpawnDefinition[],
     occupied: OccupiedFootprint[],
     routes: TrafficRoute[],
+    roads: RoadSegment[],
     surfaces: SurfaceSegment[],
     rng: SeededRandom,
     objectBudget: number
   ): void {
     const target = Math.floor(objectBudget * 0.115);
-    for (let i = 0; i < target; i += 1) {
-      const route = rng.pick(routes);
-      const t = rng.range(0, Math.max(1, route.points.length - 1));
+    const spawnableRoutes = routes.filter((route) => this.isTrafficSpawnRoute(route));
+    if (spawnableRoutes.length === 0) {
+      return;
+    }
+
+    let placed = 0;
+    let attempts = 0;
+    while (placed < target && attempts < target * 24) {
+      attempts += 1;
+      const route = rng.pick(spawnableRoutes);
+      const t = rng.range(0.035, Math.max(0.965, route.points.length - 1.035));
       const point = this.routePoint(route, t);
       const kind = this.randomTrafficVehicleKind(rng);
       const object = this.createObjectDefinition(kind, objects.length, {
@@ -1156,16 +1166,25 @@ export class ProceduralMapGenerator {
       object.routeId = route.id;
       object.routeT = t;
       object.routeSpeed = rng.range(3.5, 7.5) * this.vehicleSpeedMultiplier(kind);
-      const spawnRadius = Math.max(1.35, object.boundingRadius * 0.76);
+      const spawnRadius = this.trafficSpawnRadius(object);
       if (
         this.overlapsOccupied(object.position.x, object.position.z, spawnRadius, occupied) ||
-        this.pointConflictsCrosswalks(object.position.x, object.position.z, spawnRadius + 0.45, surfaces)
+        this.pointConflictsTrafficSpawn(object.position.x, object.position.z, spawnRadius, roads, surfaces)
       ) {
         continue;
       }
       objects.push(object);
       occupied.push({ x: object.position.x, z: object.position.z, radius: object.boundingRadius });
+      placed += 1;
     }
+  }
+
+  private isTrafficSpawnRoute(route: TrafficRoute): boolean {
+    return !route.id.startsWith('turn-') && route.points.length >= 2;
+  }
+
+  private trafficSpawnRadius(object: ObjectSpawnDefinition): number {
+    return Math.max(2.2, object.boundingRadius * 1.08, object.size.z * 0.58 + 1.25);
   }
 
   private randomTrafficVehicleKind(rng: SeededRandom): WorldObjectKind {
@@ -1391,7 +1410,7 @@ export class ProceduralMapGenerator {
     if (this.isTooCloseToAnySpawn(x, z, spawnPoints.slice(0, 5), MAP_SIZE_SETTINGS.small.spawnClearRadius)) {
       return null;
     }
-    return { x, z, rotationY: road.rotationY };
+    return { x, z, rotationY: sideSign < 0 ? road.rotationY : road.rotationY + Math.PI };
   }
 
   private looseCandidate(
@@ -1591,7 +1610,7 @@ export class ProceduralMapGenerator {
   ): ObjectSpawnDefinition {
     const spawnHeightOffset = getWorldObjectSpawnHeightOffset(base.kind);
     const centerY = Math.max(size.y * 0.5 + spawnHeightOffset, size.y * 0.5 + 0.01);
-    return {
+    return this.applyCustomObjectVariant({
       ...base,
       label,
       size,
@@ -1603,7 +1622,43 @@ export class ProceduralMapGenerator {
         ...base.position,
         y: centerY
       }
+    }, base.kind);
+  }
+
+  private applyCustomObjectVariant(object: ObjectSpawnDefinition, kind: WorldObjectKind): ObjectSpawnDefinition {
+    const variants = getEnabledCustomObjectVariantsForKind(kind);
+    if (!variants.length) {
+      return object;
+    }
+
+    const variant = variants[Math.floor(this.variantRandomUnit(object) * variants.length)];
+    const nextSize = variant.hitbox ?? object.size;
+    const spawnHeightOffset = getWorldObjectSpawnHeightOffset(kind) + variant.spawnHeightOffset;
+    const centerY = Math.max(nextSize.y * 0.5 + spawnHeightOffset, nextSize.y * 0.5 + 0.01);
+    return {
+      ...object,
+      label: variant.label || object.label,
+      color: variant.previewColor || object.color,
+      size: nextSize,
+      boundingRadius: Math.max(object.boundingRadius, Math.hypot(nextSize.x, nextSize.z) * 0.48),
+      variantId: variant.id,
+      variantLabel: variant.label,
+      variantRole: variant.role,
+      position: {
+        ...object.position,
+        y: centerY
+      }
     };
+  }
+
+  private variantRandomUnit(object: ObjectSpawnDefinition): number {
+    const id = `${object.id}:${object.position.x.toFixed(2)}:${object.position.z.toFixed(2)}`;
+    let hash = 2166136261;
+    for (let index = 0; index < id.length; index += 1) {
+      hash ^= id.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return ((hash >>> 0) % 10000) / 10000;
   }
 
   private finalizeObjectPlacement(
@@ -1940,6 +1995,55 @@ export class ProceduralMapGenerator {
     }
 
     return false;
+  }
+
+  private pointConflictsTrafficSpawn(
+    x: number,
+    z: number,
+    radius: number,
+    roads: RoadSegment[],
+    surfaces: SurfaceSegment[]
+  ): boolean {
+    return (
+      this.pointConflictsCrosswalks(x, z, Math.max(4.2, radius + 1.9), surfaces) ||
+      this.pointConflictsRoadIntersections(x, z, Math.max(8.2, radius + 4.6), roads)
+    );
+  }
+
+  private pointConflictsRoadIntersections(x: number, z: number, radius: number, roads: RoadSegment[]): boolean {
+    const radiusSq = radius * radius;
+    for (const a of roads) {
+      for (const b of roads) {
+        if (a.id >= b.id || Math.abs(Math.sin(a.rotationY - b.rotationY)) < 0.8) {
+          continue;
+        }
+
+        const center = this.roadIntersectionCenter(a, b);
+        if (!center) {
+          continue;
+        }
+
+        const dx = x - center.x;
+        const dz = z - center.z;
+        if (dx * dx + dz * dz <= radiusSq) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private roadIntersectionCenter(a: RoadSegment, b: RoadSegment): RoutePoint | null {
+    const vertical = Math.abs(Math.sin(a.rotationY)) < 0.5 ? a : b;
+    const horizontal = vertical === a ? b : a;
+    const center = { x: vertical.x, z: horizontal.z };
+    if (
+      Math.abs(center.z - vertical.z) > vertical.length * 0.5 ||
+      Math.abs(center.x - horizontal.x) > horizontal.length * 0.5
+    ) {
+      return null;
+    }
+    return center;
   }
 
   private pointConflictsPedestrianPaths(x: number, z: number, radius: number, paths: PedestrianPath[]): boolean {

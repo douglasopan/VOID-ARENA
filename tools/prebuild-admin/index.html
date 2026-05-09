@@ -1,90 +1,198 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Void Arena Prebuild Admin</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/vendor/three/build/three.module.js",
+          "three/addons/": "/vendor/three/examples/jsm/"
+        }
+      }
+    </script>
     <style>
+      @import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=Orbitron:wght@600;700;800&display=swap");
+
       :root {
         color-scheme: dark;
-        font-family: "Open Sans", Arial, sans-serif;
-        background: #080d14;
-        color: #f8fbff;
-        --panel: rgba(16, 24, 36, 0.92);
-        --line: rgba(255, 255, 255, 0.13);
+        --bg: #080d14;
+        --panel: rgba(13, 20, 31, 0.94);
+        --panel-2: rgba(19, 29, 43, 0.86);
+        --line: rgba(255, 255, 255, 0.12);
+        --line-strong: rgba(94, 234, 212, 0.42);
+        --text: #f8fbff;
+        --muted: #9aa8be;
         --cyan: #5eead4;
         --amber: #f6c453;
+        --danger: #fb7185;
+        --green: #91e88c;
+        font-family: "Open Sans", Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      * {
+        box-sizing: border-box;
       }
 
       body {
         margin: 0;
         min-height: 100vh;
         background:
-          radial-gradient(circle at 20% 12%, rgba(94, 234, 212, 0.16), transparent 30%),
-          radial-gradient(circle at 80% 84%, rgba(246, 196, 83, 0.12), transparent 28%),
-          #080d14;
+          radial-gradient(circle at 16% 8%, rgba(94, 234, 212, 0.17), transparent 28%),
+          radial-gradient(circle at 84% 88%, rgba(246, 196, 83, 0.12), transparent 30%),
+          linear-gradient(135deg, rgba(5, 10, 18, 0.96), rgba(9, 16, 26, 0.98));
       }
 
-      header,
-      main {
-        width: min(1280px, calc(100vw - 32px));
-        margin: 0 auto;
-      }
-
-      header {
-        padding: 24px 0 12px;
-      }
-
-      h1 {
-        margin: 0;
-        font-family: Orbitron, Arial, sans-serif;
-        letter-spacing: 0;
-      }
-
-      p {
-        color: #b8c2d8;
-      }
-
-      .layout {
-        display: grid;
-        grid-template-columns: 240px 1fr;
-        gap: 16px;
-        padding-bottom: 24px;
-      }
-
-      nav,
-      section {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--panel);
-        box-shadow: 0 18px 80px rgba(0, 0, 0, 0.26);
-      }
-
-      nav {
-        align-self: start;
-        padding: 10px;
-        display: grid;
-        gap: 8px;
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
       }
 
       button {
-        min-height: 40px;
+        min-height: 38px;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.08);
-        color: #f8fbff;
+        padding: 0 12px;
+        background: rgba(255, 255, 255, 0.075);
+        color: var(--text);
         font-weight: 800;
         cursor: pointer;
       }
 
+      button:hover {
+        border-color: rgba(94, 234, 212, 0.48);
+      }
+
       button.active,
       button.primary {
-        border-color: rgba(94, 234, 212, 0.8);
+        border-color: rgba(94, 234, 212, 0.85);
         background: rgba(94, 234, 212, 0.18);
       }
 
-      section {
+      button.danger {
+        border-color: rgba(251, 113, 133, 0.6);
+        background: rgba(251, 113, 133, 0.12);
+      }
+
+      input,
+      textarea,
+      select {
+        width: 100%;
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+        color: var(--text);
+        background: rgba(0, 0, 0, 0.28);
+        outline: none;
+      }
+
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+
+      input:focus,
+      textarea:focus,
+      select:focus {
+        border-color: rgba(94, 234, 212, 0.72);
+      }
+
+      header,
+      main {
+        width: min(1560px, calc(100vw - 28px));
+        margin: 0 auto;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: end;
+        padding: 22px 0 12px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        font-family: Orbitron, "Open Sans", Arial, sans-serif;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.45rem, 3vw, 2.6rem);
+      }
+
+      h2 {
+        margin: 0;
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        font-size: 1rem;
+      }
+
+      p {
+        margin: 6px 0 0;
+        color: var(--muted);
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+        gap: 14px;
+        padding-bottom: 24px;
+      }
+
+      nav,
+      .panel,
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 18px 80px rgba(0, 0, 0, 0.28);
+      }
+
+      nav {
+        align-self: start;
+        display: grid;
+        gap: 8px;
+        padding: 10px;
+        position: sticky;
+        top: 10px;
+      }
+
+      nav button {
+        justify-content: start;
+        text-align: left;
+      }
+
+      .panel {
+        min-height: calc(100vh - 128px);
         padding: 16px;
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+
+      .panel-actions,
+      .toolbar,
+      .row-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
       }
 
       .grid {
@@ -93,98 +201,249 @@
         gap: 12px;
       }
 
-      label {
+      .grid.tight {
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.8fr) minmax(360px, 1.2fr);
+        gap: 14px;
+      }
+
+      .three-col {
+        display: grid;
+        grid-template-columns: minmax(220px, 0.65fr) minmax(280px, 0.85fr) minmax(420px, 1.3fr);
+        gap: 14px;
+      }
+
+      .card {
+        background: var(--panel-2);
+        padding: 14px;
+        box-shadow: none;
+      }
+
+      .field {
         display: grid;
         gap: 6px;
-        color: #b8c2d8;
-        font-size: 0.9rem;
-      }
-
-      input,
-      textarea,
-      select {
-        min-height: 38px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 8px 10px;
-        color: #f8fbff;
-        background: rgba(0, 0, 0, 0.28);
-      }
-
-      textarea {
-        width: 100%;
-        min-height: 460px;
-        font-family: Consolas, monospace;
+        color: var(--muted);
         font-size: 0.88rem;
-        resize: vertical;
+        font-weight: 700;
       }
 
-      .toolbar {
+      .field span {
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .check {
         display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin: 14px 0 0;
+        gap: 8px;
+        align-items: center;
+        color: var(--text);
+        font-weight: 800;
+      }
+
+      .check input {
+        width: auto;
+        min-height: auto;
+      }
+
+      .muted {
+        color: var(--muted);
       }
 
       .status {
         color: var(--amber);
+        min-height: 20px;
+        font-weight: 800;
+      }
+
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: minmax(120px, 0.45fr) minmax(180px, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.18);
+      }
+
+      .text-row {
+        display: grid;
+        grid-template-columns: minmax(180px, 0.45fr) minmax(220px, 0.55fr) minmax(260px, 1fr);
+        gap: 10px;
+        align-items: start;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.18);
+      }
+
+      .text-key {
+        color: var(--cyan);
+        font-weight: 900;
+        overflow-wrap: anywhere;
+      }
+
+      .default-text {
+        white-space: pre-wrap;
+        color: #c7d2e6;
+        font-size: 0.86rem;
+      }
+
+      .object-list {
+        max-height: 680px;
+        overflow: auto;
+        display: grid;
+        gap: 6px;
+      }
+
+      .object-list button {
+        text-align: left;
+        justify-content: start;
+      }
+
+      .object-list button small {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 0.72rem;
         font-weight: 700;
       }
 
-      .spawn-tool {
+      .object-group {
         display: grid;
-        grid-template-columns: minmax(260px, 0.8fr) minmax(300px, 1.2fr);
-        gap: 14px;
-        margin: 14px 0;
-        padding: 14px;
-        border: 1px solid rgba(94, 234, 212, 0.18);
+        gap: 6px;
+        padding: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 8px;
-        background: rgba(0, 0, 0, 0.2);
+        background: rgba(0, 0, 0, 0.12);
       }
 
-      .spawn-tool h3 {
-        margin: 0 0 10px;
+      .object-group h4 {
+        margin: 0;
+        color: var(--cyan);
+        font-family: Orbitron, "Open Sans", Arial, sans-serif;
+        font-size: 0.76rem;
       }
 
-      .spawn-controls {
+      .button-link {
+        min-height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0 12px;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.075);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .preview-card {
+        min-height: 300px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .preview-card canvas {
+        display: block;
+        width: 100%;
+        min-height: 280px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #07111d;
+      }
+
+      .preview-grid {
         display: grid;
-        gap: 10px;
-        align-self: start;
+        grid-template-columns: 1fr;
+        gap: 12px;
       }
 
-      .spawn-row {
+      .raw-editor {
+        min-height: 560px;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.86rem;
+      }
+
+      .split-input {
         display: grid;
-        grid-template-columns: 1fr 96px;
+        grid-template-columns: 1fr auto;
         gap: 8px;
         align-items: end;
       }
 
-      .spawn-preview-card {
-        min-height: 260px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: linear-gradient(180deg, rgba(10, 18, 30, 0.9), rgba(2, 7, 12, 0.9));
-        overflow: hidden;
+      .pill-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0;
       }
 
-      #spawn-preview {
-        display: block;
-        width: 100%;
-        height: 260px;
-      }
-
-      .hint {
-        margin: 8px 0 0;
-        color: #91a0bb;
+      .pill-bar button {
+        min-height: 34px;
         font-size: 0.84rem;
       }
 
-      @media (max-width: 800px) {
-        .layout {
+      .audio-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .audio-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+      }
+
+      .metric {
+        display: grid;
+        gap: 4px;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .metric strong {
+        font-size: 1.35rem;
+        color: var(--cyan);
+      }
+
+      .map-preview-wrap {
+        display: grid;
+        grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+        gap: 12px;
+      }
+
+      .hide {
+        display: none !important;
+      }
+
+      @media (max-width: 1100px) {
+        .app,
+        .two-col,
+        .three-col,
+        .map-preview-wrap {
           grid-template-columns: 1fr;
         }
 
-        .spawn-tool {
+        nav {
+          position: static;
+          grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        }
+
+        .text-row,
+        .row {
           grid-template-columns: 1fr;
         }
       }
@@ -192,245 +451,1867 @@
   </head>
   <body>
     <header>
-      <h1>Void Arena Prebuild Admin</h1>
-      <p>Edita defaults que entram no build: engine, textos, audio e registro de assets. Isso fica fora do jogo final.</p>
+      <div>
+        <h1>Void Arena Prebuild Admin</h1>
+        <p>Ferramenta fora do jogo final para editar textos, mecanicas, assets, audio e parametros do gerador antes da build.</p>
+      </div>
+      <div class="panel-actions">
+        <button id="save-all" class="primary">Salvar tudo</button>
+        <button id="reload">Recarregar</button>
+      </div>
     </header>
-    <main class="layout">
-      <nav>
-        <button data-section="engine" class="active">Engine</button>
-        <button data-section="text">Texts</button>
-        <button data-section="assets">Assets</button>
-      </nav>
-      <section>
-        <h2 id="title">Engine</h2>
-        <div id="quick"></div>
-        <textarea id="editor" spellcheck="false"></textarea>
-        <div class="toolbar">
-          <button class="primary" id="save">Save section</button>
-          <button id="reload">Reload</button>
-          <span class="status" id="status"></span>
+    <main class="app">
+      <nav id="nav"></nav>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 id="title"></h2>
+            <p id="subtitle"></p>
+          </div>
+          <div class="status" id="status" aria-live="polite"></div>
         </div>
+        <div id="content"></div>
       </section>
     </main>
+
     <script type="module">
-      const WORLD_OBJECT_KINDS = [
-        'crate',
-        'post',
-        'tree',
-        'rock',
-        'car',
-        'truck',
-        'bus',
-        'emergency',
-        'trailerTruck',
-        'trafficLight',
-        'building',
-        'structure',
-        'billboard',
-        'screen',
-        'bench',
-        'hydrant',
-        'trash',
-        'pedestrian',
-        'cone',
-        'mailbox',
-        'bike',
-        'planter',
-        'kiosk',
-        'fountain',
-        'statue'
+      import * as THREE from '/vendor/three/build/three.module.js';
+      import { OrbitControls } from '/vendor/three/examples/jsm/controls/OrbitControls.js';
+      import { GLTFLoader } from '/vendor/three/examples/jsm/loaders/GLTFLoader.js';
+
+      const SECTIONS = [
+        ['dashboard', 'Resumo', 'Visao geral do que entra no build.'],
+        ['texts', 'Textos', 'Todos os textos do jogo por idioma e categoria.'],
+        ['mechanics', 'Mecanicas', 'Velocidades, stamina, fisica de queda e marca do jogo.'],
+        ['powerups', 'Powerups', 'Ativar, desativar e ajustar duracao de poderes.'],
+        ['events', 'Eventos', 'Chuva, tempestade, terremoto, meteoros e outros eventos.'],
+        ['objects', 'Objetos 3D', 'Troca de modelos, texturas, hitbox e altura de spawn.'],
+        ['audio', 'Audio OGG', 'Musicas, efeitos e importacao/conversao para .ogg.'],
+        ['generator', 'Gerador de mapa', 'Ajuste parametros e veja uma previa com seed.'],
+        ['raw', 'JSON', 'Editor bruto para casos avancados.']
       ];
 
-      const OBJECT_PREVIEW = {
-        crate: { w: 1, h: 1, bottom: -0.5, top: 0.5, shape: 'box' },
-        post: { w: 0.36, h: 4.4, bottom: -2.2, top: 2.2, shape: 'post' },
-        tree: { w: 1.25, h: 3.6, bottom: -1.62, top: 1.72, shape: 'tree' },
-        rock: { w: 1.5, h: 0.95, bottom: -0.5, top: 0.5, shape: 'rock' },
-        car: { w: 3.05, h: 0.78, bottom: -0.53, top: 0.58, shape: 'vehicle' },
-        truck: { w: 4.35, h: 1.28, bottom: -0.7, top: 0.72, shape: 'vehicle' },
-        bus: { w: 6.25, h: 1.58, bottom: -0.85, top: 0.85, shape: 'vehicle' },
-        emergency: { w: 3.5, h: 0.95, bottom: -0.58, top: 0.62, shape: 'vehicle' },
-        trailerTruck: { w: 6.65, h: 1.36, bottom: -0.76, top: 0.78, shape: 'vehicle' },
-        trafficLight: { w: 0.9, h: 3.05, bottom: -1.525, top: 1.525, shape: 'post' },
-        building: { w: 8, h: 11, bottom: -5.5, top: 5.5, shape: 'building' },
-        structure: { w: 3.2, h: 2.1, bottom: -1.05, top: 1.05, shape: 'box' },
-        billboard: { w: 13.1, h: 5.95, bottom: -2.98, top: 2.98, shape: 'ad' },
-        screen: { w: 12.55, h: 6.35, bottom: -3.18, top: 3.18, shape: 'ad' },
-        bench: { w: 1.7, h: 0.55, bottom: -0.4, top: 0.3, shape: 'bench' },
-        hydrant: { w: 0.38, h: 0.75, bottom: -0.27, top: 0.55, shape: 'post' },
-        trash: { w: 0.62, h: 0.88, bottom: -0.44, top: 0.56, shape: 'box' },
-        pedestrian: { w: 0.45, h: 1.55, bottom: -0.5, top: 0.85, shape: 'person' },
-        cone: { w: 0.46, h: 0.72, bottom: -0.36, top: 0.36, shape: 'cone' },
-        mailbox: { w: 0.58, h: 1.05, bottom: -0.53, top: 0.55, shape: 'box' },
-        bike: { w: 1.45, h: 0.82, bottom: -0.43, top: 0.34, shape: 'bike' },
-        planter: { w: 1.2, h: 0.95, bottom: -0.4, top: 0.55, shape: 'box' },
-        kiosk: { w: 2.05, h: 2.2, bottom: -0.98, top: 1.18, shape: 'box' },
-        fountain: { w: 2.35, h: 1.25, bottom: -0.52, top: 0.62, shape: 'round' },
-        statue: { w: 1.15, h: 2.35, bottom: -1.15, top: 1.18, shape: 'person' }
+      const TEXT_CATEGORIES = [
+        ['menu', 'Menus', /^(tagline|account|createAccount|matches|best|startSolo|findGames|hostMatch|settings|paused|resume|back|backToMenu|language|holeBorder|hudDisplay|soundEffects|music|musicTrack|nextTrack|deathCamera|graphics|fast|quality|camera|close|normal|far|show|hide|enabled|disabled|on|off)$/],
+        ['setup', 'Partidas', /^(soloPreset|preset|customMatch|mapSize|small|medium|large|huge|matchMode|timedMatch|lastHoleStanding|itemRespawn|matchDuration|duration|twoMinutes|threeMinutes|fiveMinutes|tenMinutes|bots|botSkill|relaxed|balanced|competitive|chaos|inWorldAds|mapElements|light|dense|packed|powerups|respawnRange|startMatch|dayNightMode|dayOnly|nightOnly|dayNightCycle|mapSeed|generateSeed|mapSeedHint|timeTrial|career|creative)/],
+        ['hud', 'HUD e Chat', /^(stamina|score|time|alive|leaderboard|closeLeaderboard|activePowerups|cameraZoom|zoomIn|zoomOut|controlsHint|pressEnterToChat|closeChat|stats|chat|chatWindow|zoomButtons|spawnProtection)$/],
+        ['controls', 'Controles', /^(controls|mouseControl|keyboardBindings|control|pressAKey|keybindHint)/],
+        ['objectives', 'Objetivos', /^(matchStarted|objective|challenge|objectiveComplete|objectiveFailed|objectiveTimeTrial|objectiveCareer)/],
+        ['events', 'Eventos', /^(naturalDisaster|disaster)/],
+        ['combat', 'Combate', /^(respawned|swallowedBy|eliminated|pickedUp|reachedSize|wonMatch|noWinner|playerFallback|voidFallback|deathPhrase|killNotice)/],
+        ['results', 'Resultado', /^(matchComplete|winner|yourPlacement|finalScore|finalSize|objectsSwallowed|eliminations|matchHistory|playAgain|online|solo|pts)$/],
+        ['multiplayer', 'Multiplayer', /^(hostTitle|hostSubtitle|roomName|maxPlayers|fillEmptySlots|hostMultiplayerMatch|findGamesSubtitle|join|map|botsOn|botsOff|waitingForPlayer|multiplayerRoom|localRoomPreview|couldNotJoinRoom|serverUnavailablePrompt)$/],
+        ['powerups', 'Nomes de powerups', /^powerup/],
+        ['other', 'Outros', /.*/]
+      ];
+
+      const POWERUP_DEFAULTS = {
+        magnet: 9,
+        shrink: 8,
+        haste: 7,
+        shield: 8,
+        stamina: 0,
+        mass: 0,
+        gust: 8,
+        overcharge: 9,
+        dash: 9
       };
 
-      const state = { section: 'engine', config: { engine: {}, text: {}, assets: {} } };
-      let selectedSpawnKind = 'bike';
-      const editor = document.querySelector('#editor');
-      const statusEl = document.querySelector('#status');
-      const titleEl = document.querySelector('#title');
-      const quickEl = document.querySelector('#quick');
+      const OBJECT_PREVIEW = {
+        crate: { w: 1, h: 1, d: 1, bottom: -0.5, top: 0.5, shape: 'box', color: '#b87938' },
+        post: { w: 0.4, h: 4.4, d: 0.4, bottom: -2.2, top: 2.2, shape: 'post', color: '#aeb9c4' },
+        tree: { w: 1.25, h: 3.6, d: 1.25, bottom: -1.62, top: 1.72, shape: 'tree', color: '#37a96b' },
+        rock: { w: 1.5, h: 0.95, d: 1.2, bottom: -0.5, top: 0.5, shape: 'rock', color: '#8c9aa1' },
+        car: { w: 2.25, h: 0.78, d: 3.05, bottom: -0.53, top: 0.58, shape: 'vehicle', color: '#ef6f57' },
+        truck: { w: 2.45, h: 1.28, d: 4.35, bottom: -0.7, top: 0.72, shape: 'vehicle', color: '#e77c38' },
+        bus: { w: 2.55, h: 1.58, d: 6.25, bottom: -0.85, top: 0.85, shape: 'vehicle', color: '#f6c453' },
+        emergency: { w: 2.35, h: 0.95, d: 3.5, bottom: -0.58, top: 0.62, shape: 'vehicle', color: '#e9f1ff' },
+        trailerTruck: { w: 2.55, h: 1.36, d: 6.65, bottom: -0.76, top: 0.78, shape: 'vehicle', color: '#d76f37' },
+        trafficLight: { w: 0.9, h: 3.05, d: 0.9, bottom: -1.525, top: 1.525, shape: 'post', color: '#222a32' },
+        building: { w: 8, h: 11, d: 8, bottom: -5.5, top: 5.5, shape: 'building', color: '#68747a' },
+        structure: { w: 3.2, h: 2.1, d: 3.2, bottom: -1.05, top: 1.05, shape: 'box', color: '#5f817c' },
+        billboard: { w: 13.1, h: 5.95, d: 0.55, bottom: -2.98, top: 2.98, shape: 'ad', color: '#28333f' },
+        screen: { w: 12.55, h: 6.35, d: 0.55, bottom: -3.18, top: 3.18, shape: 'ad', color: '#253446' },
+        bench: { w: 1.7, h: 0.55, d: 0.55, bottom: -0.4, top: 0.3, shape: 'bench', color: '#9b6738' },
+        hydrant: { w: 0.38, h: 0.75, d: 0.38, bottom: -0.27, top: 0.55, shape: 'post', color: '#d84d4d' },
+        trash: { w: 0.62, h: 0.88, d: 0.62, bottom: -0.44, top: 0.56, shape: 'box', color: '#2b5f50' },
+        pedestrian: { w: 0.45, h: 1.55, d: 0.45, bottom: -0.5, top: 0.85, shape: 'person', color: '#60a5fa' },
+        cone: { w: 0.46, h: 0.72, d: 0.46, bottom: -0.36, top: 0.36, shape: 'cone', color: '#f97316' },
+        mailbox: { w: 0.58, h: 1.05, d: 0.58, bottom: -0.53, top: 0.55, shape: 'box', color: '#2f67a8' },
+        bike: { w: 1.45, h: 0.82, d: 0.44, bottom: -0.43, top: 0.34, shape: 'bike', color: '#94a3b8' },
+        planter: { w: 1.2, h: 0.95, d: 1.2, bottom: -0.4, top: 0.55, shape: 'box', color: '#37a96b' },
+        kiosk: { w: 2.05, h: 2.2, d: 2.05, bottom: -0.98, top: 1.18, shape: 'box', color: '#5bb6a5' },
+        fountain: { w: 2.35, h: 1.25, d: 2.35, bottom: -0.52, top: 0.62, shape: 'round', color: '#7dd3fc' },
+        statue: { w: 1.15, h: 2.35, d: 1.15, bottom: -1.15, top: 1.18, shape: 'person', color: '#aeb9c4' }
+      };
 
-      document.querySelectorAll('nav button').forEach((button) => {
-        button.addEventListener('click', () => {
-          state.section = button.dataset.section;
-          document.querySelectorAll('nav button').forEach((item) => item.classList.toggle('active', item === button));
-          render();
-        });
-      });
-      document.querySelector('#save').addEventListener('click', save);
-      document.querySelector('#reload').addEventListener('click', load);
+      const OBJECT_CATEGORIES = [
+        { id: 'pedestrians', label: 'Pedestres', builtIns: ['pedestrian'] },
+        { id: 'vehicles', label: 'Veiculos', builtIns: ['car', 'truck', 'bus', 'emergency', 'trailerTruck'] },
+        { id: 'streetProps', label: 'Rua e calcada', builtIns: ['post', 'trafficLight', 'bench', 'hydrant', 'trash', 'cone', 'mailbox', 'bike', 'planter', 'kiosk', 'fountain', 'statue'] },
+        { id: 'nature', label: 'Natureza', builtIns: ['tree', 'rock'] },
+        { id: 'buildings', label: 'Construcoes e ads', builtIns: ['building', 'structure', 'billboard', 'screen'] },
+        { id: 'items', label: 'Itens e caixas', builtIns: ['crate'] }
+      ];
 
+      const DEFAULT_CUSTOM_OBJECTS = [
+        { id: 'pedestrian_male', label: 'Pedestre homem', role: 'man', category: 'pedestrians', baseKind: 'pedestrian', previewColor: '#60a5fa' },
+        { id: 'pedestrian_female', label: 'Pedestre mulher', role: 'woman', category: 'pedestrians', baseKind: 'pedestrian', previewColor: '#f472b6' },
+        { id: 'pedestrian_builder', label: 'Construtor', role: 'builder', category: 'pedestrians', baseKind: 'pedestrian', previewColor: '#facc15' },
+        { id: 'pedestrian_police', label: 'Policial', role: 'police', category: 'pedestrians', baseKind: 'pedestrian', previewColor: '#2563eb' },
+        { id: 'pedestrian_firefighter', label: 'Bombeiro', role: 'firefighter', category: 'pedestrians', baseKind: 'pedestrian', previewColor: '#ef4444' },
+        { id: 'vehicle_sedan', label: 'Sedan', role: 'sedan', category: 'vehicles', baseKind: 'car', previewColor: '#45a7d8', hitbox: { x: 1.62, y: 0.78, z: 3.05 } },
+        { id: 'vehicle_taxi', label: 'Taxi', role: 'taxi', category: 'vehicles', baseKind: 'car', previewColor: '#f6d365', hitbox: { x: 1.62, y: 0.78, z: 3.05 } },
+        { id: 'vehicle_coupe', label: 'Coupe', role: 'coupe', category: 'vehicles', baseKind: 'car', previewColor: '#d95763', hitbox: { x: 1.62, y: 0.78, z: 3.05 } },
+        { id: 'vehicle_van', label: 'Van', role: 'van', category: 'vehicles', baseKind: 'truck', previewColor: '#e2e8f0', hitbox: { x: 2.12, y: 1.28, z: 4.35 } },
+        { id: 'vehicle_pickup', label: 'Pickup', role: 'pickup', category: 'vehicles', baseKind: 'truck', previewColor: '#e56f40', hitbox: { x: 2.12, y: 1.12, z: 4.1 } },
+        { id: 'vehicle_delivery_truck', label: 'Caminhao de entrega', role: 'delivery', category: 'vehicles', baseKind: 'truck', previewColor: '#f0c850', hitbox: { x: 2.12, y: 1.28, z: 4.35 } },
+        { id: 'vehicle_city_bus', label: 'Onibus urbano', role: 'cityBus', category: 'vehicles', baseKind: 'bus', previewColor: '#f6c453', hitbox: { x: 2.26, y: 1.58, z: 6.25 } },
+        { id: 'vehicle_police', label: 'Viatura policial', role: 'police', category: 'vehicles', baseKind: 'emergency', previewColor: '#2563eb', hitbox: { x: 1.72, y: 0.86, z: 3.18 } },
+        { id: 'vehicle_ambulance', label: 'Ambulancia', role: 'ambulance', category: 'vehicles', baseKind: 'emergency', previewColor: '#f8fafc', hitbox: { x: 2.05, y: 1.28, z: 4.15 } },
+        { id: 'vehicle_fire_truck', label: 'Caminhao de bombeiros', role: 'fireTruck', category: 'vehicles', baseKind: 'emergency', previewColor: '#ef4444', hitbox: { x: 2.12, y: 1.28, z: 4.35 } },
+        { id: 'vehicle_trailer_truck', label: 'Carreta', role: 'trailerTruck', category: 'vehicles', baseKind: 'trailerTruck', previewColor: '#d76f37', hitbox: { x: 2.2, y: 1.36, z: 6.65 } }
+      ];
+
+      const state = {
+        section: 'dashboard',
+        config: { engine: {}, text: {}, assets: {} },
+        meta: { languages: [], objectKinds: [], powerUps: [], events: [], textDefaults: {} },
+        textLang: 'pt',
+        textCategory: 'menu',
+        textSearch: '',
+        objectKind: 'car',
+        mapSeed: 'VA-PREBUILD',
+        mapSize: 'medium',
+        rawSection: 'engine'
+      };
+
+      const elements = {
+        nav: document.querySelector('#nav'),
+        title: document.querySelector('#title'),
+        subtitle: document.querySelector('#subtitle'),
+        content: document.querySelector('#content'),
+        status: document.querySelector('#status')
+      };
+
+      const gltfLoader = new GLTFLoader();
+      let objectPreview = null;
+      let mapPreview = null;
+      let mapPreviewTimer = 0;
+      let mapPreviewRequestId = 0;
+      const localModelPreviewUrls = new Map();
+      let statusTimer = 0;
+
+      document.querySelector('#save-all').addEventListener('click', () => void saveAll());
+      document.querySelector('#reload').addEventListener('click', () => void load());
+
+      renderNav();
       await load();
 
       async function load() {
-        const response = await fetch('/api/config');
-        state.config = await response.json();
+        const [configResponse, metaResponse] = await Promise.all([fetch('/api/config'), fetch('/api/meta')]);
+        state.config = await configResponse.json();
+        state.meta = await metaResponse.json();
+        normalizeAllConfig();
         render();
-        setStatus('Loaded');
+        setStatus('Carregado');
       }
 
-      async function save() {
-        let value;
-        try {
-          value = JSON.parse(editor.value || '{}');
-        } catch (error) {
-          setStatus(`JSON error: ${error.message}`);
-          return;
-        }
-        const response = await fetch(`/api/config/${state.section}`, {
+      async function saveAll() {
+        if (!commitRawEditor(true)) return;
+        await Promise.all([
+          saveSection('engine', state.config.engine),
+          saveSection('text', state.config.text),
+          saveSection('assets', state.config.assets)
+        ]);
+        setStatus('Tudo salvo. A proxima build usa estes dados.');
+      }
+
+      async function saveCurrent() {
+        if (!commitRawEditor(true)) return;
+        const section = state.section === 'texts'
+          ? 'text'
+          : state.section === 'objects'
+            ? 'assets'
+            : state.section === 'raw'
+              ? state.rawSection
+              : state.section;
+        await saveSection(section, sectionPayload());
+        setStatus('Secao salva.');
+      }
+
+      async function saveSection(section, value) {
+        const response = await fetch(`/api/config/${section}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(value)
         });
         if (!response.ok) {
-          setStatus('Could not save');
-          return;
+          throw new Error(`Could not save ${section}`);
         }
-        state.config[state.section] = value;
-        setStatus('Saved. Next build will use this.');
+      }
+
+      function sectionPayload() {
+        if (state.section === 'texts') return state.config.text;
+        if (state.section === 'objects') return state.config.assets;
+        if (state.section === 'audio' || state.section === 'mechanics' || state.section === 'powerups' || state.section === 'events' || state.section === 'generator') return state.config.engine;
+        if (state.section === 'raw') return state.config[state.rawSection] ?? state.config.engine;
+        return state.config.engine;
+      }
+
+      function renderNav() {
+        elements.nav.innerHTML = SECTIONS.map(([id, label]) => `<button data-section="${id}" class="${state.section === id ? 'active' : ''}">${label}</button>`).join('');
+        elements.nav.querySelectorAll('button').forEach((button) => {
+          button.addEventListener('click', () => {
+            if (!commitRawEditor(true)) return;
+            state.section = button.dataset.section;
+            renderNav();
+            render();
+          });
+        });
       }
 
       function render() {
-        titleEl.textContent = state.section[0].toUpperCase() + state.section.slice(1);
-        editor.value = JSON.stringify(state.config[state.section] ?? {}, null, 2);
-        renderQuick();
+        const section = SECTIONS.find(([id]) => id === state.section) ?? SECTIONS[0];
+        elements.title.textContent = section[1];
+        elements.subtitle.textContent = section[2];
+        objectPreview?.dispose?.();
+        objectPreview = null;
+        mapPreview?.dispose?.();
+        mapPreview = null;
+
+        switch (state.section) {
+          case 'texts':
+            renderTexts();
+            break;
+          case 'mechanics':
+            renderMechanics();
+            break;
+          case 'powerups':
+            renderPowerups();
+            break;
+          case 'events':
+            renderEvents();
+            break;
+          case 'objects':
+            renderObjects();
+            break;
+          case 'audio':
+            renderAudio();
+            break;
+          case 'generator':
+            renderGenerator();
+            break;
+          case 'raw':
+            renderRaw();
+            break;
+          case 'dashboard':
+          default:
+            renderDashboard();
+            break;
+        }
       }
 
-      function renderQuick() {
-        if (state.section !== 'engine') {
-          quickEl.innerHTML = '';
-          return;
-        }
-        const engine = state.config.engine ?? {};
-        const gameplay = engine.gameplay ?? {};
-        const branding = engine.branding ?? {};
-        const generation = engine.generation ?? {};
-        const offsets = generation.spawnHeightOffsets ?? {};
-        quickEl.innerHTML = `
-          <div class="grid">
-            <label>Title <input data-path="branding.title" value="${escapeHtml(branding.title ?? '')}" placeholder="VOID ARENA" /></label>
-            <label>Menu font <input data-path="branding.menuFont" value="${escapeHtml(branding.menuFont ?? '')}" placeholder="Orbitron" /></label>
-            <label>Text font <input data-path="branding.textFont" value="${escapeHtml(branding.textFont ?? '')}" placeholder="Open Sans" /></label>
-            <label>Start speed multiplier <input data-path="gameplay.startSpeedMultiplier" type="number" step="0.05" value="${gameplay.startSpeedMultiplier ?? ''}" /></label>
-            <label>Boost multiplier <input data-path="gameplay.boostMultiplier" type="number" step="0.05" value="${gameplay.boostMultiplier ?? ''}" /></label>
-            <label>Magnet strength <input data-path="gameplay.magnetStrengthMultiplier" type="number" step="0.05" value="${gameplay.magnetStrengthMultiplier ?? ''}" /></label>
+      function renderDashboard() {
+        const engine = state.config.engine;
+        const textCount = Object.keys(state.meta.textDefaults).length;
+        const overriddenTexts = Object.values(state.config.text).reduce((sum, lang) => sum + Object.keys(lang ?? {}).length, 0);
+        const modelCount = Object.values(state.config.assets.models ?? {}).filter((item) => item?.source).length;
+        const customObjectCount = (state.config.assets.customObjects ?? []).length;
+        elements.content.innerHTML = `
+          <div class="grid tight">
+            <div class="metric"><span>Textos editaveis</span><strong>${textCount}</strong><small>${overriddenTexts} overrides salvos</small></div>
+            <div class="metric"><span>Objetos 3D</span><strong>${state.meta.objectKinds.length + customObjectCount}</strong><small>${modelCount} modelos base + ${customObjectCount} variantes</small></div>
+            <div class="metric"><span>Musicas menu</span><strong>${engine.audio.menuMusic.length}</strong><small>.ogg apenas</small></div>
+            <div class="metric"><span>Musicas mapa</span><strong>${engine.audio.mapMusic.length}</strong><small>crossfade no jogo</small></div>
           </div>
-          <div class="spawn-tool">
-            <div class="spawn-controls">
-              <h3>Spawn height editor</h3>
-              <label>Object kind
-                <select id="spawn-kind">
-                  ${WORLD_OBJECT_KINDS.map((kind) => `<option value="${kind}" ${kind === selectedSpawnKind ? 'selected' : ''}>${kind}</option>`).join('')}
+          <div class="card" style="margin-top: 14px;">
+            <h3>Fluxo recomendado</h3>
+            <p>1. Ajuste textos e idiomas. 2. Configure velocidades, powerups e eventos. 3. Troque assets/alturas no editor 3D. 4. Use o gerador para testar seed e densidade. 5. Salve tudo antes de rodar a build.</p>
+          </div>
+          <div class="toolbar" style="margin-top: 14px;">
+            <button class="primary" data-jump="texts">Editar textos</button>
+            <button data-jump="objects">Editar objetos 3D</button>
+            <button data-jump="generator">Abrir gerador</button>
+          </div>
+        `;
+        elements.content.querySelectorAll('[data-jump]').forEach((button) => {
+          button.addEventListener('click', () => {
+            if (!commitRawEditor(true)) return;
+            state.section = button.dataset.jump;
+            renderNav();
+            render();
+          });
+        });
+      }
+
+      function renderTexts() {
+        const visibleKeys = filteredTextKeys();
+        const langValues = state.config.text[state.textLang] ??= {};
+        elements.content.innerHTML = `
+          <div class="card">
+            <div class="grid tight">
+              <label class="field">Idioma
+                <select id="text-lang">${state.meta.languages.map((lang) => `<option value="${lang}" ${lang === state.textLang ? 'selected' : ''}>${languageLabel(lang)}</option>`).join('')}</select>
+              </label>
+              <label class="field">Categoria
+                <select id="text-category">
+                  <option value="all" ${state.textCategory === 'all' ? 'selected' : ''}>Todas</option>
+                  ${TEXT_CATEGORIES.map(([id, label]) => `<option value="${id}" ${id === state.textCategory ? 'selected' : ''}>${label}</option>`).join('')}
                 </select>
               </label>
-              <label>Height offset from map
-                <div class="spawn-row">
-                  <input id="spawn-height-range" type="range" min="-0.35" max="1.5" step="0.01" value="${Number(offsets[selectedSpawnKind] ?? 0)}" />
-                  <input id="spawn-height-number" type="number" min="-0.35" max="1.5" step="0.01" value="${Number(offsets[selectedSpawnKind] ?? 0)}" />
-                </div>
+              <label class="field">Buscar texto ou chave
+                <input id="text-search" value="${escapeHtml(state.textSearch)}" placeholder="score, powerup, menu..." />
               </label>
-              <p class="hint">A linha cyan e o mapa. Se a base ficar vermelha, o item esta atravessando o chao. Salve a secao Engine para aplicar no proximo build.</p>
             </div>
-            <div class="spawn-preview-card">
-              <canvas id="spawn-preview" width="640" height="320"></canvas>
+            <div class="toolbar" style="margin-top: 10px;">
+              <button id="copy-en-defaults">Copiar defaults EN para este idioma</button>
+              <button id="clear-lang" class="danger">Limpar overrides deste idioma</button>
+              <button id="save-texts" class="primary">Salvar textos</button>
+            </div>
+          </div>
+          <div class="list" id="text-list" style="margin-top: 12px;">
+            ${visibleKeys.map((key) => textRowMarkup(key, langValues[key] ?? '')).join('')}
+          </div>
+        `;
+        elements.content.querySelector('#text-lang').addEventListener('change', (event) => {
+          state.textLang = event.target.value;
+          renderTexts();
+        });
+        elements.content.querySelector('#text-category').addEventListener('change', (event) => {
+          state.textCategory = event.target.value;
+          renderTexts();
+        });
+        elements.content.querySelector('#text-search').addEventListener('input', (event) => {
+          state.textSearch = event.target.value;
+          renderTextListOnly();
+        });
+        bindTextOverrideInputs(elements.content);
+        elements.content.querySelector('#copy-en-defaults').addEventListener('click', () => {
+          state.config.text[state.textLang] = { ...state.meta.textDefaults };
+          renderTexts();
+          setStatus('Defaults copiados para o idioma selecionado.');
+        });
+        elements.content.querySelector('#clear-lang').addEventListener('click', () => {
+          state.config.text[state.textLang] = {};
+          renderTexts();
+        });
+        elements.content.querySelector('#save-texts').addEventListener('click', () => void saveSection('text', state.config.text).then(() => setStatus('Textos salvos.')));
+      }
+
+      function textRowMarkup(key, value) {
+        const defaultValue = state.meta.textDefaults[key] ?? '';
+        const control = defaultValue.length > 70 || defaultValue.includes('\n')
+          ? `<textarea data-text-key="${key}" rows="3" placeholder="${escapeHtml(defaultValue)}">${escapeHtml(value)}</textarea>`
+          : `<input data-text-key="${key}" value="${escapeHtml(value)}" placeholder="${escapeHtml(defaultValue)}" />`;
+        return `
+          <div class="text-row" data-text-row data-search="${escapeHtml(`${key} ${defaultValue}`.toLowerCase())}">
+            <div>
+              <div class="text-key">${key}</div>
+              <small class="muted">${TEXT_CATEGORIES.find(([id]) => id === categoryForTextKey(key))?.[1] ?? 'Outros'}</small>
+            </div>
+            <div class="default-text">${escapeHtml(defaultValue)}</div>
+            <label class="field">Override ${languageLabel(state.textLang)}
+              ${control}
+            </label>
+          </div>
+        `;
+      }
+
+      function filteredTextKeys() {
+        const keys = Object.keys(state.meta.textDefaults);
+        const search = state.textSearch.trim().toLowerCase();
+        return keys.filter((key) => {
+          const category = categoryForTextKey(key);
+          const matchesSearch = !search ||
+            key.toLowerCase().includes(search) ||
+            String(state.meta.textDefaults[key]).toLowerCase().includes(search);
+          const matchesCategory = search ? true : state.textCategory === 'all' || category === state.textCategory;
+          return matchesSearch && matchesCategory;
+        });
+      }
+
+      function renderTextListOnly() {
+        const list = elements.content.querySelector('#text-list');
+        if (!list) return;
+        const langValues = state.config.text[state.textLang] ??= {};
+        list.innerHTML = filteredTextKeys().map((key) => textRowMarkup(key, langValues[key] ?? '')).join('');
+        bindTextOverrideInputs(list);
+      }
+
+      function bindTextOverrideInputs(root) {
+        root.querySelectorAll('[data-text-key]').forEach((input) => {
+          input.addEventListener('input', () => {
+            const key = input.dataset.textKey;
+            state.config.text[state.textLang] ??= {};
+            if (input.value === '') {
+              delete state.config.text[state.textLang][key];
+            } else {
+              state.config.text[state.textLang][key] = input.value;
+            }
+          });
+        });
+      }
+
+      function renderMechanics() {
+        const engine = state.config.engine;
+        const g = engine.gameplay;
+        const b = engine.branding;
+        elements.content.innerHTML = `
+          <div class="grid">
+            ${numberField('Velocidade inicial x', 'gameplay.startSpeedMultiplier', g.startSpeedMultiplier, 0.25, 6, 0.05)}
+            ${numberField('Velocidade minima x', 'gameplay.minSpeedMultiplier', g.minSpeedMultiplier, 0.25, 6, 0.05)}
+            ${numberField('Multiplicador do boost', 'gameplay.boostMultiplier', g.boostMultiplier, 1, 4.5, 0.05)}
+            ${numberField('Dreno da stamina x', 'gameplay.staminaDrainMultiplier', g.staminaDrainMultiplier, 0.1, 5, 0.05)}
+            ${numberField('Recarga da stamina x', 'gameplay.staminaRegenMultiplier', g.staminaRegenMultiplier, 0.1, 6, 0.05)}
+            ${numberField('Forca do magnet x', 'gameplay.magnetStrengthMultiplier', g.magnetStrengthMultiplier, 0, 5, 0.05)}
+            ${numberField('Tempo de contato com item x', 'gameplay.objectContactSecondsMultiplier', g.objectContactSecondsMultiplier, 0.15, 6, 0.05)}
+            ${numberField('Succao da borda x', 'gameplay.rimSuctionMultiplier', g.rimSuctionMultiplier, 0, 5, 0.05)}
+            ${numberField('Gravidade da queda x', 'gameplay.swallowGravityMultiplier', g.swallowGravityMultiplier, 0.25, 5, 0.05)}
+            ${numberField('Tolerancia de erro do encaixe x', 'gameplay.objectMissForgiveness', g.objectMissForgiveness, 0.35, 3, 0.05)}
+            <label class="field">Titulo do jogo<input data-path="branding.title" value="${escapeHtml(b.title)}" /></label>
+            <label class="field">Fonte da logo/botoes<input data-path="branding.menuFont" value="${escapeHtml(b.menuFont)}" /></label>
+            <label class="field">Fonte de textos<input data-path="branding.textFont" value="${escapeHtml(b.textFont)}" /></label>
+          </div>
+          <div class="toolbar" style="margin-top: 14px;">
+            <button class="primary" id="save-engine">Salvar mecanicas</button>
+          </div>
+        `;
+        bindPathInputs(elements.content, state.config.engine);
+        elements.content.querySelector('#save-engine').addEventListener('click', () => void saveSection('engine', state.config.engine).then(() => setStatus('Mecanicas salvas.')));
+      }
+
+      function renderPowerups() {
+        elements.content.innerHTML = `
+          <div class="list">
+            ${state.meta.powerUps.map((type) => {
+              const config = state.config.engine.powerUps[type] ??= { enabled: true, durationSeconds: POWERUP_DEFAULTS[type] ?? 8 };
+              return `
+                <div class="row">
+                  <label class="check"><input type="checkbox" data-path="powerUps.${type}.enabled" ${config.enabled ? 'checked' : ''} /> ${type}</label>
+                  ${numberField('Duracao em segundos', `powerUps.${type}.durationSeconds`, config.durationSeconds, 0, 180, 1)}
+                  <span class="muted">${powerupHint(type)}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <div class="toolbar" style="margin-top: 14px;"><button class="primary" id="save-powerups">Salvar powerups</button></div>
+        `;
+        bindPathInputs(elements.content, state.config.engine);
+        elements.content.querySelector('#save-powerups').addEventListener('click', () => void saveSection('engine', state.config.engine).then(() => setStatus('Powerups salvos.')));
+      }
+
+      function renderEvents() {
+        const disasters = state.config.engine.disasters;
+        elements.content.innerHTML = `
+          <div class="grid tight">
+            <label class="check card"><input type="checkbox" data-path="disasters.enabled" ${disasters.enabled ? 'checked' : ''} /> Eventos habilitados</label>
+            ${numberField('Multiplicador do primeiro evento', 'disasters.firstDelayMultiplier', disasters.firstDelayMultiplier, 0.2, 10, 0.05)}
+            ${numberField('Multiplicador entre eventos', 'disasters.nextDelayMultiplier', disasters.nextDelayMultiplier, 0.2, 12, 0.05)}
+          </div>
+          <div class="list" style="margin-top: 12px;">
+            ${state.meta.events.map((type) => {
+              const config = disasters.events[type] ??= { enabled: true, weight: 10 };
+              return `
+                <div class="row">
+                  <label class="check"><input type="checkbox" data-path="disasters.events.${type}.enabled" ${config.enabled ? 'checked' : ''} /> ${type}</label>
+                  ${numberField('Peso/frequencia', `disasters.events.${type}.weight`, config.weight, 0, 100, 1)}
+                  <span class="muted">${eventHint(type)}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <div class="toolbar" style="margin-top: 14px;"><button class="primary" id="save-events">Salvar eventos</button></div>
+        `;
+        bindPathInputs(elements.content, state.config.engine);
+        elements.content.querySelector('#save-events').addEventListener('click', () => void saveSection('engine', state.config.engine).then(() => setStatus('Eventos salvos.')));
+      }
+
+      function renderObjects() {
+        ensureObjectAsset(state.objectKind);
+        const selection = currentObjectSelection();
+        const kind = selection.key;
+        const baseKind = selection.baseKind;
+        const engine = state.config.engine;
+        const model = selection.model;
+        const data = selection.data;
+        const pathBase = selection.assetPath;
+        elements.content.innerHTML = `
+          <div class="three-col">
+            <div class="card">
+              <h3>Objetos do jogo</h3>
+              <div class="object-list">${objectListMarkup(kind)}</div>
+              <div class="toolbar" style="margin-top: 12px;">
+                <button id="add-custom-object">Adicionar novo GLB</button>
+              </div>
+            </div>
+            <div class="card">
+              <h3>${escapeHtml(model.label ?? baseKind)}</h3>
+              <p class="muted">${selection.isCustom ? `Variante customizada de ${baseKind}` : 'Objeto padrao do jogo'}</p>
+              <div class="grid tight">
+                ${selection.isCustom
+                  ? `<label class="check"><input type="checkbox" data-asset-path="${pathBase}.enabled" ${model.enabled !== false ? 'checked' : ''} /> Disponivel no pipeline</label>`
+                  : `<label class="check"><input type="checkbox" data-path="generation.enabledObjectKinds.${baseKind}" ${engine.generation.enabledObjectKinds[baseKind] ? 'checked' : ''} /> Gerar no mapa</label>`}
+                ${selection.isCustom ? `
+                  <label class="field">Nome da variante
+                    <input data-asset-path="${pathBase}.label" value="${escapeHtml(model.label ?? '')}" />
+                  </label>
+                  <label class="field">Categoria
+                    <select data-asset-path="${pathBase}.category" data-rerender="objects">
+                      ${OBJECT_CATEGORIES.map((category) => `<option value="${category.id}" ${model.category === category.id ? 'selected' : ''}>${category.label}</option>`).join('')}
+                    </select>
+                  </label>
+                  <label class="field">Tipo base / fisica
+                    <select data-asset-path="${pathBase}.baseKind" data-rerender="objects">
+                      ${state.meta.objectKinds.map((item) => `<option value="${item}" ${baseKind === item ? 'selected' : ''}>${item}</option>`).join('')}
+                    </select>
+                  </label>
+                  <label class="field">Subtipo
+                    <input data-asset-path="${pathBase}.role" value="${escapeHtml(model.role ?? '')}" placeholder="man, woman, builder, police..." />
+                  </label>
+                  ${assetNumberField('Altura de spawn', `${pathBase}.spawnHeightOffset`, model.spawnHeightOffset ?? 0, -1.2, 2.5, 0.01)}
+                ` : numberField('Altura de spawn', `generation.spawnHeightOffsets.${baseKind}`, engine.generation.spawnHeightOffsets[baseKind] ?? 0, -1.2, 2.5, 0.01)}
+                <label class="field">Modelo 3D (.glb/.gltf)
+                  <input data-asset-path="${pathBase}.source" value="${escapeHtml(model.source ?? '')}" placeholder="/models/custom/${baseKind}.glb" />
+                </label>
+                <label class="field">Arquivo ativo
+                  <input readonly value="${escapeHtml(model.source || 'Usando primitivo padrao')}" />
+                </label>
+                <label class="field">Formato
+                  <select data-asset-path="${pathBase}.format">
+                    ${['primitive', 'glb', 'gltf'].map((value) => `<option value="${value}" ${model.format === value ? 'selected' : ''}>${value}</option>`).join('')}
+                  </select>
+                </label>
+                ${assetNumberField('Escala do modelo', `${pathBase}.scale`, model.scale, 0.05, 8, 0.05)}
+                ${assetNumberField('Offset Y do modelo', `${pathBase}.offsetY`, model.offsetY, -4, 6, 0.01)}
+                ${assetNumberField('Rotacao Y', `${pathBase}.rotationY`, model.rotationY, -6.28, 6.28, 0.01)}
+                ${assetNumberField('Hitbox X largura', `${pathBase}.hitbox.x`, model.hitbox?.x ?? data.w, 0.05, 80, 0.05)}
+                ${assetNumberField('Hitbox Y altura', `${pathBase}.hitbox.y`, model.hitbox?.y ?? data.h, 0.05, 120, 0.05)}
+                ${assetNumberField('Hitbox Z profundidade', `${pathBase}.hitbox.z`, model.hitbox?.z ?? data.d, 0.05, 80, 0.05)}
+                <label class="field">Material set / atlas
+                  <input data-asset-path="${pathBase}.materialSet" value="${escapeHtml(model.materialSet ?? '')}" placeholder="city_atlas_main ou characters_shared" />
+                </label>
+                <label class="field">Regiao / slot no atlas
+                  <input data-asset-path="${pathBase}.atlasRegion" value="${escapeHtml(model.atlasRegion ?? '')}" placeholder="characters.police / props.tree_leaf" />
+                </label>
+                <label class="field">Cor de preview no admin
+                  <input data-asset-path="${pathBase}.previewColor" value="${escapeHtml(model.previewColor ?? data.color)}" />
+                </label>
+                <label class="check"><input type="checkbox" data-asset-path="${pathBase}.lighting.enabled" ${model.lighting?.enabled ? 'checked' : ''} /> Luzes visuais no objeto</label>
+                <label class="field">Cor da luz
+                  <input data-asset-path="${pathBase}.lighting.color" value="${escapeHtml(model.lighting?.color ?? '#ffe6a7')}" />
+                </label>
+                ${assetNumberField('Forca da luz/glow', `${pathBase}.lighting.intensity`, model.lighting?.intensity ?? 1, 0, 2.5, 0.05)}
+                ${assetNumberField('Linhas de janelas', `${pathBase}.lighting.windowRows`, model.lighting?.windowRows ?? 0, 0, 32, 1)}
+                <label class="field">Arquivo local para importar
+                  <input id="model-source" placeholder="C:\\Users\\dougl\\Downloads\\personagem.glb" />
+                </label>
+                <label class="field">Nome final opcional
+                  <input id="model-name" value="${escapeHtml(model.id ?? baseKind)}" />
+                </label>
+                <label class="field">Preview local sem copiar
+                  <input id="model-local-file" type="file" accept=".glb,.gltf" />
+                </label>
+                <p class="muted" style="grid-column: 1 / -1;">Texturas do jogo podem estar em atlas/material sets compartilhados. Estes campos organizam o mapeamento de material para o pipeline; o runtime nao tenta aplicar uma textura avulsa por objeto.</p>
+                <label class="field">Notas
+                  <textarea data-asset-path="${pathBase}.notes" rows="3">${escapeHtml(model.notes ?? '')}</textarea>
+                </label>
+              </div>
+              <div class="toolbar" style="margin-top: 12px;">
+                <button class="primary" id="save-objects">Salvar objetos</button>
+                <button id="import-model">Importar GLB/GLTF</button>
+                ${model.source ? `<a class="button-link" href="${escapeHtml(model.source)}" target="_blank" rel="noreferrer">Ver arquivo</a>` : ''}
+                ${selection.isCustom ? '<button class="danger" id="delete-custom-object">Remover variante</button>' : ''}
+              </div>
+            </div>
+            <div class="preview-grid">
+              <div class="card preview-card">
+                <h3>Visao 3D livre</h3>
+                <canvas id="object-preview-3d"></canvas>
+                <p class="muted">Arraste para orbitar, role para aproximar. Se o GLB estiver no public ou selecionado no preview local, ele aparece aqui.</p>
+              </div>
+              <div class="card preview-card">
+                <h3>Visao lateral / altura no mapa</h3>
+                <canvas id="side-preview" width="720" height="280"></canvas>
+              </div>
             </div>
           </div>
         `;
-        quickEl.querySelectorAll('input').forEach((input) => {
-          if (input.id === 'spawn-height-range' || input.id === 'spawn-height-number') {
-            return;
-          }
-          input.addEventListener('input', () => {
-            const draft = JSON.parse(editor.value || '{}');
-            setDeep(draft, input.dataset.path, input.type === 'number' && input.value !== '' ? Number(input.value) : input.value);
-            editor.value = JSON.stringify(draft, null, 2);
+        elements.content.querySelectorAll('[data-kind]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.objectKind = button.dataset.kind;
+            renderObjects();
           });
         });
-        bindSpawnHeightEditor();
+        bindPathInputs(elements.content, state.config.engine, () => {
+          updateObjectPreview();
+          drawSidePreview(document.querySelector('#side-preview'), state.objectKind);
+        });
+        bindAssetInputs(elements.content);
+        elements.content.querySelector('#save-objects').addEventListener('click', () => {
+          void Promise.all([saveSection('engine', state.config.engine), saveSection('assets', state.config.assets)]).then(() => setStatus('Objetos salvos.'));
+        });
+        elements.content.querySelector('#add-custom-object').addEventListener('click', () => {
+          const created = createCustomObject({
+            baseKind,
+            category: selection.category,
+            label: `Novo ${objectData(baseKind).shape === 'person' ? 'pedestre' : baseKind}`
+          });
+          state.config.assets.customObjects.push(created);
+          state.objectKind = customObjectKey(created.id);
+          renderObjects();
+          setStatus('Nova variante criada. Agora escolha ou importe o GLB dela.');
+        });
+        elements.content.querySelector('#import-model').addEventListener('click', () => void importModel(pathBase));
+        elements.content.querySelector('#model-local-file').addEventListener('change', (event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          const previous = localModelPreviewUrls.get(kind);
+          if (previous) URL.revokeObjectURL(previous);
+          const url = URL.createObjectURL(file);
+          localModelPreviewUrls.set(kind, url);
+          setStatus(`Preview local carregado: ${file.name}`);
+          updateObjectPreview();
+        });
+        elements.content.querySelector('#delete-custom-object')?.addEventListener('click', () => {
+          state.config.assets.customObjects.splice(selection.customIndex, 1);
+          state.objectKind = baseKind;
+          renderObjects();
+          setStatus('Variante removida do registry.');
+        });
+        objectPreview = createObjectPreview(document.querySelector('#object-preview-3d'));
+        updateObjectPreview();
+        drawSidePreview(document.querySelector('#side-preview'), kind);
       }
 
-      function bindSpawnHeightEditor() {
-        const kindSelect = quickEl.querySelector('#spawn-kind');
-        const range = quickEl.querySelector('#spawn-height-range');
-        const number = quickEl.querySelector('#spawn-height-number');
-        const canvas = quickEl.querySelector('#spawn-preview');
-        if (!kindSelect || !range || !number || !canvas) {
+      function renderAudio() {
+        const audio = state.config.engine.audio;
+        elements.content.innerHTML = `
+          <div class="two-col">
+            <div class="card">
+              <h3>Musicas</h3>
+              ${audioListMarkup('Menu principal', 'menuMusic', audio.menuMusic)}
+              ${audioListMarkup('Mapas / gameplay', 'mapMusic', audio.mapMusic)}
+              <h3 style="margin-top: 16px;">Sons de UI</h3>
+              <div class="grid tight">
+                <label class="field">Hover<input data-path="audio.uiHover" value="${escapeHtml(audio.uiHover)}" /></label>
+                <label class="field">Click<input data-path="audio.uiClick" value="${escapeHtml(audio.uiClick)}" /></label>
+                <label class="field">Morte do jogador<input data-path="audio.playerDie" value="${escapeHtml(audio.playerDie)}" /></label>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Importar audio para .ogg</h3>
+              <p class="muted">Cole o caminho local de um .ogg ou .mp3. Se for .mp3, o admin converte para .ogg no public/audio e o jogo passa a usar somente o .ogg.</p>
+              <div class="grid tight">
+                <label class="field">Caminho local do arquivo
+                  <input id="audio-source" placeholder="C:\\Users\\dougl\\Downloads\\nova-musica.mp3" />
+                </label>
+                <label class="field">Pasta
+                  <select id="audio-folder">
+                    <option value="music">music</option>
+                    <option value="sfx">sfx</option>
+                    <option value="ui">ui</option>
+                  </select>
+                </label>
+                <label class="field">Adicionar em
+                  <select id="audio-target">
+                    <option value="menuMusic">Musicas do menu</option>
+                    <option value="mapMusic">Musicas dos mapas</option>
+                    <option value="uiHover">Hover UI</option>
+                    <option value="uiClick">Click UI</option>
+                    <option value="playerDie">Morte do jogador</option>
+                    ${state.meta.objectKinds.map((kind) => `<option value="object:${kind}">SFX objeto ${kind}</option>`).join('')}
+                  </select>
+                </label>
+                <label class="field">Nome final opcional
+                  <input id="audio-name" placeholder="city_theme_3" />
+                </label>
+              </div>
+              <div class="toolbar" style="margin-top: 12px;">
+                <button class="primary" id="import-audio">Importar/converter</button>
+                <button id="save-audio">Salvar audio</button>
+              </div>
+              <h3 style="margin-top: 18px;">SFX por objeto</h3>
+              <label class="field">Objeto
+                <select id="audio-object-kind">${state.meta.objectKinds.map((kind) => `<option value="${kind}" ${kind === state.objectKind ? 'selected' : ''}>${kind}</option>`).join('')}</select>
+              </label>
+              <div id="object-sfx"></div>
+            </div>
+          </div>
+        `;
+        bindPathInputs(elements.content, state.config.engine);
+        bindAudioLists();
+        renderObjectSfx();
+        elements.content.querySelector('#audio-object-kind').addEventListener('change', (event) => {
+          state.objectKind = event.target.value;
+          renderObjectSfx();
+        });
+        elements.content.querySelector('#import-audio').addEventListener('click', () => void importAudio());
+        elements.content.querySelector('#save-audio').addEventListener('click', () => void saveSection('engine', state.config.engine).then(() => setStatus('Audio salvo.')));
+      }
+
+      function renderObjectSfx() {
+        const container = elements.content.querySelector('#object-sfx');
+        const list = state.config.engine.audio.objectSfx[state.objectKind] ??= [];
+        container.innerHTML = audioListMarkup(`SFX de ${state.objectKind}`, `objectSfx:${state.objectKind}`, list);
+        bindAudioLists(container);
+      }
+
+      function renderGenerator() {
+        const generation = state.config.engine.generation;
+        generation.mapTuning ??= defaultMapTuning();
+        const tuning = generation.mapTuning;
+        elements.content.innerHTML = `
+          <div class="two-col">
+            <div class="card">
+              <h3>Parametros do gerador</h3>
+              <div class="grid tight">
+                ${numberField('Densidade geral de objetos', 'generation.objectDensityMultiplier', generation.objectDensityMultiplier, 0.1, 3, 0.05)}
+                ${numberField('Tamanho das quadras x', 'generation.mapTuning.blockSizeMultiplier', tuning.blockSizeMultiplier, 0.6, 1.8, 0.05)}
+                ${numberField('Largura das ruas x', 'generation.mapTuning.roadWidthMultiplier', tuning.roadWidthMultiplier, 0.7, 1.6, 0.05)}
+                ${numberField('Quantidade de avenidas x', 'generation.mapTuning.avenueCountMultiplier', tuning.avenueCountMultiplier, 0.5, 1.8, 0.05)}
+                ${numberField('Ruas secundarias x', 'generation.mapTuning.sideStreetMultiplier', tuning.sideStreetMultiplier, 0, 2, 0.05)}
+                ${numberField('Predios x', 'generation.mapTuning.buildingDensityMultiplier', tuning.buildingDensityMultiplier, 0.1, 3, 0.05)}
+                ${numberField('Trafego x', 'generation.mapTuning.trafficDensityMultiplier', tuning.trafficDensityMultiplier, 0, 3, 0.05)}
+                ${numberField('Pedestres x', 'generation.mapTuning.pedestrianDensityMultiplier', tuning.pedestrianDensityMultiplier, 0, 3, 0.05)}
+                ${numberField('Props de calcada x', 'generation.mapTuning.propDensityMultiplier', tuning.propDensityMultiplier, 0, 3, 0.05)}
+                ${numberField('Pracas x', 'generation.mapTuning.plazaDensityMultiplier', tuning.plazaDensityMultiplier, 0, 3, 0.05)}
+                ${numberField('Outdoors/ads x', 'generation.mapTuning.adDensityMultiplier', tuning.adDensityMultiplier, 0, 3, 0.05)}
+                ${numberField('Powerups x', 'generation.mapTuning.powerUpDensityMultiplier', tuning.powerUpDensityMultiplier, 0, 4, 0.05)}
+                <label class="check"><input type="checkbox" data-path="generation.trafficEnabled" ${generation.trafficEnabled ? 'checked' : ''} /> Trafego ligado</label>
+                <label class="check"><input type="checkbox" data-path="generation.pedestriansEnabled" ${generation.pedestriansEnabled ? 'checked' : ''} /> Pedestres ligados</label>
+                <label class="check"><input type="checkbox" data-path="generation.adsEnabled" ${generation.adsEnabled ? 'checked' : ''} /> Ads ligados</label>
+              </div>
+              <div class="toolbar" style="margin-top: 12px;">
+                <button class="primary" id="save-generator">Salvar gerador</button>
+                <button id="random-seed">Generate seed</button>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Preview com seed</h3>
+              <div class="grid tight">
+                <label class="field">Seed<input id="preview-seed" value="${escapeHtml(state.mapSeed)}" /></label>
+                <label class="field">Tamanho
+                  <select id="preview-size">${['small', 'medium', 'large', 'huge'].map((size) => `<option value="${size}" ${state.mapSize === size ? 'selected' : ''}>${size}</option>`).join('')}</select>
+                </label>
+              </div>
+              <p class="muted">Preview rapido para orientar o gerador. A build continua usando o gerador real do jogo.</p>
+            </div>
+          </div>
+          <div class="map-preview-wrap" style="margin-top: 14px;">
+            <div class="card preview-card">
+              <h3>Mapa 2D</h3>
+              <canvas id="map-preview-2d" width="720" height="520"></canvas>
+            </div>
+            <div class="card preview-card">
+              <h3>Mapa 3D livre</h3>
+              <canvas id="map-preview-3d"></canvas>
+            </div>
+          </div>
+        `;
+        bindPathInputs(elements.content, state.config.engine, () => drawMapPreview());
+        elements.content.querySelector('#preview-seed').addEventListener('input', (event) => {
+          state.mapSeed = event.target.value || 'VA-PREBUILD';
+          drawMapPreview();
+        });
+        elements.content.querySelector('#preview-size').addEventListener('change', (event) => {
+          state.mapSize = event.target.value;
+          drawMapPreview();
+        });
+        elements.content.querySelector('#random-seed').addEventListener('click', () => {
+          state.mapSeed = `VA-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 99999)}`;
+          renderGenerator();
+        });
+        elements.content.querySelector('#save-generator').addEventListener('click', () => void saveSection('engine', state.config.engine).then(() => setStatus('Gerador salvo.')));
+        mapPreview = createMapPreview(document.querySelector('#map-preview-3d'));
+        drawMapPreview();
+      }
+
+      function renderRaw() {
+        const rawValue = state.config[state.rawSection] ?? {};
+        elements.content.innerHTML = `
+          <div class="pill-bar">
+            <button class="${state.rawSection === 'engine' ? 'active' : ''}" data-raw="engine">Engine</button>
+            <button class="${state.rawSection === 'text' ? 'active' : ''}" data-raw="text">Textos</button>
+            <button class="${state.rawSection === 'assets' ? 'active' : ''}" data-raw="assets">Assets</button>
+          </div>
+          <textarea id="raw-editor" class="raw-editor" spellcheck="false">${escapeHtml(JSON.stringify(rawValue, null, 2))}</textarea>
+          <div class="toolbar" style="margin-top: 12px;">
+            <button id="raw-apply" class="primary">Aplicar JSON ao draft</button>
+            <button id="raw-save">Salvar secao</button>
+          </div>
+        `;
+        const textarea = elements.content.querySelector('#raw-editor');
+        elements.content.querySelectorAll('[data-raw]').forEach((button) => {
+          button.addEventListener('click', () => {
+            if (!commitRawEditor()) return;
+            state.rawSection = button.dataset.raw;
+            elements.content.querySelectorAll('[data-raw]').forEach((item) => item.classList.remove('active'));
+            button.classList.add('active');
+            textarea.value = JSON.stringify(state.config[state.rawSection], null, 2);
+          });
+        });
+        elements.content.querySelector('#raw-apply').addEventListener('click', () => {
+          if (commitRawEditor()) {
+            renderRaw();
+          }
+        });
+        elements.content.querySelector('#raw-save').addEventListener('click', () => {
+          if (commitRawEditor()) {
+            void saveSection(state.rawSection, state.config[state.rawSection]).then(() => setStatus('JSON salvo.'));
+          }
+        });
+      }
+
+      function commitRawEditor(silent = false) {
+        if (state.section !== 'raw') return true;
+        const textarea = elements.content.querySelector('#raw-editor');
+        if (!textarea) return true;
+        try {
+          state.config[state.rawSection] = JSON.parse(textarea.value || '{}');
+          normalizeAllConfig();
+          if (!silent) {
+            setStatus('JSON aplicado ao draft e sincronizado com as telas.');
+          }
+          return true;
+        } catch (error) {
+          setStatus(`JSON invalido: ${error.message}`);
+          return false;
+        }
+      }
+
+      function normalizeAllConfig() {
+        state.config.engine = mergeDeep(defaultEngineConfig(), state.config.engine ?? {});
+        coerceNumericEngineFields();
+        state.config.text = state.config.text ?? {};
+        for (const lang of state.meta.languages) {
+          state.config.text[lang] ??= {};
+        }
+        state.config.assets = normalizeAssetRegistry(state.config.assets ?? {});
+      }
+
+      function defaultEngineConfig() {
+        const objectKinds = state.meta.objectKinds;
+        return {
+          version: 1,
+          branding: { title: 'VOID ARENA', menuFont: 'Orbitron', textFont: 'Open Sans' },
+          gameplay: {
+            startSpeedMultiplier: 2,
+            minSpeedMultiplier: 1,
+            boostMultiplier: 1.58,
+            staminaDrainMultiplier: 1,
+            staminaRegenMultiplier: 1,
+            magnetStrengthMultiplier: 1,
+            objectContactSecondsMultiplier: 1,
+            rimSuctionMultiplier: 1,
+            swallowGravityMultiplier: 1,
+            objectMissForgiveness: 1
+          },
+          generation: {
+            objectDensityMultiplier: 1,
+            trafficEnabled: true,
+            pedestriansEnabled: true,
+            adsEnabled: true,
+            enabledObjectKinds: Object.fromEntries(objectKinds.map((kind) => [kind, true])),
+            spawnHeightOffsets: Object.fromEntries(objectKinds.map((kind) => [kind, 0])),
+            mapTuning: defaultMapTuning()
+          },
+          powerUps: Object.fromEntries((state.meta.powerUps.length ? state.meta.powerUps : Object.keys(POWERUP_DEFAULTS)).map((type) => [type, {
+            enabled: true,
+            durationSeconds: POWERUP_DEFAULTS[type] ?? 8
+          }])),
+          disasters: {
+            enabled: true,
+            firstDelayMultiplier: 1,
+            nextDelayMultiplier: 1,
+            events: Object.fromEntries((state.meta.events.length ? state.meta.events : ['rain', 'thunderstorm', 'earthquake', 'meteorShower', 'sandstorm']).map((type) => [type, {
+              enabled: true,
+              weight: type === 'earthquake' ? 6 : 22
+            }]))
+          },
+          controls: { mouseControlEnabled: true, bindings: {} },
+          audio: {
+            menuMusic: ['/audio/music/mainmenu1.ogg', '/audio/music/mainmenu2.ogg'],
+            mapMusic: ['/audio/music/citymap1.ogg', '/audio/music/citymap2.ogg', '/audio/music/concrete_symphony.ogg'],
+            uiHover: '/audio/ui/hover_button.ogg',
+            uiClick: '/audio/ui/click_button.ogg',
+            playerDie: '/audio/sfx/die_sound.ogg',
+            objectSfx: {}
+          }
+        };
+      }
+
+      function defaultMapTuning() {
+        return {
+          blockSizeMultiplier: 1,
+          roadWidthMultiplier: 1,
+          avenueCountMultiplier: 1,
+          sideStreetMultiplier: 1,
+          buildingDensityMultiplier: 1,
+          trafficDensityMultiplier: 1,
+          pedestrianDensityMultiplier: 1,
+          propDensityMultiplier: 1,
+          plazaDensityMultiplier: 1,
+          adDensityMultiplier: 1,
+          powerUpDensityMultiplier: 1
+        };
+      }
+
+      function normalizeAssetRegistry(input) {
+        const registry = mergeDeep({
+          version: 1,
+          notes: 'Pre-build asset registry. Models, shared texture/material sets, and audio here can be edited before builds.',
+          models: {},
+          textureSets: {},
+          textures: {},
+          audio: {},
+          customObjectCategories: OBJECT_CATEGORIES.map(({ id, label }) => ({ id, label })),
+          customObjects: []
+        }, input);
+        for (const kind of state.meta.objectKinds) {
+          registry.models[kind] = {
+            source: '',
+            format: 'primitive',
+            scale: 1,
+            offsetY: 0,
+            rotationY: 0,
+            collider: 'auto',
+            hitbox: { x: objectData(kind).w, y: objectData(kind).h, z: objectData(kind).d },
+            materialSet: '',
+            atlasRegion: '',
+            previewColor: objectData(kind).color,
+            lighting: defaultLightingForKind(kind),
+            notes: '',
+            ...(registry.models[kind] ?? {})
+          };
+        }
+        registry.customObjectCategories = normalizeCustomObjectCategories(registry.customObjectCategories);
+        registry.customObjects = normalizeCustomObjects(registry.customObjects);
+        return registry;
+      }
+
+      function normalizeCustomObjectCategories(categories) {
+        const defaults = OBJECT_CATEGORIES.map(({ id, label }) => ({ id, label }));
+        const input = Array.isArray(categories) ? categories : [];
+        const byId = new Map(defaults.map((category) => [category.id, category]));
+        for (const category of input) {
+          if (!category?.id) continue;
+          byId.set(category.id, { id: slugify(category.id), label: String(category.label || category.id) });
+        }
+        return [...byId.values()];
+      }
+
+      function normalizeCustomObjects(input) {
+        const list = Array.isArray(input) ? input : [];
+        const normalized = list
+          .map((item) => normalizeCustomObject(item))
+          .filter(Boolean);
+        for (const preset of DEFAULT_CUSTOM_OBJECTS) {
+          if (!normalized.some((item) => item.id === preset.id)) {
+            normalized.push(normalizeCustomObject(preset));
+          }
+        }
+        return normalized;
+      }
+
+      function normalizeCustomObject(item) {
+        if (!item || typeof item !== 'object') return null;
+        const baseKind = state.meta.objectKinds.includes(item.baseKind) ? item.baseKind : 'pedestrian';
+        const data = objectData(baseKind);
+        const id = slugify(item.id || item.label || `custom_${Date.now()}`);
+        return {
+          id,
+          label: String(item.label || id),
+          enabled: item.enabled !== false,
+          category: item.category || categoryForBaseKind(baseKind),
+          baseKind,
+          role: item.role || '',
+          source: item.source || '',
+          format: item.format || (String(item.source || '').toLowerCase().endsWith('.gltf') ? 'gltf' : String(item.source || '').toLowerCase().endsWith('.glb') ? 'glb' : 'primitive'),
+          scale: finiteOr(item.scale, 1),
+          offsetY: finiteOr(item.offsetY, 0),
+          rotationY: finiteOr(item.rotationY, 0),
+          spawnHeightOffset: finiteOr(item.spawnHeightOffset, 0),
+          collider: item.collider || 'auto',
+          hitbox: {
+            x: finiteOr(item.hitbox?.x, data.w),
+            y: finiteOr(item.hitbox?.y, data.h),
+            z: finiteOr(item.hitbox?.z, data.d)
+          },
+          materialSet: item.materialSet || '',
+          atlasRegion: item.atlasRegion || '',
+          previewColor: item.previewColor || data.color,
+          lighting: normalizeLighting(item.lighting, baseKind),
+          notes: item.notes || ''
+        };
+      }
+
+      function defaultLightingForKind(kind) {
+        const shape = objectData(kind).shape;
+        const enabled = ['building', 'post', 'vehicle', 'ad'].includes(shape);
+        return {
+          enabled,
+          color: kind === 'post' ? '#ffe4a3' : kind === 'emergency' ? '#fff4bc' : '#ffe6a7',
+          intensity: enabled ? 1 : 0,
+          windowRows: shape === 'building' ? 0 : 0
+        };
+      }
+
+      function normalizeLighting(input, kind) {
+        const defaults = defaultLightingForKind(kind);
+        return {
+          enabled: input?.enabled ?? defaults.enabled,
+          color: input?.color || defaults.color,
+          intensity: finiteOr(input?.intensity, defaults.intensity),
+          windowRows: Math.max(0, Math.round(finiteOr(input?.windowRows, defaults.windowRows)))
+        };
+      }
+
+      function createCustomObject(overrides = {}) {
+        const baseKind = overrides.baseKind && state.meta.objectKinds.includes(overrides.baseKind) ? overrides.baseKind : 'pedestrian';
+        const category = overrides.category || categoryForBaseKind(baseKind);
+        const data = objectData(baseKind);
+        const label = overrides.label || `Novo ${baseKind}`;
+        const id = uniqueCustomObjectId(slugify(overrides.id || label));
+        return normalizeCustomObject({
+          id,
+          label,
+          category,
+          baseKind,
+          previewColor: overrides.previewColor || data.color,
+          ...overrides
+        });
+      }
+
+      function uniqueCustomObjectId(baseId) {
+        const existing = new Set((state.config.assets.customObjects ?? []).map((item) => item.id));
+        let candidate = baseId || `custom_${Date.now()}`;
+        let suffix = 2;
+        while (existing.has(candidate)) {
+          candidate = `${baseId}_${suffix}`;
+          suffix += 1;
+        }
+        return candidate;
+      }
+
+      function coerceNumericEngineFields() {
+        const defaults = defaultEngineConfig();
+        const paths = [
+          'gameplay.startSpeedMultiplier',
+          'gameplay.minSpeedMultiplier',
+          'gameplay.boostMultiplier',
+          'gameplay.staminaDrainMultiplier',
+          'gameplay.staminaRegenMultiplier',
+          'gameplay.magnetStrengthMultiplier',
+          'gameplay.objectContactSecondsMultiplier',
+          'gameplay.rimSuctionMultiplier',
+          'gameplay.swallowGravityMultiplier',
+          'gameplay.objectMissForgiveness',
+          'generation.objectDensityMultiplier',
+          'disasters.firstDelayMultiplier',
+          'disasters.nextDelayMultiplier',
+          ...Object.keys(state.config.engine.generation.mapTuning ?? {}).map((key) => `generation.mapTuning.${key}`),
+          ...Object.keys(state.config.engine.powerUps ?? {}).map((key) => `powerUps.${key}.durationSeconds`),
+          ...Object.keys(state.config.engine.disasters.events ?? {}).map((key) => `disasters.events.${key}.weight`)
+        ];
+        for (const path of paths) {
+          const value = getDeep(state.config.engine, path);
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) {
+            setDeep(state.config.engine, path, parsed);
+          } else {
+            setDeep(state.config.engine, path, getDeep(defaults, path) ?? 1);
+          }
+        }
+      }
+
+      function ensureObjectAsset(kind) {
+        state.config.assets = normalizeAssetRegistry(state.config.assets);
+        const selection = currentObjectSelection();
+        if (selection.isCustom) {
           return;
         }
-
-        const updateOffset = (rawValue) => {
-          const value = clamp(Number(rawValue), -0.35, 1.5);
-          range.value = value.toFixed(2);
-          number.value = value.toFixed(2);
-          const draft = JSON.parse(editor.value || '{}');
-          setDeep(draft, `generation.spawnHeightOffsets.${selectedSpawnKind}`, value);
-          editor.value = JSON.stringify(draft, null, 2);
-          drawSpawnPreview(canvas, selectedSpawnKind, value);
-        };
-
-        kindSelect.addEventListener('change', () => {
-          selectedSpawnKind = kindSelect.value;
-          const draft = JSON.parse(editor.value || '{}');
-          const value = Number(draft.generation?.spawnHeightOffsets?.[selectedSpawnKind] ?? 0);
-          range.value = value.toFixed(2);
-          number.value = value.toFixed(2);
-          drawSpawnPreview(canvas, selectedSpawnKind, value);
-        });
-        range.addEventListener('input', () => updateOffset(range.value));
-        number.addEventListener('input', () => updateOffset(number.value));
-        drawSpawnPreview(canvas, selectedSpawnKind, Number(range.value));
+        state.config.engine.generation.enabledObjectKinds[selection.baseKind] ??= true;
+        state.config.engine.generation.spawnHeightOffsets[selection.baseKind] ??= 0;
       }
 
-      function drawSpawnPreview(canvas, kind, offset) {
+      function currentObjectSelection() {
+        const customId = customObjectIdFromKey(state.objectKind);
+        if (customId) {
+          const customIndex = (state.config.assets.customObjects ?? []).findIndex((item) => item.id === customId);
+          if (customIndex >= 0) {
+            const model = state.config.assets.customObjects[customIndex];
+            const baseKind = state.meta.objectKinds.includes(model.baseKind) ? model.baseKind : 'pedestrian';
+            return {
+              isCustom: true,
+              customIndex,
+              key: customObjectKey(model.id),
+              assetPath: `customObjects.${customIndex}`,
+              model,
+              baseKind,
+              category: model.category || categoryForBaseKind(baseKind),
+              data: modelPreviewData(baseKind, model)
+            };
+          }
+        }
+
+        const baseKind = state.meta.objectKinds.includes(state.objectKind) ? state.objectKind : 'car';
+        state.objectKind = baseKind;
+        return {
+          isCustom: false,
+          customIndex: -1,
+          key: baseKind,
+          assetPath: `models.${baseKind}`,
+          model: state.config.assets.models[baseKind],
+          baseKind,
+          category: categoryForBaseKind(baseKind),
+          data: modelPreviewData(baseKind, state.config.assets.models[baseKind])
+        };
+      }
+
+      function objectListMarkup(activeKey) {
+        const customObjects = state.config.assets.customObjects ?? [];
+        return OBJECT_CATEGORIES.map((category) => {
+          const builtIns = category.builtIns
+            .filter((kind) => state.meta.objectKinds.includes(kind))
+            .map((item) => `<button class="${item === activeKey ? 'active' : ''}" data-kind="${item}">${item}</button>`)
+            .join('');
+          const custom = customObjects
+            .filter((item) => (item.category || categoryForBaseKind(item.baseKind)) === category.id)
+            .map((item) => `<button class="${customObjectKey(item.id) === activeKey ? 'active' : ''}" data-kind="${customObjectKey(item.id)}">${escapeHtml(item.label)}<small>${escapeHtml(item.baseKind)}</small></button>`)
+            .join('');
+          if (!builtIns && !custom) return '';
+          return `
+            <div class="object-group">
+              <h4>${category.label}</h4>
+              ${builtIns}
+              ${custom}
+            </div>
+          `;
+        }).join('');
+      }
+
+      function customObjectKey(id) {
+        return `custom:${id}`;
+      }
+
+      function customObjectIdFromKey(key) {
+        return String(key ?? '').startsWith('custom:') ? String(key).slice('custom:'.length) : null;
+      }
+
+      function categoryForBaseKind(kind) {
+        return OBJECT_CATEGORIES.find((category) => category.builtIns.includes(kind))?.id ?? 'items';
+      }
+
+      function bindPathInputs(root, target, onChange) {
+        root.querySelectorAll('[data-path]').forEach((input) => {
+          const write = () => {
+            const value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+            setDeep(target, input.dataset.path, value);
+            onChange?.();
+          };
+          input.addEventListener('input', write);
+          input.addEventListener('change', write);
+        });
+      }
+
+      function bindAssetInputs(root) {
+        root.querySelectorAll('[data-asset-path]').forEach((input) => {
+          const write = () => {
+            const value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+            setDeep(state.config.assets, input.dataset.assetPath, value);
+            if (input.dataset.rerender === 'objects') {
+              renderObjects();
+              return;
+            }
+            updateObjectPreview();
+            drawSidePreview(document.querySelector('#side-preview'), state.objectKind);
+          };
+          input.addEventListener('input', write);
+          input.addEventListener('change', write);
+        });
+      }
+
+      function bindAudioLists(root = elements.content) {
+        root.querySelectorAll('[data-audio-add]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const field = button.dataset.audioAdd;
+            const input = root.querySelector(`[data-audio-input="${cssEscape(field)}"]`);
+            const path = normalizeAudioPath(input?.value ?? '');
+            if (!path) {
+              setStatus('Use um caminho .ogg ou importe um .mp3 para converter.');
+              return;
+            }
+            getAudioList(field).push(path);
+            input.value = '';
+            renderAudio();
+          });
+        });
+        root.querySelectorAll('[data-audio-remove]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const [field, index] = button.dataset.audioRemove.split('|');
+            getAudioList(field).splice(Number(index), 1);
+            renderAudio();
+          });
+        });
+      }
+
+      function getAudioList(field) {
+        if (field.startsWith('objectSfx:')) {
+          const kind = field.slice('objectSfx:'.length);
+          state.config.engine.audio.objectSfx[kind] ??= [];
+          return state.config.engine.audio.objectSfx[kind];
+        }
+        return state.config.engine.audio[field];
+      }
+
+      function audioListMarkup(label, field, list) {
+        return `
+          <div style="margin-top: 10px;">
+            <h3>${label}</h3>
+            <div class="audio-list">
+              ${(list ?? []).map((path, index) => `
+                <div class="audio-row">
+                  <input readonly value="${escapeHtml(path)}" />
+                  <button class="danger" data-audio-remove="${field}|${index}">Remover</button>
+                </div>
+              `).join('') || '<p class="muted">Nenhum arquivo ainda.</p>'}
+              <div class="audio-row">
+                <input data-audio-input="${field}" placeholder="/audio/music/nova_faixa.ogg" />
+                <button data-audio-add="${field}">Adicionar</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      async function importAudio() {
+        const sourcePath = elements.content.querySelector('#audio-source').value.trim();
+        const folder = elements.content.querySelector('#audio-folder').value;
+        const target = elements.content.querySelector('#audio-target').value;
+        const fileName = elements.content.querySelector('#audio-name').value.trim();
+        if (!sourcePath) {
+          setStatus('Informe o caminho local do audio.');
+          return;
+        }
+        setStatus('Importando audio...');
+        const response = await fetch('/api/import-audio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourcePath, folder, fileName })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          setStatus(`Falha: ${result.error ?? 'erro desconhecido'}`);
+          return;
+        }
+        attachAudio(target, result.path);
+        await saveSection('engine', state.config.engine);
+        setStatus(`Audio importado: ${result.path}`);
+        renderAudio();
+      }
+
+      async function importModel(pathBase) {
+        const sourcePath = elements.content.querySelector('#model-source')?.value.trim();
+        const fileName = elements.content.querySelector('#model-name')?.value.trim();
+        if (!sourcePath) {
+          setStatus('Informe o caminho local do GLB/GLTF.');
+          return;
+        }
+        setStatus('Importando modelo 3D...');
+        const response = await fetch('/api/import-model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourcePath, fileName })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          setStatus(`Falha: ${result.error ?? 'erro desconhecido'}`);
+          return;
+        }
+        setDeep(state.config.assets, `${pathBase}.source`, result.path);
+        setDeep(state.config.assets, `${pathBase}.format`, result.format);
+        await saveSection('assets', state.config.assets);
+        setStatus(`Modelo importado: ${result.path}`);
+        renderObjects();
+      }
+
+      function attachAudio(target, path) {
+        if (target === 'menuMusic' || target === 'mapMusic') {
+          state.config.engine.audio[target].push(path);
+          return;
+        }
+        if (target === 'uiHover' || target === 'uiClick' || target === 'playerDie') {
+          state.config.engine.audio[target] = path;
+          return;
+        }
+        if (target.startsWith('object:')) {
+          const kind = target.slice('object:'.length);
+          state.config.engine.audio.objectSfx[kind] ??= [];
+          state.config.engine.audio.objectSfx[kind].push(path);
+        }
+      }
+
+      function createObjectPreview(canvas) {
+        return createThreePreview(canvas, (scene) => {
+          const group = new THREE.Group();
+          group.name = 'object-root';
+          scene.add(group);
+          return group;
+        });
+      }
+
+      function updateObjectPreview() {
+        if (!objectPreview) return;
+        const group = objectPreview.root;
+        group.clear();
+        const selection = currentObjectSelection();
+        const kind = selection.baseKind;
+        const data = selection.data;
+        const model = selection.model;
+        const source = localModelPreviewUrls.get(selection.key) ?? model.source;
+        frameObjectPreview(data, model);
+        const addFallback = () => {
+          const object = createPrimitiveObject(kind, data, model.previewColor || data.color, model);
+          object.position.y = objectSpawnOffset(selection) + (model.offsetY ?? 0);
+          object.scale.setScalar(model.scale || 1);
+          object.rotation.y = model.rotationY || 0;
+          group.add(object);
+          objectPreview.renderOnce();
+        };
+        if (source && (localModelPreviewUrls.has(selection.key) || model.format === 'glb' || model.format === 'gltf')) {
+          gltfLoader.load(source, (gltf) => {
+            const root = gltf.scene;
+            root.position.y = objectSpawnOffset(selection) + (model.offsetY ?? 0);
+            root.scale.setScalar(model.scale || 1);
+            root.rotation.y = model.rotationY || 0;
+            group.add(root);
+            objectPreview.renderOnce();
+          }, undefined, addFallback);
+        } else {
+          addFallback();
+        }
+      }
+
+      function frameObjectPreview(data, model = {}) {
+        if (!objectPreview?.camera || !objectPreview?.controls) return;
+        const scale = model.scale || 1;
+        const maxSize = Math.max(data.w, data.h, data.d) * scale;
+        const distance = Math.max(6.5, maxSize * 1.58);
+        const targetY = Math.max(0.75, data.h * scale * 0.42);
+        objectPreview.camera.position.set(distance, Math.max(4.5, maxSize * 0.9), distance);
+        objectPreview.camera.near = 0.05;
+        objectPreview.camera.far = Math.max(800, distance * 12);
+        objectPreview.camera.updateProjectionMatrix();
+        objectPreview.controls.target.set(0, targetY, 0);
+      }
+
+      function createMapPreview(canvas) {
+        return createThreePreview(canvas, (scene) => {
+          const group = new THREE.Group();
+          group.name = 'map-root';
+          scene.add(group);
+          return group;
+        }, { cameraPosition: [52, 48, 52] });
+      }
+
+      function drawMapPreview() {
+        const fallback = generatePreviewMap();
+        drawMap2d(document.querySelector('#map-preview-2d'), fallback);
+        drawMap3d(fallback);
+        window.clearTimeout(mapPreviewTimer);
+        mapPreviewTimer = window.setTimeout(() => void drawRealMapPreview(), 260);
+      }
+
+      async function drawRealMapPreview() {
+        if (state.section !== 'generator') return;
+        const requestId = ++mapPreviewRequestId;
+        try {
+          const generation = state.config.engine.generation;
+          const response = await fetch('/api/map-preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              seed: state.mapSeed,
+              size: state.mapSize,
+              enableAds: generation.adsEnabled,
+              objectDensityMultiplier: generation.objectDensityMultiplier,
+              engineConfig: state.config.engine
+            })
+          });
+          const result = await response.json();
+          if (!response.ok || !result.ok) {
+            throw new Error(result.error ?? 'Preview failed');
+          }
+          if (requestId !== mapPreviewRequestId || state.section !== 'generator') return;
+          drawMap2d(document.querySelector('#map-preview-2d'), result.map);
+          drawMap3d(result.map);
+          setStatus(`Preview real: ${result.map.objects.length} objetos, ${result.map.roads.length} ruas, ${result.map.surfaces.length} superficies.`);
+        } catch (error) {
+          if (requestId === mapPreviewRequestId) {
+            setStatus(`Preview real indisponivel: ${error.message}`);
+          }
+        }
+      }
+
+      function generatePreviewMap() {
+        const rng = seededRandom(state.mapSeed);
+        const sizes = {
+          small: { half: 48, roads: 3, block: 24 },
+          medium: { half: 78, roads: 5, block: 28 },
+          large: { half: 150, roads: 7, block: 34 },
+          huge: { half: 235, roads: 9, block: 42 }
+        };
+        const base = sizes[state.mapSize] ?? sizes.medium;
+        const tuning = state.config.engine.generation.mapTuning ?? defaultMapTuning();
+        const half = base.half;
+        const block = base.block * tuning.blockSizeMultiplier;
+        const roadWidth = 7 * tuning.roadWidthMultiplier;
+        const roadCount = Math.max(2, Math.round(base.roads * tuning.avenueCountMultiplier));
+        const positions = [];
+        for (let i = 0; i < roadCount; i += 1) {
+          const t = roadCount === 1 ? 0.5 : i / (roadCount - 1);
+          positions.push((t - 0.5) * half * 1.48 + (rng() - 0.5) * block * 0.16);
+        }
+        const roads = [];
+        for (const [index, x] of positions.entries()) {
+          roads.push({ id: `preview-v-${index}`, x, z: 0, width: roadWidth, length: half * 2.08, rotationY: 0, lanes: roadWidth > 7.6 ? 2 : 1, sidewalkWidth: 2.5 });
+        }
+        for (const [index, z] of positions.entries()) {
+          roads.push({ id: `preview-h-${index}`, x: 0, z, width: roadWidth, length: half * 2.08, rotationY: Math.PI / 2, lanes: roadWidth > 7.6 ? 2 : 1, sidewalkWidth: 2.5 });
+        }
+        const objects = [];
+        const buildingTarget = Math.round(base.roads * base.roads * 1.8 * tuning.buildingDensityMultiplier);
+        let attempts = buildingTarget * 8;
+        while (objects.length < buildingTarget && attempts-- > 0) {
+          const x = (rng() * 2 - 1) * half * 0.86;
+          const z = (rng() * 2 - 1) * half * 0.86;
+          if (roads.some((road) => pointNearRoad(x, z, road, roadWidth * 1.15))) continue;
+          const w = 4 + rng() * 7;
+          const d = 4 + rng() * 7;
+          const h = 3 + rng() * (state.mapSize === 'small' ? 10 : 22);
+          if (objects.some((b) => Math.abs(b.position.x - x) < (b.size.x + w) * 0.55 && Math.abs(b.position.z - z) < (b.size.z + d) * 0.55)) continue;
+          objects.push({
+            id: `preview-building-${objects.length}`,
+            kind: h > 12 ? 'building' : 'structure',
+            category: 'building',
+            position: { x, y: h * 0.5, z },
+            rotationY: 0,
+            size: { x: w, y: h, z: d },
+            color: h > 14 ? '#6e7d84' : '#5d6c63',
+            boundingRadius: Math.max(w, d) * 0.5
+          });
+        }
+        return {
+          seed: state.mapSeed,
+          size: state.mapSize,
+          halfExtent: half,
+          roads,
+          surfaces: [],
+          trafficRoutes: [],
+          trafficSignals: [],
+          pedestrianPaths: [],
+          objects,
+          powerUps: [],
+          spawnPoints: [],
+          adSurfaces: []
+        };
+      }
+
+      function pointNearRoad(x, z, road, margin) {
+        const sin = Math.sin(road.rotationY ?? 0);
+        const cos = Math.cos(road.rotationY ?? 0);
+        const localX = (x - road.x) * cos - (z - road.z) * sin;
+        const localZ = (x - road.x) * sin + (z - road.z) * cos;
+        return Math.abs(localX) < road.width * 0.5 + margin && Math.abs(localZ) < road.length * 0.5;
+      }
+
+      function drawMap2d(canvas, map) {
+        if (!canvas || !map) return;
         const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+        const half = mapHalf(map);
+        const scale = Math.min(w, h) / (half * 2.35);
+        const sx = (x) => w * 0.5 + x * scale;
+        const sz = (z) => h * 0.5 + z * scale;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#253228';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#7f9690';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(sx(-half), sz(-half), half * 2 * scale, half * 2 * scale);
+
+        for (const road of map.roads ?? []) {
+          drawRect2d(ctx, sx, sz, scale, road.x, road.z, road.width, road.length, road.rotationY, '#1e2430');
+        }
+        for (const surface of map.surfaces ?? []) {
+          if (surface.kind === 'crosswalk') {
+            drawCrosswalk2d(ctx, sx, sz, scale, surface);
+          } else if (surface.kind === 'lane-marking') {
+            drawRect2d(ctx, sx, sz, scale, surface.x, surface.z, surface.width, surface.length, surface.rotationY, '#f6f4d7', 0.88);
+          } else {
+            const color = surface.kind === 'plaza' ? '#66736c' : '#747c77';
+            drawRect2d(ctx, sx, sz, scale, surface.x, surface.z, surface.width, surface.length, surface.rotationY, color, 0.95);
+          }
+        }
+        for (const surface of map.adSurfaces ?? []) {
+          drawAdSurface2d(ctx, sx, sz, scale, surface);
+        }
+        for (const object of map.objects ?? []) {
+          const size = object.size ?? { x: object.boundingRadius * 2, y: 1, z: object.boundingRadius * 2 };
+          const color = object.color || categoryColor(object);
+          drawRect2d(ctx, sx, sz, scale, object.position.x, object.position.z, Math.max(0.35, size.x), Math.max(0.35, size.z), object.rotationY ?? 0, color, 0.98);
+        }
+        for (const powerUp of map.powerUps ?? []) {
+          ctx.save();
+          ctx.fillStyle = powerUp.color ?? '#5eead4';
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(sx(powerUp.position.x), sz(powerUp.position.z), Math.max(3, powerUp.radius * scale), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      function drawMap3d(map) {
+        if (!mapPreview) return;
+        const group = mapPreview.root;
+        group.clear();
+        const half = mapHalf(map);
+        const ground = new THREE.Mesh(new THREE.BoxGeometry(half * 2, 0.08, half * 2), new THREE.MeshStandardMaterial({ color: '#263228' }));
+        ground.position.y = -0.04;
+        group.add(ground);
+        const roadMaterial = new THREE.MeshStandardMaterial({ color: '#1e2430', roughness: 0.8 });
+        for (const road of map.roads ?? []) {
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(road.width, 0.06, road.length), roadMaterial);
+          mesh.position.set(road.x, 0.02, road.z);
+          mesh.rotation.y = road.rotationY ?? 0;
+          group.add(mesh);
+        }
+        const surfaceMaterials = {
+          sidewalk: new THREE.MeshStandardMaterial({ color: '#747c77', roughness: 0.82 }),
+          plaza: new THREE.MeshStandardMaterial({ color: '#66736c', roughness: 0.76 }),
+          crosswalk: new THREE.MeshStandardMaterial({ color: '#e7edf1', roughness: 0.5 }),
+          'lane-marking': new THREE.MeshStandardMaterial({ color: '#f6f4d7', roughness: 0.5 })
+        };
+        for (const surface of map.surfaces ?? []) {
+          const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(surface.width, surface.kind === 'crosswalk' ? 0.08 : 0.055, surface.length),
+            surfaceMaterials[surface.kind] ?? surfaceMaterials.sidewalk
+          );
+          mesh.position.set(surface.x, surface.kind === 'crosswalk' ? 0.08 : 0.055, surface.z);
+          mesh.rotation.y = surface.rotationY ?? 0;
+          group.add(mesh);
+        }
+        for (const object of map.objects ?? []) {
+          const size = object.size ?? { x: object.boundingRadius * 2, y: 1, z: object.boundingRadius * 2 };
+          const material = new THREE.MeshStandardMaterial({ color: object.color || categoryColor(object), roughness: 0.82 });
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.35, size.x), Math.max(0.18, size.y), Math.max(0.35, size.z)), material);
+          mesh.position.set(object.position.x, Math.max(size.y * 0.5, object.position.y ?? size.y * 0.5), object.position.z);
+          mesh.rotation.y = object.rotationY ?? 0;
+          group.add(mesh);
+        }
+        for (const powerUp of map.powerUps ?? []) {
+          const mesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(powerUp.radius, powerUp.radius, 0.16, 28),
+            new THREE.MeshStandardMaterial({ color: powerUp.color ?? '#5eead4', emissive: powerUp.color ?? '#5eead4', emissiveIntensity: 0.35 })
+          );
+          mesh.position.set(powerUp.position.x, 0.18, powerUp.position.z);
+          group.add(mesh);
+        }
+        for (const surface of map.adSurfaces ?? []) {
+          const frame = new THREE.Mesh(
+            new THREE.BoxGeometry(surface.width, 0.08, Math.max(0.25, surface.height * 0.12)),
+            new THREE.MeshStandardMaterial({ color: '#5eead4', emissive: '#0f766e', emissiveIntensity: 0.35 })
+          );
+          frame.position.set(surface.position.x, Math.max(0.24, surface.position.y), surface.position.z);
+          frame.rotation.y = surface.rotationY ?? 0;
+          group.add(frame);
+        }
+        mapPreview.renderOnce();
+      }
+
+      function mapHalf(map) {
+        return map.halfExtent ?? map.half ?? 78;
+      }
+
+      function drawRect2d(ctx, sx, sz, scale, x, z, width, length, rotationY, color, alpha = 1) {
+        ctx.save();
+        ctx.translate(sx(x), sz(z));
+        ctx.rotate(-(rotationY ?? 0));
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = color;
+        ctx.fillRect(-width * scale * 0.5, -length * scale * 0.5, width * scale, length * scale);
+        ctx.restore();
+      }
+
+      function drawCrosswalk2d(ctx, sx, sz, scale, surface) {
+        const stripeCount = Math.max(4, Math.floor(surface.length / 0.75));
+        const stripeLength = surface.length / (stripeCount * 2.1);
+        const spacing = surface.length / stripeCount;
+        for (let i = 0; i < stripeCount; i += 1) {
+          const offset = -surface.length * 0.5 + spacing * (i + 0.5);
+          const x = surface.x + Math.sin(surface.rotationY ?? 0) * offset;
+          const z = surface.z + Math.cos(surface.rotationY ?? 0) * offset;
+          drawRect2d(ctx, sx, sz, scale, x, z, surface.width, stripeLength, surface.rotationY ?? 0, '#e7edf1', 0.96);
+        }
+      }
+
+      function drawAdSurface2d(ctx, sx, sz, scale, surface) {
+        ctx.save();
+        ctx.translate(sx(surface.position.x), sz(surface.position.z));
+        ctx.rotate(-(surface.rotationY ?? 0));
+        ctx.strokeStyle = '#5eead4';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-surface.width * scale * 0.5, -Math.max(0.4, surface.height * 0.1) * scale * 0.5, surface.width * scale, Math.max(0.4, surface.height * 0.1) * scale);
+        ctx.restore();
+      }
+
+      function categoryColor(object) {
+        if (object.kind === 'post' || object.kind === 'trafficLight') return '#9aa5a6';
+        if (object.category === 'traffic') return '#ef4444';
+        if (object.category === 'building') return '#65737a';
+        if (object.category === 'pedestrian') return '#e9b872';
+        if (object.isAd || object.kind === 'billboard' || object.kind === 'screen') return '#5eead4';
+        return '#8fbf8f';
+      }
+
+      function createThreePreview(canvas, init, options = {}) {
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#07111d');
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 800);
+        camera.position.set(...(options.cameraPosition ?? [8, 6, 8]));
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, 1, 0);
+        scene.add(new THREE.HemisphereLight('#dff8ff', '#243028', 2.4));
+        const key = new THREE.DirectionalLight('#fff3c4', 2.8);
+        key.position.set(6, 9, 4);
+        scene.add(key);
+        const grid = new THREE.GridHelper(24, 24, '#5eead4', '#33404d');
+        scene.add(grid);
+        const root = init(scene);
+        const resize = () => {
+          const rect = canvas.getBoundingClientRect();
+          const width = Math.max(1, Math.floor(rect.width));
+          const height = Math.max(280, Math.floor(rect.height || 280));
+          renderer.setSize(width, height, false);
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+        };
+        const renderOnce = () => {
+          resize();
+          controls.update();
+          renderer.render(scene, camera);
+        };
+        let active = true;
+        const loop = () => {
+          if (!active) return;
+          renderOnce();
+          requestAnimationFrame(loop);
+        };
+        loop();
+        return {
+          root,
+          camera,
+          controls,
+          renderOnce,
+          dispose() {
+            active = false;
+            controls.dispose();
+            renderer.dispose();
+          }
+        };
+      }
+
+      function createPrimitiveObject(kind, data, color, model = {}) {
+        const group = new THREE.Group();
+        const material = new THREE.MeshStandardMaterial({ color, roughness: 0.74, metalness: 0.05 });
+        const lighting = normalizeLighting(model.lighting, kind);
+        if (data.shape === 'vehicle') {
+          const body = new THREE.Mesh(new THREE.BoxGeometry(data.w, data.h * 0.7, data.d), material);
+          body.position.y = data.h * 0.45;
+          const cabin = new THREE.Mesh(new THREE.BoxGeometry(data.w * 0.62, data.h * 0.48, data.d * 0.42), new THREE.MeshStandardMaterial({ color: '#a9c5d6' }));
+          cabin.position.y = data.h * 0.86;
+          cabin.position.z = data.d * 0.02;
+          const wheelMaterial = new THREE.MeshStandardMaterial({ color: '#111318', roughness: 0.84, metalness: 0.08 });
+          const wheelGeometry = new THREE.CylinderGeometry(Math.max(0.18, data.h * 0.22), Math.max(0.18, data.h * 0.22), 0.18, 16);
+          for (const x of [-data.w * 0.52, data.w * 0.52]) {
+            for (const z of [-data.d * 0.34, data.d * 0.34]) {
+              const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+              wheel.rotation.z = Math.PI / 2;
+              wheel.position.set(x, data.h * 0.18, z);
+              group.add(wheel);
+            }
+          }
+          group.add(body, cabin);
+          if (lighting.enabled) {
+            const beam = createAdminForwardBeam(lighting.color, Math.max(data.w * 1.8, 3.1), Math.max(data.d * 1.45, 5.8), 0.34 * lighting.intensity);
+            beam.position.set(0, 0.035, data.d * 0.72);
+            group.add(beam);
+            for (const x of [-data.w * 0.28, data.w * 0.28]) {
+              const headlight = new THREE.Mesh(
+                new THREE.BoxGeometry(0.18, 0.1, 0.05),
+                createAdminLightMaterial(lighting.color, 0.9 * lighting.intensity)
+              );
+              headlight.position.set(x, data.h * 0.36, data.d * 0.52);
+              const tail = new THREE.Mesh(
+                new THREE.BoxGeometry(0.16, 0.09, 0.05),
+                createAdminLightMaterial('#ff4c4c', 0.78)
+              );
+              tail.position.set(x, data.h * 0.28, -data.d * 0.52);
+              group.add(headlight, tail);
+            }
+          }
+        } else if (data.shape === 'tree') {
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, data.h * 0.46, 10), new THREE.MeshStandardMaterial({ color: '#7b5233' }));
+          trunk.position.y = data.h * 0.2;
+          const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(data.w * 0.62, 0), material);
+          crown.position.y = data.h * 0.58;
+          group.add(trunk, crown);
+        } else if (data.shape === 'post') {
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, data.h, 10), material);
+          pole.position.y = data.h * 0.5;
+          const arm = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.08), material);
+          arm.position.set(0.55, data.h * 0.82, 0);
+          group.add(pole, arm);
+          if (lighting.enabled) {
+            const bulb = new THREE.Mesh(
+              new THREE.SphereGeometry(0.16, 12, 8),
+              createAdminLightMaterial(lighting.color, 1.1 * lighting.intensity)
+            );
+            bulb.position.set(1.08, data.h * 0.78, 0);
+            const glow = createAdminRadialGlow(lighting.color, 3.6, 0.46 * lighting.intensity);
+            glow.position.set(1.08, 0.025, 0);
+            group.add(bulb, glow);
+          }
+        } else if (data.shape === 'person') {
+          const body = new THREE.Mesh(new THREE.CapsuleGeometry(data.w * 0.32, data.h * 0.56, 4, 8), material);
+          body.position.y = data.h * 0.5;
+          group.add(body);
+        } else if (data.shape === 'round') {
+          const body = new THREE.Mesh(new THREE.CylinderGeometry(data.w * 0.5, data.w * 0.5, data.h, 24), material);
+          body.position.y = data.h * 0.5;
+          group.add(body);
+        } else if (data.shape === 'building') {
+          const body = new THREE.Mesh(new THREE.BoxGeometry(data.w, data.h, data.d), material);
+          body.position.y = data.h * 0.5;
+          group.add(body);
+          if (lighting.enabled) {
+            const rows = lighting.windowRows || Math.max(3, Math.min(14, Math.floor(data.h / 1.2)));
+            const rowStep = data.h / (rows + 1);
+            const lightMaterial = createAdminLightMaterial(lighting.color, Math.min(1, 0.75 * lighting.intensity));
+            for (let row = 1; row <= rows; row += 1) {
+              const y = rowStep * row;
+              for (const z of [-data.d * 0.505, data.d * 0.505]) {
+                const strip = new THREE.Mesh(new THREE.BoxGeometry(data.w * 0.62, 0.08, 0.04), lightMaterial);
+                strip.position.set(0, y, z);
+                group.add(strip);
+              }
+              if (row % 2 === 1) {
+                for (const x of [-data.w * 0.505, data.w * 0.505]) {
+                  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, data.d * 0.5), lightMaterial);
+                  strip.position.set(x, y, 0);
+                  group.add(strip);
+                }
+              }
+            }
+          }
+        } else if (data.shape === 'ad') {
+          const board = new THREE.Mesh(new THREE.BoxGeometry(data.w, data.h, data.d), material);
+          board.position.y = data.h * 0.5;
+          group.add(board);
+        } else {
+          const body = new THREE.Mesh(new THREE.BoxGeometry(data.w, data.h, data.d), material);
+          body.position.y = data.h * 0.5;
+          group.add(body);
+        }
+        group.userData.kind = kind;
+        return group;
+      }
+
+      function createAdminLightMaterial(color, opacity) {
+        return new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: Math.max(0, Math.min(1, opacity)),
+          depthWrite: false,
+          side: THREE.DoubleSide
+        });
+      }
+
+      function createAdminRadialGlow(color, radius, opacity) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 192;
+        canvas.height = 192;
+        const ctx = canvas.getContext('2d');
+        const gradient = ctx.createRadialGradient(96, 96, 0, 96, 96, 96);
+        gradient.addColorStop(0, 'rgba(255,255,255,0.9)');
+        gradient.addColorStop(0.26, 'rgba(255,255,255,0.35)');
+        gradient.addColorStop(0.68, 'rgba(255,255,255,0.08)');
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 192, 192);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        const mesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(radius * 2.4, radius * 1.55),
+          new THREE.MeshBasicMaterial({
+            color,
+            map: texture,
+            transparent: true,
+            opacity: Math.max(0, Math.min(1, opacity)),
+            depthWrite: false,
+            side: THREE.DoubleSide
+          })
+        );
+        mesh.rotation.x = -Math.PI / 2;
+        return mesh;
+      }
+
+      function createAdminForwardBeam(color, width, length, opacity) {
+        const shape = new THREE.Shape();
+        shape.moveTo(-width * 0.18, 0);
+        shape.lineTo(width * 0.18, 0);
+        shape.lineTo(width * 0.5, length);
+        shape.lineTo(-width * 0.5, length);
+        shape.closePath();
+        const mesh = new THREE.Mesh(
+          new THREE.ShapeGeometry(shape),
+          createAdminLightMaterial(color, Math.max(0.06, Math.min(0.9, opacity)))
+        );
+        mesh.rotation.x = Math.PI / 2;
+        return mesh;
+      }
+
+      function drawSidePreview(canvas, kind) {
+        const ctx = canvas.getContext('2d');
+        const selection = currentObjectSelection();
+        const data = selection.data;
+        const model = selection.model ?? {};
+        const spawnOffset = objectSpawnOffset(selection);
+        const modelOffset = model.offsetY ?? 0;
+        const scale = model.scale ?? 1;
+        const centerY = data.h * 0.5 * scale + spawnOffset + modelOffset;
+        const bottomY = centerY + data.bottom * scale;
+        const topY = centerY + data.top * scale;
         const width = canvas.width;
         const height = canvas.height;
-        const data = OBJECT_PREVIEW[kind] ?? OBJECT_PREVIEW.crate;
-        const centerY = data.h * 0.5 + offset;
-        const bottomY = centerY + data.bottom;
-        const topY = centerY + data.top;
-        const unitScale = Math.min(58, Math.max(16, 210 / Math.max(1, topY - Math.min(-0.35, bottomY))));
-        const groundY = Math.round(height * 0.74);
-        const centerX = width * 0.5;
-        const toScreenY = (worldY) => groundY - worldY * unitScale;
-        const objectWidth = Math.max(28, Math.min(width * 0.72, data.w * unitScale));
-        const yBottom = toScreenY(bottomY);
-        const yTop = toScreenY(topY);
-        const penetratesGround = bottomY < -0.005;
-
+        const unit = Math.min(62, Math.max(18, 200 / Math.max(1, topY - Math.min(-0.5, bottomY))));
+        const groundY = Math.round(height * 0.72);
+        const toY = (value) => groundY - value * unit;
         ctx.clearRect(0, 0, width, height);
-        const gradient = ctx.createLinearGradient(0, 0, 0, height);
-        gradient.addColorStop(0, '#0e1b2b');
-        gradient.addColorStop(1, '#03070d');
-        ctx.fillStyle = gradient;
+        const bg = ctx.createLinearGradient(0, 0, 0, height);
+        bg.addColorStop(0, '#0e1b2b');
+        bg.addColorStop(1, '#03070d');
+        ctx.fillStyle = bg;
         ctx.fillRect(0, 0, width, height);
-
         ctx.fillStyle = '#172316';
         ctx.fillRect(0, groundY, width, height - groundY);
         ctx.strokeStyle = '#5eead4';
@@ -439,120 +2320,93 @@
         ctx.moveTo(24, groundY);
         ctx.lineTo(width - 24, groundY);
         ctx.stroke();
-
+        const warning = bottomY < -0.005;
         ctx.setLineDash([8, 8]);
-        ctx.strokeStyle = penetratesGround ? '#fb7185' : '#91e88c';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = warning ? '#fb7185' : '#91e88c';
         ctx.beginPath();
-        ctx.moveTo(36, yBottom);
-        ctx.lineTo(width - 36, yBottom);
+        ctx.moveTo(34, toY(bottomY));
+        ctx.lineTo(width - 34, toY(bottomY));
         ctx.stroke();
         ctx.setLineDash([]);
-
-        ctx.save();
-        ctx.translate(centerX, toScreenY((topY + bottomY) * 0.5));
-        drawObjectSilhouette(ctx, data, objectWidth, (topY - bottomY) * unitScale, penetratesGround);
-        ctx.restore();
-
+        ctx.fillStyle = warning ? 'rgba(251, 113, 133, 0.38)' : 'rgba(94, 234, 212, 0.3)';
+        ctx.strokeStyle = warning ? '#fb7185' : '#5eead4';
+        const objectWidth = Math.max(28, Math.min(width * 0.62, data.w * unit * scale));
+        const objectHeight = Math.max(18, (topY - bottomY) * unit);
+        ctx.fillRect(width * 0.5 - objectWidth * 0.5, toY(topY), objectWidth, objectHeight);
+        ctx.strokeRect(width * 0.5 - objectWidth * 0.5, toY(topY), objectWidth, objectHeight);
         ctx.fillStyle = '#f8fbff';
-        ctx.font = '700 20px Arial';
-        ctx.fillText(kind, 24, 34);
-        ctx.font = '14px Arial';
-        ctx.fillStyle = penetratesGround ? '#fb7185' : '#91e88c';
-        ctx.fillText(`offset ${offset.toFixed(2)}m | bottom ${bottomY.toFixed(2)}m`, 24, 58);
+        ctx.font = '700 18px Open Sans';
+        ctx.fillText(selection.model.label ?? selection.baseKind, 24, 30);
+        ctx.font = '14px Open Sans';
+        ctx.fillStyle = warning ? '#fb7185' : '#91e88c';
+        ctx.fillText(`spawn ${spawnOffset.toFixed(2)}m | model ${modelOffset.toFixed(2)}m | bottom ${bottomY.toFixed(2)}m`, 24, 54);
       }
 
-      function drawObjectSilhouette(ctx, data, width, height, warning) {
-        const color = warning ? '#fb7185' : '#5eead4';
-        const fill = warning ? 'rgba(251, 113, 133, 0.34)' : 'rgba(94, 234, 212, 0.28)';
-        ctx.strokeStyle = color;
-        ctx.fillStyle = fill;
-        ctx.lineWidth = 4;
-        const x = -width * 0.5;
-        const y = -height * 0.5;
-
-        if (data.shape === 'bike') {
-          const radius = Math.max(16, width * 0.18);
-          const wheelY = height * 0.28;
-          for (const wheelX of [-width * 0.28, width * 0.28]) {
-            ctx.beginPath();
-            ctx.arc(wheelX, wheelY, radius, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-          ctx.beginPath();
-          ctx.moveTo(-width * 0.28, wheelY);
-          ctx.lineTo(0, -height * 0.02);
-          ctx.lineTo(width * 0.28, wheelY);
-          ctx.lineTo(-width * 0.04, wheelY);
-          ctx.closePath();
-          ctx.stroke();
-          ctx.fillRect(width * 0.22, -height * 0.22, width * 0.24, 5);
-          return;
-        }
-
-        if (data.shape === 'vehicle') {
-          ctx.fillRect(x, y + height * 0.24, width, height * 0.5);
-          ctx.strokeRect(x, y + height * 0.24, width, height * 0.5);
-          ctx.fillRect(x + width * 0.28, y + height * 0.02, width * 0.36, height * 0.28);
-          ctx.strokeRect(x + width * 0.28, y + height * 0.02, width * 0.36, height * 0.28);
-          ctx.fillStyle = '#111318';
-          for (const wheelX of [x + width * 0.22, x + width * 0.78]) {
-            ctx.beginPath();
-            ctx.arc(wheelX, y + height * 0.82, Math.max(9, width * 0.055), 0, Math.PI * 2);
-            ctx.fill();
-          }
-          return;
-        }
-
-        if (data.shape === 'post') {
-          ctx.fillRect(-width * 0.1, y, width * 0.2, height);
-          ctx.strokeRect(-width * 0.1, y, width * 0.2, height);
-          ctx.fillRect(-width * 0.1, y + height * 0.08, width * 0.75, 7);
-          return;
-        }
-
-        if (data.shape === 'tree') {
-          ctx.fillStyle = '#8b5e3c';
-          ctx.fillRect(-width * 0.08, y + height * 0.46, width * 0.16, height * 0.46);
-          ctx.fillStyle = fill;
-          ctx.beginPath();
-          ctx.arc(0, y + height * 0.34, width * 0.38, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          return;
-        }
-
-        if (data.shape === 'person') {
-          ctx.beginPath();
-          ctx.arc(0, y + height * 0.18, width * 0.18, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillRect(-width * 0.12, y + height * 0.32, width * 0.24, height * 0.48);
-          ctx.strokeRect(-width * 0.12, y + height * 0.32, width * 0.24, height * 0.48);
-          return;
-        }
-
-        if (data.shape === 'cone') {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(x + width, y + height);
-          ctx.lineTo(x, y + height);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          return;
-        }
-
-        ctx.fillRect(x, y, width, height);
-        ctx.strokeRect(x, y, width, height);
+      function objectSpawnOffset(selection = currentObjectSelection()) {
+        return selection.isCustom
+          ? finiteOr(selection.model.spawnHeightOffset, 0)
+          : finiteOr(state.config.engine.generation.spawnHeightOffsets[selection.baseKind], 0);
       }
 
-      function setStatus(message) {
-        statusEl.textContent = message;
-        window.clearTimeout(setStatus.timer);
-        setStatus.timer = window.setTimeout(() => {
-          statusEl.textContent = '';
-        }, 2600);
+      function numberField(label, path, value, min, max, step) {
+        return `<label class="field">${label}<input data-path="${path}" type="number" min="${min}" max="${max}" step="${step}" value="${Number(value)}" /></label>`;
+      }
+
+      function assetNumberField(label, path, value, min, max, step) {
+        return `<label class="field">${label}<input data-asset-path="${path}" type="number" min="${min}" max="${max}" step="${step}" value="${Number(value ?? 0)}" /></label>`;
+      }
+
+      function categoryForTextKey(key) {
+        return (TEXT_CATEGORIES.find(([id, _label, pattern]) => id !== 'other' && pattern.test(key)) ?? ['other'])[0];
+      }
+
+      function objectData(kind) {
+        return OBJECT_PREVIEW[kind] ?? OBJECT_PREVIEW.crate;
+      }
+
+      function modelPreviewData(kind, model = {}) {
+        const base = objectData(kind);
+        const width = finiteOr(model.hitbox?.x, base.w);
+        const height = finiteOr(model.hitbox?.y, base.h);
+        const depth = finiteOr(model.hitbox?.z, base.d);
+        return {
+          ...base,
+          w: width,
+          h: height,
+          d: depth,
+          bottom: -height * 0.5,
+          top: height * 0.5,
+          color: model.previewColor || base.color
+        };
+      }
+
+      function languageLabel(lang) {
+        const labels = { en: 'English', es: 'Espanol', pt: 'Portugues', fr: 'Francais', de: 'Deutsch', ru: 'Russian', ja: 'Japanese', zh: 'Chinese' };
+        return `${lang.toUpperCase()} - ${labels[lang] ?? lang}`;
+      }
+
+      function powerupHint(type) {
+        return {
+          magnet: 'Atrai objetos proximos.',
+          shrink: 'Reduz rivais.',
+          haste: 'Aumenta velocidade temporaria.',
+          shield: 'Protecao temporaria.',
+          stamina: 'Recupera stamina.',
+          mass: 'Aumenta massa/pontos.',
+          gust: 'Sopro que empurra itens.',
+          overcharge: 'Stamina infinita por tempo limitado.',
+          dash: 'Impulso rapido sem teleporte.'
+        }[type] ?? '';
+      }
+
+      function eventHint(type) {
+        return {
+          rain: 'Baixa visibilidade e cidade molhada.',
+          thunderstorm: 'Chuva forte e raios.',
+          earthquake: 'Pode derrubar objetos e predios.',
+          meteorShower: 'Meteoros quentes caem no mapa.',
+          sandstorm: 'Tempestade de areia com visibilidade reduzida.'
+        }[type] ?? '';
       }
 
       function setDeep(target, path, value) {
@@ -565,21 +2419,80 @@
         cursor[parts.at(-1)] = value;
       }
 
-      function clamp(value, min, max) {
-        if (!Number.isFinite(value)) {
-          return min;
+      function getDeep(target, path) {
+        return path.split('.').reduce((cursor, part) => cursor?.[part], target);
+      }
+
+      function mergeDeep(base, input) {
+        if (!isObject(base) || !isObject(input)) return structuredClone(input ?? base);
+        const output = structuredClone(base);
+        for (const [key, value] of Object.entries(input)) {
+          output[key] = isObject(value) && isObject(output[key]) ? mergeDeep(output[key], value) : structuredClone(value);
         }
-        return Math.min(max, Math.max(min, value));
+        return output;
+      }
+
+      function isObject(value) {
+        return value && typeof value === 'object' && !Array.isArray(value);
+      }
+
+      function normalizeAudioPath(value) {
+        const trimmed = String(value).trim();
+        if (!trimmed) return '';
+        if (trimmed.toLowerCase().endsWith('.mp3')) return trimmed.slice(0, -4) + '.ogg';
+        if (trimmed.toLowerCase().endsWith('.ogg')) return trimmed;
+        return '';
+      }
+
+      function finiteOr(value, fallback) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : fallback;
+      }
+
+      function slugify(value) {
+        return String(value ?? '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9_-]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .toLowerCase() || `custom_${Date.now()}`;
+      }
+
+      function seededRandom(seed) {
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < seed.length; i += 1) {
+          h ^= seed.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return () => {
+          h += 0x6D2B79F5;
+          let t = h;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function setStatus(message) {
+        elements.status.textContent = message;
+        window.clearTimeout(statusTimer);
+        statusTimer = window.setTimeout(() => {
+          elements.status.textContent = '';
+        }, 3200);
       }
 
       function escapeHtml(value) {
-        return String(value).replace(/[&<>"']/g, (char) => ({
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
           '&': '&amp;',
           '<': '&lt;',
           '>': '&gt;',
           '"': '&quot;',
           "'": '&#039;'
         })[char]);
+      }
+
+      function cssEscape(value) {
+        return String(value).replace(/["\\]/g, '\\$&');
       }
     </script>
   </body>

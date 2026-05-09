@@ -12,14 +12,20 @@ export interface PauseCallbacks {
   onDeathCameraToggle?: (enabled: boolean) => void;
   onHudDisplayToggle?: (key: HudDisplayKey, visible: boolean) => void;
   onNextMusic?: () => void;
+  onStopMusic?: () => void;
   onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
+  onSkyEffectsToggle?: (enabled: boolean) => void;
+  onLightingEffectsToggle?: (enabled: boolean) => void;
   onHoleAppearanceChange?: (rimColor: string, rimStyle: HoleRimStyle) => void;
   onLanguageChange?: (language: LanguageCode) => void;
   onControlConfigChange?: (controls: EngineControlsConfig) => void;
 }
 
+type PauseCategory = 'graphics' | 'sound' | 'controls' | 'language' | 'void' | 'hud';
+
 export class PauseMenu {
   private element: HTMLDivElement | null = null;
+  private activeCategory: PauseCategory = 'graphics';
 
   constructor(
     private readonly root: HTMLElement,
@@ -38,6 +44,8 @@ export class PauseMenu {
       graphicsQuality?: GraphicsQuality;
       language?: LanguageCode;
       controlsConfig?: EngineControlsConfig;
+      skyEffectsEnabled?: boolean;
+      lightingEffectsEnabled?: boolean;
     }
   ): void {
     this.hide();
@@ -48,106 +56,141 @@ export class PauseMenu {
     const enabledText = t(language, 'enabled');
     const disabledText = t(language, 'disabled');
     const controlsConfig = options.controlsConfig ? this.cloneControlsConfig(options.controlsConfig) : null;
+    const categories: Array<{ key: PauseCategory; label: string }> = [
+      { key: 'graphics', label: t(language, 'pauseGraphics') },
+      { key: 'sound', label: t(language, 'pauseSound') },
+      { key: 'controls', label: t(language, 'controls') },
+      { key: 'language', label: t(language, 'language') },
+      { key: 'void', label: t(language, 'pauseMyVoid') },
+      { key: 'hud', label: t(language, 'hudDisplay') }
+    ];
+    if (!categories.some((category) => category.key === this.activeCategory)) {
+      this.activeCategory = 'graphics';
+    }
+    const skyEffectsEnabled = options.skyEffectsEnabled !== false;
+    const lightingEffectsEnabled = options.lightingEffectsEnabled !== false;
     element.innerHTML = `
-      <section class="menu-panel narrow">
-        <h2>${options.inMatch ? t(language, 'paused') : t(language, 'settings')}</h2>
-        <div class="form-grid">
-          <label class="field">${t(language, 'soundEffects')}
-            <div class="range-row"><input class="sfx" type="range" min="0" max="100" value="${Math.round(this.audioManager.getSfxVolume() * 100)}" /><span class="sfx-value"></span></div>
-          </label>
-          <label class="field">${t(language, 'music')}
-            <div class="range-row"><input class="music" type="range" min="0" max="100" value="${Math.round(this.audioManager.getMusicVolume() * 100)}" /><span class="music-value"></span></div>
-          </label>
-          <div class="field">
-            <label>${t(language, 'musicTrack')}</label>
-            <button class="next-music" type="button">${t(language, 'nextTrack')}</button>
+      <section class="menu-panel pause-menu-panel">
+        <div class="pause-menu-head">
+          <h2>${options.inMatch ? t(language, 'paused') : t(language, 'settings')}</h2>
+          <span>${t(language, 'pauseChooseCategory')}</span>
+        </div>
+        <div class="pause-layout">
+          <div class="pause-category-list" role="tablist" aria-label="${t(language, 'settings')}">
+            ${categories.map((category) => this.categoryButtonMarkup(category.key, category.label)).join('')}
           </div>
-          <div class="field">
-            <label>${t(language, 'graphics')}</label>
-            <div class="segmented pause-graphics-segment">
-              <button class="${(options.graphicsQuality ?? 'balanced') === 'performance' ? 'active' : ''}" type="button" data-graphics-quality="performance">${t(language, 'fast')}</button>
-              <button class="${(options.graphicsQuality ?? 'balanced') === 'balanced' ? 'active' : ''}" type="button" data-graphics-quality="balanced">${t(language, 'balanced')}</button>
-              <button class="${(options.graphicsQuality ?? 'balanced') === 'quality' ? 'active' : ''}" type="button" data-graphics-quality="quality">${t(language, 'quality')}</button>
-            </div>
-          </div>
-          <div class="field">
-            <label>${t(language, 'chat')}</label>
-            <button class="toggle chat-toggle ${options.chatEnabled ? 'active' : ''}">${options.chatEnabled ? enabledText : disabledText}</button>
-          </div>
-          <div class="field">
-            <label>${t(language, 'deathCamera')}</label>
-            <button class="toggle death-camera-toggle ${options.deathCameraEnabled !== false ? 'active' : ''}">${options.deathCameraEnabled !== false ? enabledText : disabledText}</button>
-          </div>
-          ${controlsConfig ? `
-            <div class="field controls-options-field">
-              <label>${t(language, 'controls')}</label>
-              <button
-                class="hud-toggle-row mouse-control-toggle ${controlsConfig.mouseControlEnabled ? 'active' : ''}"
-                type="button"
-                aria-pressed="${controlsConfig.mouseControlEnabled}"
-              >
-                <span>${t(language, 'mouseControl')}</span>
-                <strong>${controlsConfig.mouseControlEnabled ? enabledText : disabledText}</strong>
-              </button>
-              <div class="control-bind-grid" aria-label="${t(language, 'keyboardBindings')}">
-                ${CONTROL_ACTIONS.map((action) => this.controlBindingMarkup(action, controlsConfig, language)).join('')}
+          <div class="pause-category-content">
+            <div class="pause-category-panel ${this.activeCategory === 'graphics' ? 'active' : ''}" data-pause-panel="graphics" role="tabpanel">
+              <h3>${t(language, 'pauseGraphics')}</h3>
+              <div class="field">
+                <label>${t(language, 'graphics')}</label>
+                <div class="segmented pause-graphics-segment">
+                  <button class="${(options.graphicsQuality ?? 'balanced') === 'performance' ? 'active' : ''}" type="button" data-graphics-quality="performance">${t(language, 'fast')}</button>
+                  <button class="${(options.graphicsQuality ?? 'balanced') === 'balanced' ? 'active' : ''}" type="button" data-graphics-quality="balanced">${t(language, 'balanced')}</button>
+                  <button class="${(options.graphicsQuality ?? 'balanced') === 'quality' ? 'active' : ''}" type="button" data-graphics-quality="quality">${t(language, 'quality')}</button>
+                </div>
               </div>
-              <small class="controls-hint">${t(language, 'keybindHint')}</small>
+              ${this.toggleMarkup('sky-effects-toggle', t(language, 'skyEffects'), skyEffectsEnabled, enabledText, disabledText)}
+              ${this.toggleMarkup('lighting-effects-toggle', t(language, 'lightingEffects'), lightingEffectsEnabled, enabledText, disabledText)}
             </div>
-          ` : ''}
-          <div class="field language-field">
-            <span class="field-label">${t(language, 'language')}</span>
-            <div class="language-flags" role="group" aria-label="${t(language, 'language')}">
-              ${LANGUAGE_OPTIONS.map((option) => `
-                <button
-                  class="language-flag ${option.value === language ? 'active' : ''}"
-                  type="button"
-                  data-language="${option.value}"
-                  aria-label="${option.label}"
-                  title="${option.label}"
-                >
-                  <span class="flag-icon">${option.flag}</span>
-                  <span>${option.short}</span>
-                </button>
-              `).join('')}
-            </div>
-          </div>
-          <div class="field hole-appearance-field">
-            <label>${t(language, 'holeBorder')}</label>
-            <div class="rim-swatch-grid">
-              ${RIM_COLORS.map((color) => `
-                <button
-                  class="rim-swatch ${color === (options.holeRimColor ?? RIM_COLORS[0]) ? 'active' : ''}"
-                  type="button"
-                  data-rim-color="${color}"
-                  aria-label="Hole border color ${color}"
-                  style="--rim-color: ${color}"
-                ></button>
-              `).join('')}
-            </div>
-            <div class="segmented rim-style-segment">
-              ${HOLE_RIM_STYLE_OPTIONS.map((style) => `
-                <button
-                  class="${style.value === (options.holeRimStyle ?? 'neon') ? 'active' : ''}"
-                  type="button"
-                  data-rim-style="${style.value}"
-                >${style.label}</button>
-              `).join('')}
-            </div>
-          </div>
-          ${hudSettings ? `
-            <div class="field hud-options-field">
-              <label>${t(language, 'hudDisplay')}</label>
-              <div class="hud-toggle-list pause-hud-toggle-list">
-                ${this.hudToggleMarkup('stats', t(language, 'stats'), hudSettings.stats, language)}
-                ${this.hudToggleMarkup('leaderboard', t(language, 'leaderboard'), hudSettings.leaderboard, language)}
-                ${this.hudToggleMarkup('chat', t(language, 'chatWindow'), hudSettings.chat, language)}
-                ${this.hudToggleMarkup('powerups', t(language, 'powerups'), hudSettings.powerups, language)}
-                ${this.hudToggleMarkup('zoom', t(language, 'zoomButtons'), hudSettings.zoom, language)}
-                ${this.hudToggleMarkup('help', t(language, 'controlsHint'), hudSettings.help, language)}
+            <div class="pause-category-panel ${this.activeCategory === 'sound' ? 'active' : ''}" data-pause-panel="sound" role="tabpanel">
+              <h3>${t(language, 'pauseSound')}</h3>
+              <label class="field">${t(language, 'soundEffects')}
+                <div class="range-row"><input class="sfx" type="range" min="0" max="100" value="${Math.round(this.audioManager.getSfxVolume() * 100)}" /><span class="sfx-value"></span></div>
+              </label>
+              <label class="field">${t(language, 'music')}
+                <div class="range-row"><input class="music" type="range" min="0" max="100" value="${Math.round(this.audioManager.getMusicVolume() * 100)}" /><span class="music-value"></span></div>
+              </label>
+              <div class="pause-track-card">
+                <span>${t(language, 'musicTrack')}</span>
+                <strong class="current-music-track">${this.escapeHtml(this.audioManager.getCurrentMusicLabel())}</strong>
+              </div>
+              <div class="button-grid compact">
+                <button class="next-music" type="button">${t(language, 'nextTrack')}</button>
+                <button class="stop-music" type="button">${t(language, 'stopMusic')}</button>
               </div>
             </div>
-          ` : ''}
+            <div class="pause-category-panel ${this.activeCategory === 'controls' ? 'active' : ''}" data-pause-panel="controls" role="tabpanel">
+              <h3>${t(language, 'controls')}</h3>
+              ${controlsConfig ? `
+                <div class="field controls-options-field">
+                  <button
+                    class="hud-toggle-row mouse-control-toggle ${controlsConfig.mouseControlEnabled ? 'active' : ''}"
+                    type="button"
+                    aria-pressed="${controlsConfig.mouseControlEnabled}"
+                  >
+                    <span>${t(language, 'mouseControl')}</span>
+                    <strong>${controlsConfig.mouseControlEnabled ? enabledText : disabledText}</strong>
+                  </button>
+                  <div class="control-bind-grid" aria-label="${t(language, 'keyboardBindings')}">
+                    ${CONTROL_ACTIONS.map((action) => this.controlBindingMarkup(action, controlsConfig, language)).join('')}
+                  </div>
+                  <small class="controls-hint">${t(language, 'keybindHint')}</small>
+                </div>
+              ` : `<p class="subtitle">${t(language, 'controlsUnavailable')}</p>`}
+            </div>
+            <div class="pause-category-panel ${this.activeCategory === 'language' ? 'active' : ''}" data-pause-panel="language" role="tabpanel">
+              <h3>${t(language, 'language')}</h3>
+              <div class="language-flags pause-language-flags" role="group" aria-label="${t(language, 'language')}">
+                ${LANGUAGE_OPTIONS.map((option) => `
+                  <button
+                    class="language-flag ${option.value === language ? 'active' : ''}"
+                    type="button"
+                    data-language="${option.value}"
+                    aria-label="${option.label}"
+                    title="${option.label}"
+                  >
+                    <span class="flag-icon">${option.flag}</span>
+                    <span>${option.short}</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+            <div class="pause-category-panel ${this.activeCategory === 'void' ? 'active' : ''}" data-pause-panel="void" role="tabpanel">
+              <h3>${t(language, 'pauseMyVoid')}</h3>
+              <div class="field hole-appearance-field">
+                <label>${t(language, 'holeBorder')}</label>
+                <div class="rim-swatch-grid">
+                  ${RIM_COLORS.map((color) => `
+                    <button
+                      class="rim-swatch ${color === (options.holeRimColor ?? RIM_COLORS[0]) ? 'active' : ''}"
+                      type="button"
+                      data-rim-color="${color}"
+                      aria-label="Hole border color ${color}"
+                      style="--rim-color: ${color}"
+                    ></button>
+                  `).join('')}
+                </div>
+                <div class="segmented rim-style-segment">
+                  ${HOLE_RIM_STYLE_OPTIONS.map((style) => `
+                    <button
+                      class="${style.value === (options.holeRimStyle ?? 'neon') ? 'active' : ''}"
+                      type="button"
+                      data-rim-style="${style.value}"
+                    >${style.label}</button>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+            <div class="pause-category-panel ${this.activeCategory === 'hud' ? 'active' : ''}" data-pause-panel="hud" role="tabpanel">
+              <h3>${t(language, 'hudDisplay')}</h3>
+              ${this.toggleMarkup('chat-toggle', t(language, 'chat'), options.chatEnabled, enabledText, disabledText)}
+              ${this.toggleMarkup('death-camera-toggle', t(language, 'deathCamera'), options.deathCameraEnabled !== false, enabledText, disabledText)}
+              ${hudSettings ? `
+                <div class="field hud-options-field">
+                  <label>${t(language, 'hudDisplay')}</label>
+                  <div class="hud-toggle-list pause-hud-toggle-list">
+                    ${this.hudToggleMarkup('stats', t(language, 'stats'), hudSettings.stats, language)}
+                    ${this.hudToggleMarkup('leaderboard', t(language, 'leaderboard'), hudSettings.leaderboard, language)}
+                    ${this.hudToggleMarkup('chat', t(language, 'chatWindow'), hudSettings.chat, language)}
+                    ${this.hudToggleMarkup('powerups', t(language, 'powerups'), hudSettings.powerups, language)}
+                    ${this.hudToggleMarkup('zoom', t(language, 'zoomButtons'), hudSettings.zoom, language)}
+                    ${this.hudToggleMarkup('help', t(language, 'controlsHint'), hudSettings.help, language)}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          </div>
         </div>
         <div class="button-grid">
           <button class="primary resume">${options.inMatch ? t(language, 'resume') : t(language, 'back')}</button>
@@ -165,6 +208,19 @@ export class PauseMenu {
       if (musicValue && music) musicValue.textContent = `${music.value}%`;
     };
     syncValues();
+    element.querySelectorAll<HTMLButtonElement>('.pause-category-button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const category = button.dataset.pauseCategory as PauseCategory | undefined;
+        if (!category) {
+          return;
+        }
+        this.activeCategory = category;
+        element.querySelectorAll('.pause-category-button').forEach((item) => item.classList.remove('active'));
+        element.querySelectorAll('.pause-category-panel').forEach((panel) => panel.classList.remove('active'));
+        button.classList.add('active');
+        element.querySelector(`[data-pause-panel="${category}"]`)?.classList.add('active');
+      });
+    });
     sfx?.addEventListener('input', () => {
       this.audioManager.setSfxVolume(Number(sfx.value) / 100);
       syncValues();
@@ -173,7 +229,14 @@ export class PauseMenu {
       this.audioManager.setMusicVolume(Number(music.value) / 100);
       syncValues();
     });
-    element.querySelector<HTMLButtonElement>('.next-music')?.addEventListener('click', () => callbacks.onNextMusic?.());
+    element.querySelector<HTMLButtonElement>('.next-music')?.addEventListener('click', () => {
+      callbacks.onNextMusic?.();
+      this.updateCurrentMusicTrack(element);
+    });
+    element.querySelector<HTMLButtonElement>('.stop-music')?.addEventListener('click', () => {
+      callbacks.onStopMusic?.();
+      this.updateCurrentMusicTrack(element);
+    });
     element.querySelectorAll<HTMLButtonElement>('.pause-graphics-segment button').forEach((button) => {
       button.addEventListener('click', () => {
         const quality = button.dataset.graphicsQuality as GraphicsQuality | undefined;
@@ -185,6 +248,8 @@ export class PauseMenu {
         callbacks.onGraphicsQualityChange?.(quality);
       });
     });
+    this.bindToggle(element, '.sky-effects-toggle', skyEffectsEnabled, enabledText, disabledText, callbacks.onSkyEffectsToggle);
+    this.bindToggle(element, '.lighting-effects-toggle', lightingEffectsEnabled, enabledText, disabledText, callbacks.onLightingEffectsToggle);
 
     let chatEnabled = options.chatEnabled;
     const chatToggle = element.querySelector<HTMLButtonElement>('.chat-toggle');
@@ -278,6 +343,58 @@ export class PauseMenu {
   hide(): void {
     this.element?.remove();
     this.element = null;
+  }
+
+  private categoryButtonMarkup(key: PauseCategory, label: string): string {
+    return `
+      <button
+        class="pause-category-button ${this.activeCategory === key ? 'active' : ''}"
+        type="button"
+        data-pause-category="${key}"
+        role="tab"
+        aria-selected="${this.activeCategory === key}"
+      >${label}</button>
+    `;
+  }
+
+  private toggleMarkup(
+    className: string,
+    label: string,
+    enabled: boolean,
+    enabledText: string,
+    disabledText: string
+  ): string {
+    return `
+      <div class="field pause-option-card">
+        <label>${label}</label>
+        <button class="toggle ${className} ${enabled ? 'active' : ''}" type="button">${enabled ? enabledText : disabledText}</button>
+      </div>
+    `;
+  }
+
+  private bindToggle(
+    element: HTMLElement,
+    selector: string,
+    initialValue: boolean,
+    enabledText: string,
+    disabledText: string,
+    callback?: (enabled: boolean) => void
+  ): void {
+    let enabled = initialValue;
+    const button = element.querySelector<HTMLButtonElement>(selector);
+    button?.addEventListener('click', () => {
+      enabled = !enabled;
+      button.classList.toggle('active', enabled);
+      button.textContent = enabled ? enabledText : disabledText;
+      callback?.(enabled);
+    });
+  }
+
+  private updateCurrentMusicTrack(element: HTMLElement): void {
+    const label = element.querySelector<HTMLElement>('.current-music-track');
+    if (label) {
+      label.textContent = this.audioManager.getCurrentMusicLabel();
+    }
   }
 
   private hudToggleMarkup(key: HudDisplayKey, label: string, visible: boolean, language: LanguageCode): string {

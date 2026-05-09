@@ -1,7 +1,1023 @@
 {
   "version": 1,
-  "notes": "Pre-build asset registry. Use the local prebuild admin panel to plan/assign models, textures, and audio before building the game.",
-  "models": {},
+  "notes": "Pre-build asset registry. Models, shared texture/material sets, and audio can be edited before builds. Texture files may be grouped in atlases/material sets; runtime does not apply one texture file per object automatically.",
+  "models": {
+    "crate": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#b87938",
+      "notes": ""
+    },
+    "post": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.4,
+        "y": 4.4,
+        "z": 0.4
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#aeb9c4",
+      "notes": ""
+    },
+    "tree": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.25,
+        "y": 3.6,
+        "z": 1.25
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#37a96b",
+      "notes": ""
+    },
+    "rock": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.5,
+        "y": 0.95,
+        "z": 1.2
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#8c9aa1",
+      "notes": ""
+    },
+    "car": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.25,
+        "y": 0.78,
+        "z": 3.05
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#ef6f57",
+      "notes": ""
+    },
+    "truck": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.45,
+        "y": 1.28,
+        "z": 4.35
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#e77c38",
+      "notes": ""
+    },
+    "bus": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.55,
+        "y": 1.58,
+        "z": 6.25
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#f6c453",
+      "notes": ""
+    },
+    "emergency": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.35,
+        "y": 0.95,
+        "z": 3.5
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#e9f1ff",
+      "notes": ""
+    },
+    "trailerTruck": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.55,
+        "y": 1.36,
+        "z": 6.65
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#d76f37",
+      "notes": ""
+    },
+    "trafficLight": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.9,
+        "y": 3.05,
+        "z": 0.9
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#222a32",
+      "notes": ""
+    },
+    "building": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 8,
+        "y": 11,
+        "z": 8
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#68747a",
+      "notes": ""
+    },
+    "structure": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 3.2,
+        "y": 2.1,
+        "z": 3.2
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#5f817c",
+      "notes": ""
+    },
+    "billboard": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 13.1,
+        "y": 5.95,
+        "z": 0.55
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#28333f",
+      "notes": ""
+    },
+    "screen": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 12.55,
+        "y": 6.35,
+        "z": 0.55
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#253446",
+      "notes": ""
+    },
+    "bench": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.7,
+        "y": 0.55,
+        "z": 0.55
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#9b6738",
+      "notes": ""
+    },
+    "hydrant": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.38,
+        "y": 0.75,
+        "z": 0.38
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#d84d4d",
+      "notes": ""
+    },
+    "trash": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.62,
+        "y": 0.88,
+        "z": 0.62
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#2b5f50",
+      "notes": ""
+    },
+    "pedestrian": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.45,
+        "y": 1.55,
+        "z": 0.45
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#60a5fa",
+      "notes": ""
+    },
+    "cone": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.46,
+        "y": 0.72,
+        "z": 0.46
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#f97316",
+      "notes": ""
+    },
+    "mailbox": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.58,
+        "y": 1.05,
+        "z": 0.58
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#2f67a8",
+      "notes": ""
+    },
+    "bike": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.45,
+        "y": 0.82,
+        "z": 0.44
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#94a3b8",
+      "notes": ""
+    },
+    "planter": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.2,
+        "y": 0.95,
+        "z": 1.2
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#37a96b",
+      "notes": ""
+    },
+    "kiosk": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.05,
+        "y": 2.2,
+        "z": 2.05
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#5bb6a5",
+      "notes": ""
+    },
+    "fountain": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.35,
+        "y": 1.25,
+        "z": 2.35
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#7dd3fc",
+      "notes": ""
+    },
+    "statue": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.15,
+        "y": 2.35,
+        "z": 1.15
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#aeb9c4",
+      "notes": ""
+    }
+  },
+  "textureSets": {},
   "textures": {},
-  "audio": {}
+  "audio": {},
+  "customObjects": [
+    {
+      "id": "pedestrian_male",
+      "label": "Pedestre homem",
+      "role": "man",
+      "category": "pedestrians",
+      "baseKind": "pedestrian",
+      "previewColor": "#60a5fa",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.45,
+        "y": 1.55,
+        "z": 0.45
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "pedestrian_female",
+      "label": "Pedestre mulher",
+      "role": "woman",
+      "category": "pedestrians",
+      "baseKind": "pedestrian",
+      "previewColor": "#f472b6",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.45,
+        "y": 1.55,
+        "z": 0.45
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "pedestrian_builder",
+      "label": "Construtor",
+      "role": "builder",
+      "category": "pedestrians",
+      "baseKind": "pedestrian",
+      "previewColor": "#facc15",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.45,
+        "y": 1.55,
+        "z": 0.45
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "pedestrian_police",
+      "label": "Policial",
+      "role": "police",
+      "category": "pedestrians",
+      "baseKind": "pedestrian",
+      "previewColor": "#2563eb",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.45,
+        "y": 1.55,
+        "z": 0.45
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "pedestrian_firefighter",
+      "label": "Bombeiro",
+      "role": "firefighter",
+      "category": "pedestrians",
+      "baseKind": "pedestrian",
+      "previewColor": "#ef4444",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 0.45,
+        "y": 1.55,
+        "z": 0.45
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_sedan",
+      "label": "Sedan",
+      "role": "sedan",
+      "category": "vehicles",
+      "baseKind": "car",
+      "previewColor": "#45a7d8",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.62,
+        "y": 0.78,
+        "z": 3.05
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_taxi",
+      "label": "Taxi",
+      "role": "taxi",
+      "category": "vehicles",
+      "baseKind": "car",
+      "previewColor": "#f6d365",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.62,
+        "y": 0.78,
+        "z": 3.05
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_coupe",
+      "label": "Coupe",
+      "role": "coupe",
+      "category": "vehicles",
+      "baseKind": "car",
+      "previewColor": "#d95763",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.62,
+        "y": 0.78,
+        "z": 3.05
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_van",
+      "label": "Van",
+      "role": "van",
+      "category": "vehicles",
+      "baseKind": "truck",
+      "previewColor": "#e2e8f0",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.12,
+        "y": 1.28,
+        "z": 4.35
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_pickup",
+      "label": "Pickup",
+      "role": "pickup",
+      "category": "vehicles",
+      "baseKind": "truck",
+      "previewColor": "#e56f40",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.12,
+        "y": 1.12,
+        "z": 4.1
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_delivery_truck",
+      "label": "Caminhao de entrega",
+      "role": "delivery",
+      "category": "vehicles",
+      "baseKind": "truck",
+      "previewColor": "#f0c850",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.12,
+        "y": 1.28,
+        "z": 4.35
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_city_bus",
+      "label": "Onibus urbano",
+      "role": "cityBus",
+      "category": "vehicles",
+      "baseKind": "bus",
+      "previewColor": "#f6c453",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.26,
+        "y": 1.58,
+        "z": 6.25
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_police",
+      "label": "Viatura policial",
+      "role": "police",
+      "category": "vehicles",
+      "baseKind": "emergency",
+      "previewColor": "#2563eb",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 1.72,
+        "y": 0.86,
+        "z": 3.18
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_ambulance",
+      "label": "Ambulancia",
+      "role": "ambulance",
+      "category": "vehicles",
+      "baseKind": "emergency",
+      "previewColor": "#f8fafc",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.05,
+        "y": 1.28,
+        "z": 4.15
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_fire_truck",
+      "label": "Caminhao de bombeiros",
+      "role": "fireTruck",
+      "category": "vehicles",
+      "baseKind": "emergency",
+      "previewColor": "#ef4444",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.12,
+        "y": 1.28,
+        "z": 4.35
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    },
+    {
+      "id": "vehicle_trailer_truck",
+      "label": "Carreta",
+      "role": "trailerTruck",
+      "category": "vehicles",
+      "baseKind": "trailerTruck",
+      "previewColor": "#d76f37",
+      "enabled": true,
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "spawnHeightOffset": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.2,
+        "y": 1.36,
+        "z": 6.65
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
+    }
+  ],
+  "legacyTextureHints": {
+    "crate": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#b87938",
+      "scale": 1
+    },
+    "post": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#aeb9c4",
+      "scale": 1
+    },
+    "tree": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#37a96b",
+      "scale": 1
+    },
+    "rock": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#8c9aa1",
+      "scale": 1
+    },
+    "car": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#ef6f57",
+      "scale": 1
+    },
+    "truck": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#e77c38",
+      "scale": 1
+    },
+    "bus": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#f6c453",
+      "scale": 1
+    },
+    "emergency": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#e9f1ff",
+      "scale": 1
+    },
+    "trailerTruck": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#d76f37",
+      "scale": 1
+    },
+    "trafficLight": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#222a32",
+      "scale": 1
+    },
+    "building": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#68747a",
+      "scale": 1
+    },
+    "structure": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#5f817c",
+      "scale": 1
+    },
+    "billboard": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#28333f",
+      "scale": 1
+    },
+    "screen": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#253446",
+      "scale": 1
+    },
+    "bench": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#9b6738",
+      "scale": 1
+    },
+    "hydrant": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#d84d4d",
+      "scale": 1
+    },
+    "trash": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#2b5f50",
+      "scale": 1
+    },
+    "pedestrian": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#60a5fa",
+      "scale": 1
+    },
+    "cone": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#f97316",
+      "scale": 1
+    },
+    "mailbox": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#2f67a8",
+      "scale": 1
+    },
+    "bike": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#94a3b8",
+      "scale": 1
+    },
+    "planter": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#37a96b",
+      "scale": 1
+    },
+    "kiosk": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#5bb6a5",
+      "scale": 1
+    },
+    "fountain": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#7dd3fc",
+      "scale": 1
+    },
+    "statue": {
+      "albedo": "",
+      "normal": "",
+      "roughness": "",
+      "color": "#aeb9c4",
+      "scale": 1
+    }
+  },
+  "customObjectCategories": [
+    {
+      "id": "pedestrians",
+      "label": "Pedestres"
+    },
+    {
+      "id": "vehicles",
+      "label": "Veiculos"
+    },
+    {
+      "id": "streetProps",
+      "label": "Rua e calcada"
+    },
+    {
+      "id": "nature",
+      "label": "Natureza"
+    },
+    {
+      "id": "buildings",
+      "label": "Construcoes e ads"
+    },
+    {
+      "id": "items",
+      "label": "Itens e caixas"
+    }
+  ]
 }

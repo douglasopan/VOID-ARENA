@@ -84,6 +84,15 @@ export class AudioManager {
     return this.musicVolume;
   }
 
+  getCurrentMusicLabel(): string {
+    const asset = this.activeMusicAssets[this.activeMusicIndex];
+    if (!asset) {
+      return this.musicOscillator ? 'Generated tone' : 'No music';
+    }
+
+    return this.formatMusicAssetLabel(asset);
+  }
+
   isMuted(): boolean {
     return this.muted;
   }
@@ -405,6 +414,13 @@ export class AudioManager {
     if (this.musicAutoAdvanceAudio === audio) {
       this.musicAutoAdvanceAudio = null;
     }
+  }
+
+  private formatMusicAssetLabel(asset: string): string {
+    const fileName = asset.split('/').pop()?.replace(/\.[a-z0-9]+$/i, '') ?? asset;
+    return fileName
+      .replace(/[_-]+/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   private scheduleMusicTick(): void {

@@ -137,6 +137,10 @@ export interface EngineConfig {
     swallowGravityMultiplier: number;
     objectMissForgiveness: number;
   };
+  visual: {
+    skyEffectsEnabled: boolean;
+    lightingEffectsEnabled: boolean;
+  };
   generation: {
     objectDensityMultiplier: number;
     trafficEnabled: boolean;
@@ -184,6 +188,10 @@ export function createDefaultEngineConfig(): EngineConfig {
       rimSuctionMultiplier: 1,
       swallowGravityMultiplier: 1,
       objectMissForgiveness: 1
+    },
+    visual: {
+      skyEffectsEnabled: true,
+      lightingEffectsEnabled: true
     },
     generation: {
       objectDensityMultiplier: 1,
@@ -244,7 +252,7 @@ export function createDefaultEngineConfig(): EngineConfig {
       }
     }
   };
-  return mergeEngineConfig(defaults, prebuildEngineOverrides as Partial<EngineConfig>);
+  return mergeEngineConfig(defaults, prebuildEngineOverrides as unknown as Partial<EngineConfig>);
 }
 
 export function getEngineConfig(): EngineConfig {
@@ -377,6 +385,7 @@ function mergeEngineConfig(defaults: EngineConfig, input: Partial<EngineConfig>)
     ...input,
     branding: { ...defaults.branding, ...input.branding },
     gameplay: { ...defaults.gameplay, ...input.gameplay },
+    visual: { ...defaults.visual, ...input.visual },
     generation: {
       ...defaults.generation,
       ...input.generation,
@@ -447,6 +456,8 @@ function sanitizeEngineConfig(input: Partial<EngineConfig>): EngineConfig {
   merged.gameplay.rimSuctionMultiplier = clamp(merged.gameplay.rimSuctionMultiplier, 0, 4);
   merged.gameplay.swallowGravityMultiplier = clamp(merged.gameplay.swallowGravityMultiplier, 0.25, 4);
   merged.gameplay.objectMissForgiveness = clamp(merged.gameplay.objectMissForgiveness, 0.35, 2.4);
+  merged.visual.skyEffectsEnabled = merged.visual.skyEffectsEnabled !== false;
+  merged.visual.lightingEffectsEnabled = merged.visual.lightingEffectsEnabled !== false;
   merged.generation.objectDensityMultiplier = clamp(merged.generation.objectDensityMultiplier, 0.1, 2.5);
   merged.disasters.firstDelayMultiplier = clamp(merged.disasters.firstDelayMultiplier, 0.2, 6);
   merged.disasters.nextDelayMultiplier = clamp(merged.disasters.nextDelayMultiplier, 0.2, 8);
