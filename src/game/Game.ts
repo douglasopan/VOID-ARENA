@@ -1547,6 +1547,11 @@ export class Game {
     if (this.currentConfig) {
       this.currentConfig.enableAds = this.currentConfig.enableAds && config.generation.adsEnabled;
     }
+    if ((this.state === 'playing' || this.state === 'paused') && this.currentConfig) {
+      this.audioManager.startMusic(this.currentConfig.mapSize);
+    } else if (this.state === 'menu' || this.state === 'setup') {
+      this.audioManager.startMenuMusic();
+    }
   }
 
   private applyControlConfig(controls: EngineControlsConfig): void {

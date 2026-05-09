@@ -217,6 +217,7 @@ export class AudioManager {
   }
 
   nextMusicTrack(): void {
+    this.refreshActiveMusicAssetsFromConfig();
     if (this.activeMusicAssets.length <= 1 || !this.activeMusicKey) {
       return;
     }
@@ -226,19 +227,42 @@ export class AudioManager {
   }
 
   private startTrackGroup(key: string, assets: string[]): void {
-    if (this.musicElement && this.activeMusicKey === key && !this.musicElement.paused) {
-      return;
-    }
-    if (this.pendingMusicRequest?.key === key) {
-      return;
-    }
-
-    if (assets.length === 0) {
+    const playlist = this.dedupeMusicAssets(assets);
+    if (playlist.length === 0) {
       this.startGeneratedMusic();
       return;
     }
 
-    this.playMusicAsset(key, assets, Math.floor(Math.random() * assets.length));
+    const sameActiveGroup = this.musicElement && this.activeMusicKey === key && !this.musicElement.paused;
+    if (sameActiveGroup && this.sameMusicAssets(this.activeMusicAssets, playlist)) {
+      return;
+    }
+
+    if (sameActiveGroup) {
+      const currentAsset = this.activeMusicAssets[this.activeMusicIndex];
+      const retainedIndex = playlist.indexOf(currentAsset);
+      this.activeMusicAssets = [...playlist];
+      if (retainedIndex >= 0) {
+        this.activeMusicIndex = retainedIndex;
+        return;
+      }
+      this.playMusicAsset(key, playlist, Math.floor(Math.random() * playlist.length), false, this.musicManualFadeSeconds);
+      return;
+    }
+
+    if (this.pendingMusicRequest?.key === key) {
+      if (this.sameMusicAssets(this.pendingMusicRequest.assets, playlist)) {
+        return;
+      }
+      this.pendingMusicRequest = {
+        ...this.pendingMusicRequest,
+        assets: [...playlist],
+        index: Math.min(this.pendingMusicRequest.index, playlist.length - 1)
+      };
+      return;
+    }
+
+    this.playMusicAsset(key, playlist, Math.floor(Math.random() * playlist.length));
   }
 
   private playMusicAsset(
@@ -349,6 +373,7 @@ export class AudioManager {
   private handleMusicEnded(audio: HTMLAudioElement): void {
     const wasCurrentTrack = this.musicElement === audio;
     const key = this.activeMusicKey;
+    this.refreshActiveMusicAssetsFromConfig();
     const assets = [...this.activeMusicAssets];
     const nextIndex = assets.length > 1 ? (this.activeMusicIndex + 1) % assets.length : this.activeMusicIndex;
 
@@ -423,6 +448,78 @@ export class AudioManager {
       .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
+  private refreshActiveMusicAssetsFromConfig(): void {
+    const key = this.activeMusicKey ?? this.pendingMusicRequest?.key;
+    if (!key) {
+      return;
+    }
+
+    const configuredAssets = this.getConfiguredMusicAssetsForKey(key);
+    if (configuredAssets.length === 0 || this.sameMusicAssets(this.activeMusicAssets, configuredAssets)) {
+      return;
+    }
+
+    const currentAsset = this.activeMusicAssets[this.activeMusicIndex];
+    this.activeMusicAssets = [...configuredAssets];
+    const retainedIndex = configuredAssets.indexOf(currentAsset);
+    this.activeMusicIndex = retainedIndex >= 0
+      ? retainedIndex
+      : Math.min(this.activeMusicIndex, configuredAssets.length - 1);
+
+    if (this.pendingMusicRequest?.key === key) {
+      this.pendingMusicRequest = {
+        ...this.pendingMusicRequest,
+        assets: [...configuredAssets],
+        index: Math.min(this.pendingMusicRequest.index, configuredAssets.length - 1)
+      };
+    }
+  }
+
+  private getConfiguredMusicAssetsForKey(key: string): string[] {
+    if (key === 'menu') {
+      const configuredAssets = getEngineConfig().audio.menuMusic;
+      return this.dedupeMusicAssets(configuredAssets.length ? configuredAssets : MENU_MUSIC_ASSETS);
+    }
+
+    if (key.startsWith('map:')) {
+      const configuredAssets = getEngineConfig().audio.mapMusic;
+      const mapSize = key.slice('map:'.length);
+      if (configuredAssets.length) {
+        return this.dedupeMusicAssets(configuredAssets);
+      }
+      if (this.isMapSize(mapSize)) {
+        return this.dedupeMusicAssets(MAP_MUSIC_ASSETS[mapSize]);
+      }
+    }
+
+    return [];
+  }
+
+  private dedupeMusicAssets(assets: string[]): string[] {
+    const deduped: string[] = [];
+    const seen = new Set<string>();
+    for (const asset of assets) {
+      const normalized = this.getPreferredAudioPath(asset);
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      deduped.push(normalized);
+    }
+    return deduped;
+  }
+
+  private sameMusicAssets(left: string[], right: string[]): boolean {
+    if (left.length !== right.length) {
+      return false;
+    }
+    return left.every((asset, index) => asset === right[index]);
+  }
+
+  private isMapSize(value: string): value is MapSize {
+    return value === 'small' || value === 'medium' || value === 'large' || value === 'huge';
+  }
+
   private scheduleMusicTick(): void {
     if (this.musicTickId !== 0) {
       return;
@@ -462,6 +559,7 @@ export class AudioManager {
     if (!audio || !this.activeMusicKey || this.activeMusicAssets.length === 0 || audio.paused) {
       return;
     }
+    this.refreshActiveMusicAssetsFromConfig();
 
     const duration = audio.duration;
     if (!Number.isFinite(duration) || duration <= 0) {

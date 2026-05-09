@@ -7,8 +7,8 @@
   },
   "gameplay": {
     "startSpeedMultiplier": 0,
-    "minSpeedMultiplier": 0.3,
-    "boostMultiplier": 1,
+    "minSpeedMultiplier": 0.1,
+    "boostMultiplier": 0.2,
     "staminaDrainMultiplier": 0,
     "staminaRegenMultiplier": 2,
     "magnetStrengthMultiplier": 5,

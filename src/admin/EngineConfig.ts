@@ -484,6 +484,9 @@ function sanitizeEngineConfig(input: Partial<EngineConfig>): EngineConfig {
   merged.controls.mouseControlEnabled = merged.controls.mouseControlEnabled !== false;
   merged.controls.bindings = sanitizeControlBindings(merged.controls.bindings, defaults.controls.bindings);
 
+  const prebuildAudio = (prebuildEngineOverrides as unknown as Partial<EngineConfig>).audio;
+  merged.audio.menuMusic = mergeUniqueAudioPaths(merged.audio.menuMusic, prebuildAudio?.menuMusic);
+  merged.audio.mapMusic = mergeUniqueAudioPaths(merged.audio.mapMusic, prebuildAudio?.mapMusic);
   merged.audio.menuMusic = merged.audio.menuMusic.map(normalizeOggAudioPath).filter(Boolean);
   merged.audio.mapMusic = merged.audio.mapMusic.map(normalizeOggAudioPath).filter(Boolean);
   merged.audio.uiHover = normalizeOggAudioPath(merged.audio.uiHover) || defaults.audio.uiHover;
@@ -501,6 +504,22 @@ function sanitizeEngineConfig(input: Partial<EngineConfig>): EngineConfig {
   }
 
   return merged;
+}
+
+function mergeUniqueAudioPaths(primary: string[] = [], required: string[] = []): string[] {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+
+  for (const path of [...primary, ...required]) {
+    const normalized = typeof path === 'string' ? normalizeOggAudioPath(path) : '';
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    paths.push(normalized);
+  }
+
+  return paths;
 }
 
 function clamp(value: number, min: number, max: number): number {

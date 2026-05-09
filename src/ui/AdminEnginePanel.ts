@@ -438,11 +438,15 @@ export class AdminEnginePanel {
       }
       const result = await response.json() as { path: string };
       this.attachAudioPath(attach, result.path);
-      if (status) status.textContent = `Áudio salvo: ${result.path}`;
-      this.renderPanel({
-        onClose: this.callbacks?.onClose ?? (() => this.hide()),
-        onApply: this.callbacks?.onApply ?? ((config) => saveEngineConfig(config))
-      });
+      this.syncAudioFieldsAfterUpload(root, attach);
+      const saved = saveEngineConfig(this.draft);
+      this.draft = structuredClone(saved);
+      this.callbacks?.onApply(saved);
+      const fileInput = root.querySelector<HTMLInputElement>('.admin-audio-file');
+      if (fileInput) {
+        fileInput.value = '';
+      }
+      if (status) status.textContent = `Audio salvo e aplicado: ${result.path}`;
     } catch (error) {
       if (status) status.textContent = `Falha no upload: ${error instanceof Error ? error.message : 'erro desconhecido'}`;
     }
@@ -460,6 +464,23 @@ export class AdminEnginePanel {
     if (target.startsWith('object:')) {
       const kind = target.slice('object:'.length) as WorldObjectKind;
       this.draft.audio.objectSfx[kind] = [...(this.draft.audio.objectSfx[kind] ?? []), path];
+    }
+  }
+
+  private syncAudioFieldsAfterUpload(root: HTMLElement, target: string): void {
+    if (target === 'menuMusic' || target === 'mapMusic') {
+      const textarea = root.querySelector<HTMLTextAreaElement>(`[data-audio-list="${target}"]`);
+      if (textarea) {
+        textarea.value = this.draft.audio[target].join('\n');
+      }
+      return;
+    }
+
+    if (target === 'uiHover' || target === 'uiClick' || target === 'playerDie') {
+      const input = root.querySelector<HTMLInputElement>(`[data-path="audio.${target}"]`);
+      if (input) {
+        input.value = this.draft.audio[target];
+      }
     }
   }
 
