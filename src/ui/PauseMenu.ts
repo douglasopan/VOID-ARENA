@@ -215,9 +215,12 @@ export class PauseMenu {
           return;
         }
         this.activeCategory = category;
-        element.querySelectorAll('.pause-category-button').forEach((item) => item.classList.remove('active'));
+        element.querySelectorAll<HTMLButtonElement>('.pause-category-button').forEach((item) => {
+          const active = item === button;
+          item.classList.toggle('active', active);
+          item.setAttribute('aria-selected', String(active));
+        });
         element.querySelectorAll('.pause-category-panel').forEach((panel) => panel.classList.remove('active'));
-        button.classList.add('active');
         element.querySelector(`[data-pause-panel="${category}"]`)?.classList.add('active');
       });
     });
