@@ -17,6 +17,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#b87938",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "post": {
@@ -34,6 +40,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#aeb9c4",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe4a3",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "tree": {
@@ -51,6 +63,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#37a96b",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "rock": {
@@ -68,6 +86,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#8c9aa1",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "car": {
@@ -85,6 +109,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#ef6f57",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "truck": {
@@ -102,6 +132,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#e77c38",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "bus": {
@@ -119,6 +155,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#f6c453",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "emergency": {
@@ -136,6 +178,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#e9f1ff",
+      "lighting": {
+        "enabled": true,
+        "color": "#fff4bc",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "trailerTruck": {
@@ -153,6 +201,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#d76f37",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "trafficLight": {
@@ -170,6 +224,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#222a32",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "building": {
@@ -187,6 +247,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#68747a",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "structure": {
@@ -204,6 +270,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#5f817c",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "billboard": {
@@ -221,6 +293,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#28333f",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "screen": {
@@ -238,6 +316,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#253446",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "bench": {
@@ -255,6 +339,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#9b6738",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "hydrant": {
@@ -272,6 +362,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#d84d4d",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "trash": {
@@ -289,6 +385,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#2b5f50",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "pedestrian": {
@@ -306,6 +408,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#60a5fa",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "cone": {
@@ -323,6 +431,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#f97316",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "mailbox": {
@@ -340,6 +454,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#2f67a8",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "bike": {
@@ -357,6 +477,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#94a3b8",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "planter": {
@@ -374,6 +500,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#37a96b",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "kiosk": {
@@ -391,6 +523,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#5bb6a5",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "fountain": {
@@ -408,6 +546,12 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#7dd3fc",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     },
     "statue": {
@@ -425,21 +569,56 @@
       "materialSet": "",
       "atlasRegion": "",
       "previewColor": "#aeb9c4",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": ""
     }
   },
   "textureSets": {},
   "textures": {},
   "audio": {},
+  "customObjectCategories": [
+    {
+      "id": "pedestrians",
+      "label": "Pedestres"
+    },
+    {
+      "id": "vehicles",
+      "label": "Veiculos"
+    },
+    {
+      "id": "streetProps",
+      "label": "Rua e calcada"
+    },
+    {
+      "id": "nature",
+      "label": "Natureza"
+    },
+    {
+      "id": "buildings",
+      "label": "Construcoes e ads"
+    },
+    {
+      "id": "items",
+      "label": "Itens e caixas"
+    },
+    {
+      "id": "streetprops",
+      "label": "Rua e calcada"
+    }
+  ],
   "customObjects": [
     {
       "id": "pedestrian_male",
       "label": "Pedestre homem",
-      "role": "man",
+      "enabled": true,
       "category": "pedestrians",
       "baseKind": "pedestrian",
-      "previewColor": "#60a5fa",
-      "enabled": true,
+      "role": "man",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -454,16 +633,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#60a5fa",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": "Default placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "pedestrian_female",
       "label": "Pedestre mulher",
-      "role": "woman",
+      "enabled": true,
       "category": "pedestrians",
       "baseKind": "pedestrian",
-      "previewColor": "#f472b6",
-      "enabled": true,
+      "role": "woman",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -478,16 +663,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#f472b6",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": "Default placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "pedestrian_builder",
       "label": "Construtor",
-      "role": "builder",
+      "enabled": true,
       "category": "pedestrians",
       "baseKind": "pedestrian",
-      "previewColor": "#facc15",
-      "enabled": true,
+      "role": "builder",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -502,16 +693,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#facc15",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": "Default placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "pedestrian_police",
       "label": "Policial",
-      "role": "police",
+      "enabled": true,
       "category": "pedestrians",
       "baseKind": "pedestrian",
-      "previewColor": "#2563eb",
-      "enabled": true,
+      "role": "police",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -526,16 +723,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#2563eb",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": "Default placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "pedestrian_firefighter",
       "label": "Bombeiro",
-      "role": "firefighter",
+      "enabled": true,
       "category": "pedestrians",
       "baseKind": "pedestrian",
-      "previewColor": "#ef4444",
-      "enabled": true,
+      "role": "firefighter",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -550,16 +753,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#ef4444",
+      "lighting": {
+        "enabled": false,
+        "color": "#ffe6a7",
+        "intensity": 0,
+        "windowRows": 0
+      },
       "notes": "Default placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_sedan",
       "label": "Sedan",
-      "role": "sedan",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "car",
-      "previewColor": "#45a7d8",
-      "enabled": true,
+      "role": "sedan",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -574,16 +783,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#45a7d8",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_taxi",
       "label": "Taxi",
-      "role": "taxi",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "car",
-      "previewColor": "#f6d365",
-      "enabled": true,
+      "role": "taxi",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -598,16 +813,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#f6d365",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_coupe",
       "label": "Coupe",
-      "role": "coupe",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "car",
-      "previewColor": "#d95763",
-      "enabled": true,
+      "role": "coupe",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -622,16 +843,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#d95763",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_van",
       "label": "Van",
-      "role": "van",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "truck",
-      "previewColor": "#e2e8f0",
-      "enabled": true,
+      "role": "van",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -646,16 +873,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#e2e8f0",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_pickup",
       "label": "Pickup",
-      "role": "pickup",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "truck",
-      "previewColor": "#e56f40",
-      "enabled": true,
+      "role": "pickup",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -670,16 +903,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#e56f40",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_delivery_truck",
       "label": "Caminhao de entrega",
-      "role": "delivery",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "truck",
-      "previewColor": "#f0c850",
-      "enabled": true,
+      "role": "delivery",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -694,16 +933,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#f0c850",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_city_bus",
       "label": "Onibus urbano",
-      "role": "cityBus",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "bus",
-      "previewColor": "#f6c453",
-      "enabled": true,
+      "role": "cityBus",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -718,16 +963,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#f6c453",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_police",
       "label": "Viatura policial",
-      "role": "police",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "emergency",
-      "previewColor": "#2563eb",
-      "enabled": true,
+      "role": "police",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -742,16 +993,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#2563eb",
+      "lighting": {
+        "enabled": true,
+        "color": "#fff4bc",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_ambulance",
       "label": "Ambulancia",
-      "role": "ambulance",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "emergency",
-      "previewColor": "#f8fafc",
-      "enabled": true,
+      "role": "ambulance",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -766,16 +1023,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#f8fafc",
+      "lighting": {
+        "enabled": true,
+        "color": "#fff4bc",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_fire_truck",
       "label": "Caminhao de bombeiros",
-      "role": "fireTruck",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "emergency",
-      "previewColor": "#ef4444",
-      "enabled": true,
+      "role": "fireTruck",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -790,16 +1053,22 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#ef4444",
+      "lighting": {
+        "enabled": true,
+        "color": "#fff4bc",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     },
     {
       "id": "vehicle_trailer_truck",
       "label": "Carreta",
-      "role": "trailerTruck",
+      "enabled": true,
       "category": "vehicles",
       "baseKind": "trailerTruck",
-      "previewColor": "#d76f37",
-      "enabled": true,
+      "role": "trailerTruck",
       "source": "",
       "format": "primitive",
       "scale": 1,
@@ -814,6 +1083,13 @@
       },
       "materialSet": "",
       "atlasRegion": "",
+      "previewColor": "#d76f37",
+      "lighting": {
+        "enabled": true,
+        "color": "#ffe6a7",
+        "intensity": 1,
+        "windowRows": 0
+      },
       "notes": "Default vehicle placeholder. Replace source with a custom GLB later."
     }
   ],
@@ -993,31 +1269,5 @@
       "color": "#aeb9c4",
       "scale": 1
     }
-  },
-  "customObjectCategories": [
-    {
-      "id": "pedestrians",
-      "label": "Pedestres"
-    },
-    {
-      "id": "vehicles",
-      "label": "Veiculos"
-    },
-    {
-      "id": "streetProps",
-      "label": "Rua e calcada"
-    },
-    {
-      "id": "nature",
-      "label": "Natureza"
-    },
-    {
-      "id": "buildings",
-      "label": "Construcoes e ads"
-    },
-    {
-      "id": "items",
-      "label": "Itens e caixas"
-    }
-  ]
+  }
 }

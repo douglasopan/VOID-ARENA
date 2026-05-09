@@ -6,16 +6,16 @@
     "textFont": "Open Sans"
   },
   "gameplay": {
-    "startSpeedMultiplier": 1.5,
+    "startSpeedMultiplier": 1.3,
     "minSpeedMultiplier": 1,
-    "boostMultiplier": 1.58,
-    "staminaDrainMultiplier": 1,
-    "staminaRegenMultiplier": 1,
+    "boostMultiplier": 1.6,
+    "staminaDrainMultiplier": 0.5,
+    "staminaRegenMultiplier": 2,
     "magnetStrengthMultiplier": 5,
     "objectContactSecondsMultiplier": 1,
-    "rimSuctionMultiplier": 1,
-    "swallowGravityMultiplier": 1,
-    "objectMissForgiveness": 1
+    "rimSuctionMultiplier": 1.5,
+    "swallowGravityMultiplier": 5,
+    "objectMissForgiveness": 1.7
   },
   "generation": {
     "objectDensityMultiplier": 1,
