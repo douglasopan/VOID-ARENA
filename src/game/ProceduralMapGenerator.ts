@@ -50,6 +50,14 @@ interface RoadNetwork {
   pedestrianPaths: PedestrianPath[];
 }
 
+type CityZone =
+  | 'industrial'
+  | 'commercial'
+  | 'highResidential'
+  | 'lowResidential'
+  | 'civic'
+  | 'greenEdge';
+
 const ROAD_LAYOUT_GUIDELINES: Record<MapSize, {
   avenueCount: number;
   sideStreetCount: number;
@@ -161,11 +169,19 @@ export class ProceduralMapGenerator {
     this.reserveCrosswalkFootprints(occupied, network.surfaces);
     this.addStreetlights(objects, occupied, network.surfaces, rng);
     this.addPlazas(objects, occupied, network.surfaces, network.roads, spawnPoints, rng, options.size);
+    this.addParkingLots(objects, occupied, network.surfaces, network.roads, spawnPoints, rng, options.size);
+    this.addResidentialLots(objects, occupied, network.roads, spawnPoints, rng, options.size);
+    this.addCivicBuildings(objects, occupied, network.roads, spawnPoints, rng, options.size);
     this.addBuildings(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
     this.addRoadsideObjects(objects, occupied, network.roads, spawnPoints, rng, objectBudget);
+    this.addBenchTrashPairs(objects, occupied, rng);
+    this.addBuildingServiceProps(objects, occupied, network.roads, rng, objectBudget);
+    this.addEdgeNature(objects, occupied, network.roads, spawnPoints, rng, options.size, objectBudget);
     this.addTraffic(objects, occupied, network.trafficRoutes, network.roads, network.surfaces, rng, objectBudget);
     this.addParkedVehicles(objects, occupied, network.roads, network.surfaces, spawnPoints, rng, objectBudget);
     this.addPedestrians(objects, occupied, network.pedestrianPaths, rng, objectBudget);
+    this.addSeatedPedestrians(objects, occupied, rng, objectBudget);
+    this.addBuildingDoorPedestrians(objects, occupied, network.pedestrianPaths, network.roads, rng, objectBudget);
     this.addLooseCityObjects(objects, occupied, network.roads, spawnPoints, rng, options.size, objectBudget);
     this.addPowerUps(powerUps, occupied, network.roads, spawnPoints, rng, options.size, options.powerUpCount);
 
@@ -754,7 +770,7 @@ export class ProceduralMapGenerator {
     size: MapSize
   ): void {
     const settings = MAP_SIZE_SETTINGS[size];
-    const countBySize = { small: 1, medium: 2, large: 4, huge: 7 } satisfies Record<MapSize, number>;
+    const countBySize = { small: 2, medium: 4, large: 8, huge: 13 } satisfies Record<MapSize, number>;
     for (let i = 0; i < countBySize[size]; i += 1) {
       let candidate: SpawnCandidate | null = null;
       let width = 0;
@@ -826,6 +842,372 @@ export class ProceduralMapGenerator {
       }
 
       occupied.push({ x: candidate.x, z: candidate.z, radius: footprintRadius });
+    }
+  }
+
+  private addParkingLots(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    surfaces: SurfaceSegment[],
+    roads: RoadSegment[],
+    spawnPoints: Vec3Data[],
+    rng: SeededRandom,
+    size: MapSize
+  ): void {
+    const countBySize = { small: 1, medium: 2, large: 4, huge: 7 } satisfies Record<MapSize, number>;
+    for (let lotIndex = 0; lotIndex < countBySize[size]; lotIndex += 1) {
+      let lot: (SpawnCandidate & { width: number; length: number }) | null = null;
+
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        const road = rng.pick(roads);
+        const forward = this.forwardVector(road.rotationY);
+        const side = this.sideVector(road.rotationY);
+        const sideSign = rng.pick([-1, 1]);
+        const maxScaleBySize = { small: 1.35, medium: 1.72, large: 2.02, huge: 2.16 } satisfies Record<MapSize, number>;
+        const lotScale = rng.chance(0.36)
+          ? rng.range(1.28, maxScaleBySize[size])
+          : rng.range(0.95, 1.22);
+        const width = rng.range(8.8, size === 'small' ? 11.5 : 15.2) * lotScale;
+        const length = rng.range(12, size === 'small' ? 16 : 23.5) * lotScale;
+        const along = rng.range(-road.length * 0.38, road.length * 0.38);
+        const offset = road.width * 0.5 + road.sidewalkWidth + width * 0.5 + rng.range(2.4, 4.8);
+        const x = road.x + forward.x * along + side.x * offset * sideSign;
+        const z = road.z + forward.z * along + side.z * offset * sideSign;
+        const radius = Math.hypot(width, length) * 0.52;
+        const lotFootprint = {
+          x,
+          z,
+          radius,
+          halfWidth: width * 0.5 + 0.8,
+          halfDepth: length * 0.5 + 0.8,
+          rotationY: road.rotationY
+        };
+        if (
+          this.overlapsFootprint(lotFootprint, occupied) ||
+          this.pointConflictsRoads(x, z, Math.max(2.2, Math.min(width * 0.42, 5.8)), roads) ||
+          this.isTooCloseToAnySpawn(x, z, spawnPoints.slice(0, 5), MAP_SIZE_SETTINGS[size].spawnClearRadius + 1.5)
+        ) {
+          continue;
+        }
+
+        lot = { x, z, rotationY: road.rotationY, width, length };
+        break;
+      }
+
+      if (!lot) {
+        continue;
+      }
+
+      surfaces.push({
+        id: `parking-lot-${lotIndex}`,
+        x: lot.x,
+        z: lot.z,
+        width: lot.width,
+        length: lot.length,
+        rotationY: lot.rotationY,
+        kind: 'parking'
+      });
+
+      const forward = this.forwardVector(lot.rotationY);
+      const side = this.sideVector(lot.rotationY);
+      const localOccupied: OccupiedFootprint[] = [];
+      const usableWidth = lot.width * 0.84;
+      const usableLength = lot.length * 0.84;
+      const columns = Math.max(2, Math.min(8, Math.floor(usableWidth / 3.05)));
+      const rows = Math.max(2, Math.min(10, Math.floor(usableLength / 4.35)));
+      const stallWidth = usableWidth / columns;
+      const rowDepth = usableLength / rows;
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+          if (!rng.chance(0.72)) {
+            continue;
+          }
+          const localX = -usableWidth * 0.5 + stallWidth * (column + 0.5) + rng.range(-0.1, 0.1);
+          const localZ = -usableLength * 0.5 + rowDepth * (row + 0.5) + rng.range(-0.16, 0.16);
+          const x = lot.x + side.x * localX + forward.x * localZ;
+          const z = lot.z + side.z * localX + forward.z * localZ;
+          const kind: WorldObjectKind = rng.chance(0.14) ? 'emergency' : 'car';
+          const car = this.createObjectDefinition(kind, objects.length, {
+            x,
+            z,
+            rotationY: lot.rotationY + (row % 2 === 1 ? Math.PI : 0)
+          }, rng);
+          car.label = `Parked ${car.label}`;
+          car.lightsEnabled = false;
+          car.variantRole = 'parking-stall';
+          if (
+            this.overlapsOccupied(x, z, car.boundingRadius * 0.42, occupied) ||
+            this.overlapsOccupied(x, z, car.boundingRadius * 0.42, localOccupied)
+          ) {
+            continue;
+          }
+          objects.push(car);
+          const footprint = {
+            x,
+            z,
+            radius: car.boundingRadius * 0.42,
+            halfWidth: car.size.x * 0.5 + 0.18,
+            halfDepth: car.size.z * 0.5 + 0.18,
+            rotationY: car.rotationY
+          };
+          localOccupied.push(footprint);
+          occupied.push(footprint);
+        }
+      }
+
+      for (const sign of [-1, 1]) {
+        if (!rng.chance(0.68)) {
+          continue;
+        }
+        const x = lot.x + side.x * (sign * lot.width * 0.43) + forward.x * rng.range(-lot.length * 0.32, lot.length * 0.32);
+        const z = lot.z + side.z * (sign * lot.width * 0.43) + forward.z * rng.range(-lot.length * 0.32, lot.length * 0.32);
+        const kind: WorldObjectKind = rng.chance(0.5) ? 'trash' : 'crate';
+        const prop = this.createObjectDefinition(kind, objects.length, { x, z, rotationY: lot.rotationY }, rng);
+        if (!this.overlapsOccupied(x, z, prop.boundingRadius, occupied)) {
+          objects.push(prop);
+          occupied.push({ x, z, radius: prop.boundingRadius });
+        }
+      }
+
+      occupied.push({
+        x: lot.x,
+        z: lot.z,
+        radius: Math.hypot(lot.width, lot.length) * 0.52,
+        halfWidth: lot.width * 0.5 + 0.45,
+        halfDepth: lot.length * 0.5 + 0.45,
+        rotationY: lot.rotationY
+      });
+    }
+  }
+
+  private addResidentialLots(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    roads: RoadSegment[],
+    spawnPoints: Vec3Data[],
+    rng: SeededRandom,
+    size: MapSize
+  ): void {
+    const targetBySize = { small: 3, medium: 7, large: 15, huge: 24 } satisfies Record<MapSize, number>;
+    let placed = 0;
+    let attempts = 0;
+    while (placed < targetBySize[size] && attempts < targetBySize[size] * 30) {
+      attempts += 1;
+      const road = rng.pick(roads);
+      const forward = this.forwardVector(road.rotationY);
+      const side = this.sideVector(road.rotationY);
+      const sideSign = rng.pick([-1, 1]);
+      const lotWidth = rng.range(8.2, 11.5);
+      const lotDepth = rng.range(8.4, 12.5);
+      const along = rng.range(-road.length * 0.42, road.length * 0.42);
+      const offset = road.width * 0.5 + road.sidewalkWidth + lotDepth * 0.5 + rng.range(1.6, 3.3);
+      const centerX = road.x + forward.x * along + side.x * offset * sideSign;
+      const centerZ = road.z + forward.z * along + side.z * offset * sideSign;
+      if (this.zoneForPosition(centerX, centerZ) !== 'lowResidential') {
+        continue;
+      }
+      const radius = Math.hypot(lotWidth, lotDepth) * 0.52;
+      if (
+        this.overlapsOccupied(centerX, centerZ, radius + 0.35, occupied) ||
+        this.pointConflictsRoads(centerX, centerZ, radius * 0.72, roads) ||
+        this.isTooCloseToAnySpawn(centerX, centerZ, spawnPoints.slice(0, 5), MAP_SIZE_SETTINGS[size].spawnClearRadius + 1)
+      ) {
+        continue;
+      }
+
+      const lotOccupied: OccupiedFootprint[] = [];
+      const placeLocal = (
+        object: ObjectSpawnDefinition,
+        localDepth: number,
+        localFront: number,
+        footprintScale = 1
+      ): boolean => {
+        object.position.x = centerX + side.x * localDepth * sideSign + forward.x * localFront;
+        object.position.z = centerZ + side.z * localDepth * sideSign + forward.z * localFront;
+        const footprint = {
+          x: object.position.x,
+          z: object.position.z,
+          radius: object.boundingRadius * footprintScale,
+          halfWidth: object.size.x * 0.5 + 0.22,
+          halfDepth: object.size.z * 0.5 + 0.22,
+          rotationY: object.rotationY
+        };
+        if (
+          this.overlapsOccupied(footprint.x, footprint.z, footprint.radius, occupied) ||
+          this.overlapsOccupied(footprint.x, footprint.z, footprint.radius, lotOccupied)
+        ) {
+          return false;
+        }
+        objects.push(object);
+        occupied.push(footprint);
+        lotOccupied.push(footprint);
+        return true;
+      };
+
+      const houseSize = { x: rng.range(4.0, 5.6), y: rng.range(2.8, 4.4), z: rng.range(4.0, 5.8) };
+      const house = this.createManualObjectDefinition(
+        'building',
+        objects.length,
+        { x: centerX, z: centerZ, rotationY: road.rotationY },
+        'Detached House',
+        houseSize,
+        rng.pick(['#9a8068', '#8e9377', '#a58d74', '#7d8b80']),
+        Math.hypot(houseSize.x, houseSize.z) * 0.5,
+        houseSize.x * houseSize.z * 1.35,
+        95
+      );
+      if (!placeLocal(house, lotDepth * 0.12, rng.range(-lotWidth * 0.12, lotWidth * 0.12))) {
+        continue;
+      }
+
+      const garage = this.createManualObjectDefinition(
+        'structure',
+        objects.length,
+        { x: centerX, z: centerZ, rotationY: road.rotationY },
+        'Home Garage',
+        { x: rng.range(2.4, 3.4), y: 1.7, z: rng.range(2.6, 3.6) },
+        '#7d8a83',
+        1.75,
+        18,
+        38,
+        'decor'
+      );
+      placeLocal(garage, -lotDepth * 0.28, rng.pick([-1, 1]) * lotWidth * 0.26, 0.92);
+
+      const carCount = rng.chance(0.55) ? 2 : 1;
+      for (let carIndex = 0; carIndex < carCount; carIndex += 1) {
+        const localFront = (carIndex - (carCount - 1) * 0.5) * 2.1;
+        const car = this.createObjectDefinition(rng.chance(0.18) ? 'truck' : 'car', objects.length, {
+          x: centerX,
+          z: centerZ,
+          rotationY: road.rotationY
+        }, rng);
+        car.label = `Garage ${car.label}`;
+        car.lightsEnabled = false;
+        placeLocal(car, -lotDepth * 0.38, localFront, 0.88);
+      }
+
+      const fenceColor = '#8a735c';
+      for (const fence of [
+        { depth: -lotDepth * 0.5, front: 0, size: { x: lotWidth, y: 0.62, z: 0.12 }, rot: road.rotationY + Math.PI / 2 },
+        { depth: lotDepth * 0.5, front: 0, size: { x: lotWidth, y: 0.62, z: 0.12 }, rot: road.rotationY + Math.PI / 2 },
+        { depth: 0, front: -lotWidth * 0.5, size: { x: 0.12, y: 0.62, z: lotDepth }, rot: road.rotationY },
+        { depth: 0, front: lotWidth * 0.5, size: { x: 0.12, y: 0.62, z: lotDepth }, rot: road.rotationY }
+      ]) {
+        if (!rng.chance(0.86)) {
+          continue;
+        }
+        const object = this.createManualObjectDefinition(
+          'structure',
+          objects.length,
+          { x: centerX, z: centerZ, rotationY: fence.rot },
+          'Lot Fence',
+          fence.size,
+          fenceColor,
+          Math.hypot(fence.size.x, fence.size.z) * 0.5,
+          5,
+          8,
+          'decor'
+        );
+        placeLocal(object, fence.depth, fence.front, 0.72);
+      }
+
+      for (let treeIndex = 0; treeIndex < rng.int(1, 4); treeIndex += 1) {
+        const tree = this.createObjectDefinition('tree', objects.length, { x: centerX, z: centerZ, rotationY: rng.range(0, Math.PI * 2) }, rng);
+        placeLocal(tree, rng.range(-lotDepth * 0.34, lotDepth * 0.42), rng.range(-lotWidth * 0.42, lotWidth * 0.42), 0.8);
+      }
+
+      occupied.push({
+        x: centerX,
+        z: centerZ,
+        radius,
+        halfWidth: lotDepth * 0.5 + 0.35,
+        halfDepth: lotWidth * 0.5 + 0.35,
+        rotationY: road.rotationY
+      });
+      placed += 1;
+    }
+  }
+
+  private addCivicBuildings(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    roads: RoadSegment[],
+    spawnPoints: Vec3Data[],
+    rng: SeededRandom,
+    size: MapSize
+  ): void {
+    const stations = size === 'small'
+      ? [rng.chance(0.5) ? 'Fire Station' : 'Police Station']
+      : ['Fire Station', 'Police Station'];
+
+    for (const label of stations) {
+      for (let attempt = 0; attempt < 72; attempt += 1) {
+        const road = rng.pick(roads);
+        const candidate = this.roadsideCandidate(road, rng, 6.5, spawnPoints);
+        if (!candidate) {
+          continue;
+        }
+        const zone = this.zoneForPosition(candidate.x, candidate.z);
+        if (zone !== 'commercial' && zone !== 'industrial' && zone !== 'civic') {
+          continue;
+        }
+        const sizeDef = label === 'Fire Station'
+          ? { x: 10.4, y: 3.6, z: 7.4 }
+          : { x: 8.6, y: 4.1, z: 6.4 };
+        const radius = Math.hypot(sizeDef.x, sizeDef.z) * 0.52;
+        if (
+          this.overlapsOccupied(candidate.x, candidate.z, radius + 0.6, occupied) ||
+          this.pointConflictsRoads(candidate.x, candidate.z, Math.min(4.8, radius * 0.64), roads)
+        ) {
+          continue;
+        }
+
+        const building = this.createManualObjectDefinition(
+          'building',
+          objects.length,
+          candidate,
+          label,
+          sizeDef,
+          label === 'Fire Station' ? '#8e5650' : '#59677e',
+          radius,
+          sizeDef.x * sizeDef.z * 1.8,
+          150
+        );
+        objects.push(building);
+        occupied.push({
+          x: building.position.x,
+          z: building.position.z,
+          radius: radius + 0.55,
+          halfWidth: sizeDef.x * 0.5 + 0.58,
+          halfDepth: sizeDef.z * 0.5 + 0.58,
+          rotationY: building.rotationY
+        });
+
+        const forward = this.forwardVector(candidate.rotationY);
+        const side = this.sideVector(candidate.rotationY);
+        const emergencyCount = label === 'Fire Station' ? 2 : 1;
+        for (let i = 0; i < emergencyCount; i += 1) {
+          const x = candidate.x - forward.x * (sizeDef.z * 0.52 + 2.3) + side.x * (i - (emergencyCount - 1) * 0.5) * 2.4;
+          const z = candidate.z - forward.z * (sizeDef.z * 0.52 + 2.3) + side.z * (i - (emergencyCount - 1) * 0.5) * 2.4;
+          const vehicle = this.createObjectDefinition('emergency', objects.length, { x, z, rotationY: candidate.rotationY }, rng);
+          vehicle.label = label === 'Fire Station' ? 'Fire Response Truck' : 'Police Car';
+          vehicle.color = label === 'Fire Station' ? '#f43f5e' : '#f8fafc';
+          vehicle.lightsEnabled = false;
+          if (!this.overlapsOccupied(x, z, vehicle.boundingRadius, occupied)) {
+            objects.push(vehicle);
+            occupied.push({
+              x,
+              z,
+              radius: vehicle.boundingRadius,
+              halfWidth: vehicle.size.x * 0.5 + 0.3,
+              halfDepth: vehicle.size.z * 0.5 + 0.3,
+              rotationY: vehicle.rotationY
+            });
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -1046,7 +1428,7 @@ export class ProceduralMapGenerator {
     rng: SeededRandom,
     objectBudget: number
   ): void {
-    const target = Math.floor(objectBudget * 0.34);
+    const target = Math.floor(objectBudget * 0.44);
     for (let i = 0; i < target; i += 1) {
       const road = rng.pick(roads);
       const candidate = this.roadsideCandidate(road, rng, rng.range(0.4, 1.3), spawnPoints, true);
@@ -1060,6 +1442,111 @@ export class ProceduralMapGenerator {
       }
       objects.push(object);
       occupied.push({ x: candidate.x, z: candidate.z, radius: object.boundingRadius });
+    }
+  }
+
+  private addBenchTrashPairs(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    rng: SeededRandom
+  ): void {
+    const benches = objects.filter((object) => object.kind === 'bench');
+    for (const bench of benches) {
+      if (!rng.chance(0.68)) {
+        continue;
+      }
+      const side = this.sideVector(bench.rotationY);
+      const sign = rng.pick([-1, 1]);
+      const x = bench.position.x + side.x * sign * 1.18;
+      const z = bench.position.z + side.z * sign * 1.18;
+      const trash = this.createObjectDefinition('trash', objects.length, { x, z, rotationY: bench.rotationY }, rng);
+      if (this.overlapsOccupied(x, z, trash.boundingRadius, occupied)) {
+        continue;
+      }
+      objects.push(trash);
+      occupied.push({ x, z, radius: trash.boundingRadius });
+    }
+  }
+
+  private addBuildingServiceProps(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    roads: RoadSegment[],
+    rng: SeededRandom,
+    objectBudget: number
+  ): void {
+    const buildings = objects.filter((object) => object.kind === 'building');
+    const target = Math.min(Math.floor(objectBudget * 0.13), Math.floor(buildings.length * 1.6));
+    let placed = 0;
+    for (const building of buildings) {
+      if (placed >= target || !rng.chance(0.55)) {
+        continue;
+      }
+      const count = rng.chance(0.36) ? 2 : 1;
+      for (let i = 0; i < count && placed < target; i += 1) {
+        const sideSign = rng.pick([-1, 1]);
+        const frontSign = rng.pick([-1, 1]);
+        const localX = sideSign * (building.size.x * 0.5 + rng.range(0.75, 1.7));
+        const localZ = frontSign * rng.range(-building.size.z * 0.36, building.size.z * 0.48);
+        const cos = Math.cos(building.rotationY);
+        const sin = Math.sin(building.rotationY);
+        const x = building.position.x + localX * cos + localZ * sin;
+        const z = building.position.z - localX * sin + localZ * cos;
+        const kind: WorldObjectKind = rng.pick(['crate', 'trash', 'planter']);
+        const prop = this.createObjectDefinition(kind, objects.length, { x, z, rotationY: building.rotationY }, rng);
+        if (
+          this.overlapsOccupied(x, z, prop.boundingRadius, occupied) ||
+          this.pointConflictsRoads(x, z, prop.boundingRadius, roads)
+        ) {
+          continue;
+        }
+        objects.push(prop);
+        occupied.push({ x, z, radius: prop.boundingRadius });
+        placed += 1;
+      }
+    }
+  }
+
+  private addEdgeNature(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    roads: RoadSegment[],
+    spawnPoints: Vec3Data[],
+    rng: SeededRandom,
+    size: MapSize,
+    objectBudget: number
+  ): void {
+    const settings = MAP_SIZE_SETTINGS[size];
+    const target = Math.floor(objectBudget * 0.09);
+    let placed = 0;
+    let attempts = 0;
+    while (placed < target && attempts < target * 16) {
+      attempts += 1;
+      const edge = rng.pick(['north', 'south', 'east', 'west']);
+      const inset = rng.range(4.5, settings.halfExtent * 0.18);
+      const along = rng.range(-settings.halfExtent * 0.86, settings.halfExtent * 0.86);
+      const x = edge === 'east'
+        ? settings.halfExtent - inset
+        : edge === 'west'
+          ? -settings.halfExtent + inset
+          : along;
+      const z = edge === 'north'
+        ? -settings.halfExtent + inset
+        : edge === 'south'
+          ? settings.halfExtent - inset
+          : along;
+      const kind: WorldObjectKind = rng.next() < 0.62 ? 'tree' : rng.next() < 0.78 ? 'rock' : 'planter';
+      const object = this.createObjectDefinition(kind, objects.length, { x, z, rotationY: rng.range(0, Math.PI * 2) }, rng);
+      if (
+        this.overlapsOccupied(x, z, object.boundingRadius, occupied) ||
+        this.pointConflictsRoads(x, z, object.boundingRadius, roads) ||
+        this.isTooCloseToAnySpawn(x, z, spawnPoints.slice(0, 5), settings.spawnClearRadius * 0.72)
+      ) {
+        continue;
+      }
+      objects.push(object);
+      occupied.push({ x, z, radius: object.boundingRadius });
+      placed += 1;
     }
   }
 
@@ -1127,10 +1614,12 @@ export class ProceduralMapGenerator {
   private roadsideKindForZone(x: number, z: number, rng: SeededRandom): WorldObjectKind {
     const zone = this.zoneForPosition(x, z);
     const pools: Record<ReturnType<ProceduralMapGenerator['zoneForPosition']>, WorldObjectKind[]> = {
-      industrial: ['cone', 'trash', 'crate', 'hydrant', 'structure', 'bike'],
-      commercial: ['bench', 'trash', 'bike', 'planter', 'kiosk', 'hydrant'],
-      highResidential: ['tree', 'bench', 'trash', 'bike', 'planter', 'mailbox'],
-      lowResidential: ['tree', 'bench', 'mailbox', 'planter', 'hydrant']
+      industrial: ['cone', 'trash', 'trash', 'crate', 'crate', 'hydrant', 'structure', 'bike'],
+      commercial: ['bench', 'bench', 'trash', 'trash', 'bike', 'planter', 'kiosk', 'hydrant'],
+      highResidential: ['tree', 'bench', 'bench', 'trash', 'trash', 'bike', 'planter', 'mailbox'],
+      lowResidential: ['tree', 'tree', 'bench', 'trash', 'mailbox', 'planter', 'hydrant'],
+      civic: ['bench', 'trash', 'trash', 'hydrant', 'planter', 'kiosk'],
+      greenEdge: ['tree', 'tree', 'rock', 'rock', 'bench', 'trash', 'planter']
     };
     return rng.pick(pools[zone]);
   }
@@ -1166,6 +1655,7 @@ export class ProceduralMapGenerator {
       object.routeId = route.id;
       object.routeT = t;
       object.routeSpeed = rng.range(3.5, 7.5) * this.vehicleSpeedMultiplier(kind);
+      this.decorateTrafficVehicle(object, rng);
       const spawnRadius = this.trafficSpawnRadius(object);
       if (
         this.overlapsOccupied(object.position.x, object.position.z, spawnRadius, occupied) ||
@@ -1192,8 +1682,17 @@ export class ProceduralMapGenerator {
     if (roll < 0.055) return 'emergency';
     if (roll < 0.12) return 'bus';
     if (roll < 0.2) return 'trailerTruck';
-    if (roll < 0.34) return 'truck';
+    if (roll < 0.39) return 'truck';
     return 'car';
+  }
+
+  private decorateTrafficVehicle(object: ObjectSpawnDefinition, rng: SeededRandom): void {
+    if (object.kind === 'truck' && rng.chance(0.22)) {
+      object.label = 'Garbage Truck';
+      object.color = '#3f8c68';
+      object.variantRole = 'garbage-truck';
+      object.routeSpeed = (object.routeSpeed ?? 0) * 0.78;
+    }
   }
 
   private vehicleSpeedMultiplier(kind: WorldObjectKind): number {
@@ -1229,6 +1728,7 @@ export class ProceduralMapGenerator {
         : rng.chance(0.16) ? 'truck' : 'car';
       const object = this.createObjectDefinition(kind, objects.length, candidate, rng);
       object.label = `Parked ${object.label}`;
+      object.lightsEnabled = false;
       if (
         this.overlapsOccupied(candidate.x, candidate.z, object.boundingRadius, occupied) ||
         this.pointConflictsCrosswalks(candidate.x, candidate.z, Math.max(2.35, object.boundingRadius * 0.72), surfaces)
@@ -1247,7 +1747,7 @@ export class ProceduralMapGenerator {
     rng: SeededRandom,
     objectBudget: number
   ): void {
-    const target = Math.floor(objectBudget * 0.16);
+    const target = Math.floor(objectBudget * 0.24);
     for (let i = 0; i < target; i += 1) {
       const path = rng.pick(paths);
       const t = rng.range(0, Math.max(1, path.points.length - 1));
@@ -1260,12 +1760,149 @@ export class ProceduralMapGenerator {
       object.pedestrianPathId = path.id;
       object.routeT = t;
       object.routeSpeed = rng.range(0.65, 1.35);
+      this.decoratePedestrian(object, rng);
       if (this.overlapsOccupied(object.position.x, object.position.z, object.boundingRadius, occupied)) {
         continue;
       }
       objects.push(object);
       occupied.push({ x: object.position.x, z: object.position.z, radius: object.boundingRadius });
     }
+  }
+
+  private addSeatedPedestrians(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    rng: SeededRandom,
+    objectBudget: number
+  ): void {
+    const benches = objects.filter((object) => object.kind === 'bench');
+    const target = Math.min(Math.floor(objectBudget * 0.045), benches.length);
+    let placed = 0;
+    for (const bench of benches) {
+      if (placed >= target || !rng.chance(0.46)) {
+        continue;
+      }
+      const forward = this.forwardVector(bench.rotationY);
+      const side = this.sideVector(bench.rotationY);
+      const x = bench.position.x - forward.x * 0.32 + side.x * rng.range(-0.28, 0.28);
+      const z = bench.position.z - forward.z * 0.32 + side.z * rng.range(-0.28, 0.28);
+      const person = this.createObjectDefinition('pedestrian', objects.length, { x, z, rotationY: bench.rotationY }, rng);
+      this.decoratePedestrian(person, rng, 'seated');
+      person.boundingRadius = 0.24;
+      person.mass = 1.6;
+      if (this.overlapsOccupied(x, z, 0.22, occupied)) {
+        continue;
+      }
+      objects.push(person);
+      occupied.push({ x, z, radius: 0.22 });
+      placed += 1;
+    }
+  }
+
+  private addBuildingDoorPedestrians(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    paths: PedestrianPath[],
+    roads: RoadSegment[],
+    rng: SeededRandom,
+    objectBudget: number
+  ): void {
+    const buildings = objects.filter((object) => object.kind === 'building');
+    const target = Math.min(Math.floor(objectBudget * 0.075), Math.floor(buildings.length * 0.42));
+    let placed = 0;
+    for (const building of buildings) {
+      if (placed >= target || !rng.chance(0.28)) {
+        continue;
+      }
+      const forward = this.forwardVector(building.rotationY);
+      const side = this.sideVector(building.rotationY);
+      const doorSide = rng.pick([-1, 1]);
+      const door = {
+        x: building.position.x - forward.x * (building.size.z * 0.5 + 0.34) + side.x * doorSide * rng.range(0, building.size.x * 0.22),
+        z: building.position.z - forward.z * (building.size.z * 0.5 + 0.34) + side.z * doorSide * rng.range(0, building.size.x * 0.22)
+      };
+      const walk = {
+        x: door.x - forward.x * rng.range(2.2, 4.8) + side.x * doorSide * rng.range(0.5, 1.4),
+        z: door.z - forward.z * rng.range(2.2, 4.8) + side.z * doorSide * rng.range(0.5, 1.4)
+      };
+      if (
+        this.pointConflictsRoads(door.x, door.z, 0.42, roads) ||
+        this.pointConflictsRoads(walk.x, walk.z, 0.42, roads) ||
+        this.overlapsOccupied(walk.x, walk.z, 0.42, occupied)
+      ) {
+        continue;
+      }
+
+      const pathId = `door-path-${paths.length}`;
+      paths.push({
+        id: pathId,
+        points: [door, walk, door],
+        loop: true
+      });
+      const person = this.createObjectDefinition('pedestrian', objects.length, {
+        x: walk.x,
+        z: walk.z,
+        rotationY: Math.atan2(door.x - walk.x, door.z - walk.z)
+      }, rng);
+      this.decoratePedestrian(person, rng, this.pedestrianRoleForBuilding(building, rng));
+      person.pedestrianPathId = pathId;
+      person.routeT = rng.range(0, 1.8);
+      person.routeSpeed = rng.range(0.35, 0.9);
+      objects.push(person);
+      occupied.push({ x: person.position.x, z: person.position.z, radius: person.boundingRadius });
+      placed += 1;
+    }
+  }
+
+  private decoratePedestrian(
+    object: ObjectSpawnDefinition,
+    rng: SeededRandom,
+    forcedRole?: 'civilian' | 'police' | 'firefighter' | 'construction' | 'seated'
+  ): void {
+    const role = forcedRole ?? this.randomPedestrianRole(rng);
+    object.variantRole = role;
+    if (role === 'police') {
+      object.label = 'Police Officer';
+      object.color = '#2563eb';
+      object.score = 12;
+      return;
+    }
+    if (role === 'firefighter') {
+      object.label = 'Firefighter';
+      object.color = '#ef4444';
+      object.score = 12;
+      return;
+    }
+    if (role === 'construction') {
+      object.label = 'Construction Worker';
+      object.color = '#facc15';
+      object.score = 10;
+      return;
+    }
+    if (role === 'seated') {
+      object.label = 'Seated Pedestrian';
+      object.color = rng.pick(['#60a5fa', '#fb7185', '#91e88c', '#d8b4fe']);
+      return;
+    }
+    object.label = rng.chance(0.5) ? 'Pedestrian' : 'Resident';
+  }
+
+  private randomPedestrianRole(rng: SeededRandom): 'civilian' | 'police' | 'firefighter' | 'construction' {
+    const roll = rng.next();
+    if (roll < 0.045) return 'police';
+    if (roll < 0.075) return 'firefighter';
+    if (roll < 0.155) return 'construction';
+    return 'civilian';
+  }
+
+  private pedestrianRoleForBuilding(
+    building: ObjectSpawnDefinition,
+    rng: SeededRandom
+  ): 'civilian' | 'police' | 'firefighter' | 'construction' {
+    if (building.label === 'Police Station') return 'police';
+    if (building.label === 'Fire Station') return 'firefighter';
+    if (building.label === 'Factory Block' || building.label === 'Warehouse') return rng.chance(0.64) ? 'construction' : 'civilian';
+    return this.randomPedestrianRole(rng);
   }
 
   private addLooseCityObjects(
@@ -1448,6 +2085,41 @@ export class ProceduralMapGenerator {
     return null;
   }
 
+  private createManualObjectDefinition(
+    kind: WorldObjectKind,
+    index: number,
+    candidate: SpawnCandidate,
+    label: string,
+    size: Vec3Data,
+    color: string,
+    boundingRadius: number,
+    mass: number,
+    score: number,
+    category = this.categoryForKind(kind)
+  ): ObjectSpawnDefinition {
+    const spawnHeightOffset = getWorldObjectSpawnHeightOffset(kind);
+    return {
+      id: `${kind}-${index}`,
+      kind,
+      label,
+      position: {
+        x: candidate.x,
+        y: Math.max(size.y * 0.5 + spawnHeightOffset, size.y * 0.5 + 0.01),
+        z: candidate.z
+      },
+      rotationY: candidate.rotationY,
+      size,
+      color,
+      boundingRadius,
+      mass,
+      score,
+      respawnDelay: 14,
+      category,
+      roadAligned: true,
+      isAd: false
+    };
+  }
+
   private createObjectDefinition(
     kind: WorldObjectKind,
     index: number,
@@ -1550,13 +2222,17 @@ export class ProceduralMapGenerator {
           industrial: ['#6f7678', '#59666b', '#7b7468', '#5c6363'],
           commercial: ['#77838e', '#67788a', '#6f8790', '#9aa3a9'],
           highResidential: ['#8f7f72', '#918d79', '#9aa3a9', '#75685f'],
-          lowResidential: ['#a18b73', '#8f806f', '#7d917b', '#9a8f7a']
+          lowResidential: ['#a18b73', '#8f806f', '#7d917b', '#9a8f7a'],
+          civic: ['#66758a', '#75899c', '#6f7f8d', '#8c8f94'],
+          greenEdge: ['#6f8068', '#7b866e', '#687c72', '#8a7d65']
         };
         const sizeByZone = {
           industrial: { width: [7.5, 14.5], depth: [6.5, 13], height: [3.4, 8.2], mass: 2.15 },
           commercial: { width: [5.4, 11.5], depth: [4.8, 10.8], height: [4.5, 13.5], mass: 1.9 },
           highResidential: { width: [5.2, 9.8], depth: [5.2, 9.8], height: [9.5, 20], mass: 2.05 },
-          lowResidential: { width: [3.8, 6.8], depth: [3.8, 6.4], height: [2.6, 5.2], mass: 1.55 }
+          lowResidential: { width: [3.8, 6.8], depth: [3.8, 6.4], height: [2.6, 5.2], mass: 1.55 },
+          civic: { width: [7.2, 12.4], depth: [5.8, 10.5], height: [4.2, 9.2], mass: 1.85 },
+          greenEdge: { width: [3.2, 6.8], depth: [3.2, 6.4], height: [2.3, 4.4], mass: 1.35 }
         };
         const settings = sizeByZone[zone];
         const width = rng.range(settings.width[0], settings.width[1]);
@@ -1566,7 +2242,9 @@ export class ProceduralMapGenerator {
           industrial: rng.chance(0.5) ? 'Factory Block' : 'Warehouse',
           commercial: height > 10 ? 'Office Building' : 'Corner Shop',
           highResidential: 'Apartment Tower',
-          lowResidential: 'Town House'
+          lowResidential: 'Town House',
+          civic: height > 6.5 ? 'Civic Office' : 'Municipal Building',
+          greenEdge: 'Park Service Building'
         };
         return this.withSize(
           base,
@@ -1581,7 +2259,9 @@ export class ProceduralMapGenerator {
     }
   }
 
-  private zoneForPosition(x: number, z: number): 'industrial' | 'commercial' | 'highResidential' | 'lowResidential' {
+  private zoneForPosition(x: number, z: number): CityZone {
+    if (Math.abs(x) < 22 && Math.abs(z) < 22) return 'civic';
+    if (Math.max(Math.abs(x), Math.abs(z)) > 92) return 'greenEdge';
     if (x < 0 && z < 0) return 'industrial';
     if (x >= 0 && z < 0) return 'commercial';
     if (x >= 0 && z >= 0) return 'highResidential';
@@ -1681,7 +2361,7 @@ export class ProceduralMapGenerator {
       const footprint = this.placementFootprint(entry.object);
       if (
         this.objectConflictsProtectedSurface(entry.object, roads, surfaces, pedestrianPaths, footprint.radius) ||
-        this.overlapsOccupied(footprint.x, footprint.z, footprint.radius, occupied)
+        this.overlapsFootprint(footprint, occupied)
       ) {
         continue;
       }
@@ -1733,6 +2413,7 @@ export class ProceduralMapGenerator {
   }
 
   private placementPadding(object: ObjectSpawnDefinition): number {
+    if (object.variantRole === 'parking-stall') return 0.08;
     if (object.category === 'building') return 0.9;
     if (object.category === 'ad') return 0.75;
     if (object.category === 'traffic') return 0.42;
@@ -1741,6 +2422,82 @@ export class ProceduralMapGenerator {
     if (object.kind === 'tree') return 0.55;
     if (object.kind === 'bench' || object.kind === 'bike' || object.kind === 'planter') return 0.48;
     return 0.45;
+  }
+
+  private overlapsFootprint(candidate: OccupiedFootprint, occupied: OccupiedFootprint[]): boolean {
+    return occupied.some((footprint) => this.footprintsOverlap(candidate, footprint));
+  }
+
+  private footprintsOverlap(a: OccupiedFootprint, b: OccupiedFootprint): boolean {
+    const aRect = this.hasRectFootprint(a);
+    const bRect = this.hasRectFootprint(b);
+    if (aRect && bRect) {
+      return this.rectanglesOverlap(a, b);
+    }
+    if (aRect) {
+      return this.rectangleCircleOverlap(a, b);
+    }
+    if (bRect) {
+      return this.rectangleCircleOverlap(b, a);
+    }
+    const dx = a.x - b.x;
+    const dz = a.z - b.z;
+    const minDistance = a.radius + b.radius + 0.06;
+    return dx * dx + dz * dz < minDistance * minDistance;
+  }
+
+  private hasRectFootprint(footprint: OccupiedFootprint): boolean {
+    return (
+      typeof footprint.halfWidth === 'number' &&
+      typeof footprint.halfDepth === 'number' &&
+      typeof footprint.rotationY === 'number'
+    );
+  }
+
+  private rectanglesOverlap(a: OccupiedFootprint, b: OccupiedFootprint): boolean {
+    const axes = [
+      this.sideVector(a.rotationY ?? 0),
+      this.forwardVector(a.rotationY ?? 0),
+      this.sideVector(b.rotationY ?? 0),
+      this.forwardVector(b.rotationY ?? 0)
+    ];
+    for (const axis of axes) {
+      const left = this.projectFootprint(a, axis);
+      const right = this.projectFootprint(b, axis);
+      if (left.max < right.min || right.max < left.min) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private rectangleCircleOverlap(rectangle: OccupiedFootprint, circle: OccupiedFootprint): boolean {
+    const dx = circle.x - rectangle.x;
+    const dz = circle.z - rectangle.z;
+    const cos = Math.cos(-(rectangle.rotationY ?? 0));
+    const sin = Math.sin(-(rectangle.rotationY ?? 0));
+    const localX = dx * cos - dz * sin;
+    const localZ = dx * sin + dz * cos;
+    const closestX = Math.max(-(rectangle.halfWidth ?? 0), Math.min(rectangle.halfWidth ?? 0, localX));
+    const closestZ = Math.max(-(rectangle.halfDepth ?? 0), Math.min(rectangle.halfDepth ?? 0, localZ));
+    const boxDx = localX - closestX;
+    const boxDz = localZ - closestZ;
+    const minDistance = circle.radius + 0.06;
+    return boxDx * boxDx + boxDz * boxDz < minDistance * minDistance;
+  }
+
+  private projectFootprint(footprint: OccupiedFootprint, axis: RoutePoint): { min: number; max: number } {
+    const center = footprint.x * axis.x + footprint.z * axis.z;
+    if (this.hasRectFootprint(footprint)) {
+      const localX = this.sideVector(footprint.rotationY ?? 0);
+      const localZ = this.forwardVector(footprint.rotationY ?? 0);
+      const extent =
+        (footprint.halfWidth ?? 0) * Math.abs(localX.x * axis.x + localX.z * axis.z) +
+        (footprint.halfDepth ?? 0) * Math.abs(localZ.x * axis.x + localZ.z * axis.z);
+      return { min: center - extent, max: center + extent };
+    }
+
+    return { min: center - footprint.radius, max: center + footprint.radius };
   }
 
   private objectConflictsProtectedSurface(

@@ -4,6 +4,7 @@ import { getEngineConfig } from '../admin/EngineConfig';
 import { generatePlayerName } from '../game/MatchConfig';
 import { t } from '../i18n/I18n';
 import type { LanguageCode, PlayerProfile } from '../shared/types';
+import { languageFlagButtonMarkup } from './LanguageFlags';
 
 export interface MainMenuCallbacks {
   onStartSolo: (playerName: string) => void;
@@ -43,18 +44,7 @@ export class MainMenu {
         <div class="field language-field">
           <span class="field-label">${t(language, 'language')}</span>
           <div class="language-flags" role="group" aria-label="${t(language, 'language')}">
-            ${LANGUAGE_OPTIONS.map((option) => `
-              <button
-                class="language-flag ${option.value === language ? 'active' : ''}"
-                type="button"
-                data-language="${option.value}"
-                aria-label="${option.label}"
-                title="${option.label}"
-              >
-                <span class="flag-icon">${option.flag}</span>
-                <span>${option.short}</span>
-              </button>
-            `).join('')}
+            ${LANGUAGE_OPTIONS.map((option) => languageFlagButtonMarkup(option, language)).join('')}
           </div>
         </div>
         ${accountSummary}

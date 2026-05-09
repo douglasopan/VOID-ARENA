@@ -23,6 +23,7 @@ export type ControlAction =
   | 'pause';
 
 export const ENGINE_CONFIG_STORAGE_KEY = 'void-arena-engine-config';
+export const ENGINE_CONFIG_PREBUILD_SIGNATURE_KEY = 'void-arena-engine-prebuild-signature';
 export const ENGINE_CONFIG_EVENT = 'void-arena-engine-config-changed';
 
 export const ALL_POWER_UP_TYPES: PowerUpType[] = ['magnet', 'shrink', 'haste', 'shield', 'stamina', 'mass', 'gust', 'overcharge', 'dash'];
@@ -268,6 +269,7 @@ export function saveEngineConfig(config: EngineConfig): EngineConfig {
   const sanitized = sanitizeEngineConfig(config);
   cachedConfig = sanitized;
   localStorage.setItem(ENGINE_CONFIG_STORAGE_KEY, JSON.stringify(sanitized));
+  localStorage.setItem(ENGINE_CONFIG_PREBUILD_SIGNATURE_KEY, prebuildConfigSignature());
   window.dispatchEvent(new CustomEvent(ENGINE_CONFIG_EVENT, { detail: sanitized }));
   return sanitized;
 }
@@ -276,6 +278,7 @@ export function resetEngineConfig(): EngineConfig {
   const defaults = createDefaultEngineConfig();
   cachedConfig = defaults;
   localStorage.setItem(ENGINE_CONFIG_STORAGE_KEY, JSON.stringify(defaults));
+  localStorage.setItem(ENGINE_CONFIG_PREBUILD_SIGNATURE_KEY, prebuildConfigSignature());
   window.dispatchEvent(new CustomEvent(ENGINE_CONFIG_EVENT, { detail: defaults }));
   return defaults;
 }
@@ -432,8 +435,12 @@ function mergeEngineConfig(defaults: EngineConfig, input: Partial<EngineConfig>)
 function loadEngineConfig(): EngineConfig {
   const defaults = createDefaultEngineConfig();
   try {
+    const signature = prebuildConfigSignature();
+    const storedSignature = localStorage.getItem(ENGINE_CONFIG_PREBUILD_SIGNATURE_KEY);
     const raw = localStorage.getItem(ENGINE_CONFIG_STORAGE_KEY);
-    if (!raw) {
+    if (!raw || storedSignature !== signature) {
+      localStorage.setItem(ENGINE_CONFIG_STORAGE_KEY, JSON.stringify(defaults));
+      localStorage.setItem(ENGINE_CONFIG_PREBUILD_SIGNATURE_KEY, signature);
       return defaults;
     }
     return sanitizeEngineConfig(JSON.parse(raw) as Partial<EngineConfig>);
@@ -553,4 +560,14 @@ function sanitizeControlBindings(
     sanitized[action] = values.length > 0 ? [...new Set(values)].slice(0, 4) : [...fallback[action]];
   }
   return sanitized;
+}
+
+function prebuildConfigSignature(): string {
+  const raw = JSON.stringify(prebuildEngineOverrides);
+  let hash = 2166136261;
+  for (let index = 0; index < raw.length; index += 1) {
+    hash ^= raw.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${raw.length}:${(hash >>> 0).toString(36)}`;
 }

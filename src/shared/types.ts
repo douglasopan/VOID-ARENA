@@ -86,6 +86,7 @@ export interface ObjectSpawnDefinition {
   routeSpeed?: number;
   pedestrianPathId?: string;
   trafficSignalId?: string;
+  lightsEnabled?: boolean;
   isAd?: boolean;
   adSurfaceId?: string;
 }
@@ -108,7 +109,7 @@ export interface SurfaceSegment {
   width: number;
   length: number;
   rotationY: number;
-  kind: 'sidewalk' | 'lane-marking' | 'crosswalk' | 'plaza';
+  kind: 'sidewalk' | 'lane-marking' | 'crosswalk' | 'plaza' | 'parking';
   roadSideSign?: -1 | 1;
 }
 
@@ -243,12 +244,19 @@ export interface MatchHistoryEntry extends MatchResult {
   leaderboard: LeaderboardEntry[];
 }
 
+export interface PlayerAudioPreferences {
+  sfxVolume: number;
+  musicVolume: number;
+  musicEnabled: boolean;
+}
+
 export interface PlayerProfile {
   accountId: string;
   playerName: string;
   holeRimColor: string;
   holeRimStyle: HoleRimStyle;
   language: LanguageCode;
+  audioPreferences: PlayerAudioPreferences;
   createdAt: string;
   updatedAt: string;
   matchHistory: MatchHistoryEntry[];

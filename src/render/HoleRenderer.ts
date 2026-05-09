@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Player } from '../game/Player';
-import type { HoleRimStyle } from '../shared/types';
+import { POWERUP_SETTINGS } from '../shared/constants';
+import type { HoleRimStyle, PowerUpType } from '../shared/types';
 import { NameLabelRenderer } from './NameLabelRenderer';
 
 interface HoleView {
@@ -8,6 +9,9 @@ interface HoleView {
   label: THREE.Sprite;
   rimColor: string;
   rimStyle: HoleRimStyle;
+  powerGlow: THREE.Mesh;
+  powerGlowMaterial: THREE.MeshBasicMaterial;
+  powerGlowColor: string | null;
 }
 
 export class HoleRenderer {
@@ -48,6 +52,7 @@ export class HoleRenderer {
       view.group.scale.set(visualRadius, 1, visualRadius);
       view.label.position.set(player.position.x, 1.55 + player.radius * 0.78 + player.visualY, player.position.z);
       view.label.scale.set(5.65 + player.radius * 0.36, 1.42 + player.radius * 0.08, 1);
+      this.updatePowerGlow(view, player);
     }
   }
 
@@ -139,6 +144,20 @@ export class HoleRenderer {
     rim.position.y = 0.09;
     rim.renderOrder = 7;
 
+    const powerGlowMaterial = new THREE.MeshBasicMaterial({
+      color: '#ffffff',
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const powerGlow = new THREE.Mesh(this.glowRimGeometry, powerGlowMaterial);
+    powerGlow.rotation.x = Math.PI / 2;
+    powerGlow.position.y = 0.132;
+    powerGlow.scale.setScalar(1.18);
+    powerGlow.visible = false;
+    powerGlow.renderOrder = 8;
+
     const rimDetails: THREE.Object3D[] = [];
     if (player.rimStyle === 'neon') {
       const glow = new THREE.Mesh(
@@ -174,14 +193,17 @@ export class HoleRenderer {
     shadow.position.y = -0.045;
     shadow.renderOrder = 5;
 
-    group.add(stencilMask, shadow, tunnel, throat, depthRing, lowerDepthRing, ...rimDetails, rim);
+    group.add(stencilMask, shadow, tunnel, throat, depthRing, lowerDepthRing, ...rimDetails, rim, powerGlow);
     const label = this.labelRenderer.createLabel(player.name, player.rimColor);
     this.scene.add(group, label);
     const view = {
       group,
       label,
       rimColor: player.rimColor,
-      rimStyle: player.rimStyle
+      rimStyle: player.rimStyle,
+      powerGlow,
+      powerGlowMaterial,
+      powerGlowColor: null
     };
     this.views.set(player.id, view);
     return view;
@@ -220,5 +242,35 @@ export class HoleRenderer {
       material.map.dispose();
     }
     material.dispose();
+  }
+
+  private updatePowerGlow(view: HoleView, player: Player): void {
+    const color = this.activePowerUpColor(player);
+    if (!color) {
+      view.powerGlow.visible = false;
+      view.powerGlowColor = null;
+      return;
+    }
+
+    const pulse = (Math.sin(performance.now() * 0.008) + 1) * 0.5;
+    if (view.powerGlowColor !== color) {
+      view.powerGlowMaterial.color.set(color);
+      view.powerGlowColor = color;
+    }
+    view.powerGlow.visible = true;
+    view.powerGlowMaterial.opacity = 0.28 + pulse * 0.2;
+    view.powerGlow.scale.setScalar(1.18 + pulse * 0.07);
+  }
+
+  private activePowerUpColor(player: Player): string | null {
+    let selected: PowerUpType | null = null;
+    let latestExpiry = 0;
+    for (const [type, expiresAt] of player.activePowerUps) {
+      if (expiresAt > latestExpiry) {
+        selected = type;
+        latestExpiry = expiresAt;
+      }
+    }
+    return selected ? POWERUP_SETTINGS[selected].color : null;
   }
 }

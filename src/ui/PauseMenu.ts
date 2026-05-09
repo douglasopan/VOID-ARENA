@@ -4,6 +4,7 @@ import { HOLE_RIM_STYLE_OPTIONS, LANGUAGE_OPTIONS, RIM_COLORS } from '../shared/
 import { t, type TranslationKey } from '../i18n/I18n';
 import type { GraphicsQuality, HoleRimStyle, LanguageCode } from '../shared/types';
 import type { HudDisplayKey, HudDisplaySettings } from './HUD';
+import { languageFlagButtonMarkup } from './LanguageFlags';
 
 export interface PauseCallbacks {
   onResume: () => void;
@@ -13,6 +14,7 @@ export interface PauseCallbacks {
   onHudDisplayToggle?: (key: HudDisplayKey, visible: boolean) => void;
   onNextMusic?: () => void;
   onStopMusic?: () => void;
+  onAudioSettingsChange?: (settings: { sfxVolume: number; musicVolume: number; musicEnabled: boolean }) => void;
   onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
   onSkyEffectsToggle?: (enabled: boolean) => void;
   onLightingEffectsToggle?: (enabled: boolean) => void;
@@ -46,6 +48,7 @@ export class PauseMenu {
       controlsConfig?: EngineControlsConfig;
       skyEffectsEnabled?: boolean;
       lightingEffectsEnabled?: boolean;
+      musicEnabled?: boolean;
     }
   ): void {
     this.hide();
@@ -132,18 +135,7 @@ export class PauseMenu {
             <div class="pause-category-panel ${this.activeCategory === 'language' ? 'active' : ''}" data-pause-panel="language" role="tabpanel">
               <h3>${t(language, 'language')}</h3>
               <div class="language-flags pause-language-flags" role="group" aria-label="${t(language, 'language')}">
-                ${LANGUAGE_OPTIONS.map((option) => `
-                  <button
-                    class="language-flag ${option.value === language ? 'active' : ''}"
-                    type="button"
-                    data-language="${option.value}"
-                    aria-label="${option.label}"
-                    title="${option.label}"
-                  >
-                    <span class="flag-icon">${option.flag}</span>
-                    <span>${option.short}</span>
-                  </button>
-                `).join('')}
+                ${LANGUAGE_OPTIONS.map((option) => languageFlagButtonMarkup(option, language)).join('')}
               </div>
             </div>
             <div class="pause-category-panel ${this.activeCategory === 'void' ? 'active' : ''}" data-pause-panel="void" role="tabpanel">
@@ -207,6 +199,15 @@ export class PauseMenu {
       if (sfxValue && sfx) sfxValue.textContent = `${sfx.value}%`;
       if (musicValue && music) musicValue.textContent = `${music.value}%`;
     };
+    let musicEnabled = options.musicEnabled !== false;
+    const emitAudioSettings = (nextMusicEnabled = musicEnabled): void => {
+      musicEnabled = nextMusicEnabled;
+      callbacks.onAudioSettingsChange?.({
+        sfxVolume: this.audioManager.getSfxVolume(),
+        musicVolume: this.audioManager.getMusicVolume(),
+        musicEnabled
+      });
+    };
     syncValues();
     element.querySelectorAll<HTMLButtonElement>('.pause-category-button').forEach((button) => {
       button.addEventListener('click', () => {
@@ -227,17 +228,21 @@ export class PauseMenu {
     sfx?.addEventListener('input', () => {
       this.audioManager.setSfxVolume(Number(sfx.value) / 100);
       syncValues();
+      emitAudioSettings();
     });
     music?.addEventListener('input', () => {
       this.audioManager.setMusicVolume(Number(music.value) / 100);
       syncValues();
+      emitAudioSettings();
     });
     element.querySelector<HTMLButtonElement>('.next-music')?.addEventListener('click', () => {
       callbacks.onNextMusic?.();
+      emitAudioSettings();
       this.updateCurrentMusicTrack(element);
     });
     element.querySelector<HTMLButtonElement>('.stop-music')?.addEventListener('click', () => {
       callbacks.onStopMusic?.();
+      emitAudioSettings(false);
       this.updateCurrentMusicTrack(element);
     });
     element.querySelectorAll<HTMLButtonElement>('.pause-graphics-segment button').forEach((button) => {

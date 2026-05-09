@@ -96,6 +96,9 @@ export class SceneManager {
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private readonly groundPointer = new THREE.Vector2();
   private readonly groundHit = new THREE.Vector3();
+  private cameraOcclusionAccumulator = 999;
+  private cameraOcclusionTarget = 0;
+  private cameraZenithBlend = 0;
 
   constructor(private readonly container: HTMLElement) {
     this.scene.background = new THREE.Color('#0b2330');
@@ -184,6 +187,12 @@ export class SceneManager {
     this.resize();
   }
 
+  startRespawnDrop(player: Player): void {
+    this.cameraZenithBlend = 0;
+    this.cameraOcclusionTarget = 0;
+    this.cameraController.startRespawnDrop(player);
+  }
+
   setSkyEffectsEnabled(enabled: boolean): void {
     this.skyEffectsEnabled = enabled;
     if (!enabled) {
@@ -250,11 +259,94 @@ export class SceneManager {
       this.holeRenderer.update(playerManager.all());
     }
 
-    this.cameraController.update(this.camera, localPlayer, deltaSeconds, this.firstCameraFrame, zoom);
+    const zenithBlend = world && localPlayer
+      ? this.updateCameraZenithBlend(world, localPlayer, deltaSeconds, zoom)
+      : 0;
+    this.cameraController.update(this.camera, localPlayer, deltaSeconds, this.firstCameraFrame, zoom, zenithBlend);
     this.applyDisasterCameraShake(deltaSeconds);
     this.updateWeather(deltaSeconds);
     this.updateSkyTraffic(deltaSeconds, world, zoom);
     this.firstCameraFrame = false;
+  }
+
+  private updateCameraZenithBlend(world: World, localPlayer: Player, deltaSeconds: number, zoom: number): number {
+    this.cameraOcclusionAccumulator += deltaSeconds;
+    if (this.cameraOcclusionAccumulator >= 0.12) {
+      this.cameraOcclusionAccumulator = 0;
+      this.cameraOcclusionTarget = this.computeCameraOcclusionTarget(world, localPlayer, zoom);
+    }
+
+    const response = this.cameraOcclusionTarget > this.cameraZenithBlend ? 0.0015 : 0.035;
+    const blend = 1 - Math.pow(response, deltaSeconds);
+    this.cameraZenithBlend = THREE.MathUtils.lerp(this.cameraZenithBlend, this.cameraOcclusionTarget, blend);
+    if (this.cameraZenithBlend < 0.025 && this.cameraOcclusionTarget <= 0) {
+      this.cameraZenithBlend = 0;
+    }
+    return this.cameraZenithBlend;
+  }
+
+  private computeCameraOcclusionTarget(world: World, localPlayer: Player, zoom: number): number {
+    const target = new THREE.Vector3(localPlayer.position.x, 1.1, localPlayer.position.z);
+    const camera = this.camera.position;
+    const segment = new THREE.Vector3().subVectors(camera, target);
+    const segmentLengthSq = segment.lengthSq();
+    if (segmentLengthSq <= 0.001) {
+      return 0;
+    }
+
+    const searchRadius = Math.min(118, 30 + localPlayer.radius * 5.5 + zoom * 34);
+    const candidates = world.queryObjects(localPlayer.position, searchRadius);
+    let strongest = 0;
+    for (const object of candidates) {
+      if (!object.active || object.swallowAnimation) {
+        continue;
+      }
+      if (!this.canBlockCamera(object)) {
+        continue;
+      }
+
+      const objectCenter = new THREE.Vector3(
+        object.position.x,
+        object.position.y + object.size.y * 0.45,
+        object.position.z
+      );
+      const projected = objectCenter.clone().sub(target).dot(segment) / segmentLengthSq;
+      if (projected <= 0.08 || projected >= 0.96) {
+        continue;
+      }
+
+      const closest = target.clone().addScaledVector(segment, projected);
+      const dx = object.position.x - closest.x;
+      const dz = object.position.z - closest.z;
+      const horizontalDistance = Math.hypot(dx, dz);
+      const horizontalClearance = Math.max(0.9, object.boundingRadius * 0.66 + localPlayer.radius * 0.12);
+      const verticalTop = object.position.y + object.size.y * Math.max(0.7, object.temporaryScale);
+      if (horizontalDistance > horizontalClearance || closest.y > verticalTop + 1.15) {
+        continue;
+      }
+
+      const closeness = 1 - horizontalDistance / horizontalClearance;
+      const heightFactor = THREE.MathUtils.clamp((verticalTop - closest.y + 2.5) / 9, 0.25, 1);
+      strongest = Math.max(strongest, THREE.MathUtils.clamp(0.34 + closeness * 0.66 * heightFactor, 0, 1));
+      if (strongest >= 0.96) {
+        return 1;
+      }
+    }
+
+    return strongest;
+  }
+
+  private canBlockCamera(object: WorldObject): boolean {
+    if (object.category === 'building' || object.category === 'ad') {
+      return true;
+    }
+    if (object.kind === 'tree' || object.kind === 'kiosk' || object.kind === 'statue') {
+      return true;
+    }
+    if (object.category === 'traffic') {
+      return object.size.y > 1.4 || object.boundingRadius > 2.3;
+    }
+    return object.size.y > 3.2 && object.boundingRadius > 1.1;
   }
 
   updateDeathDive(

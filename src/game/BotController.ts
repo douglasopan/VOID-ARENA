@@ -54,10 +54,11 @@ export class BotController {
     this.refreshObjectTargetSteering();
     this.bot.updateResources(deltaSeconds, this.wantsBoost);
     const speed = this.bot.getSpeed(this.bot.isBoosting) * this.movementThrottle;
-    const moveDistance = speed * deltaSeconds;
+    const moveDistance = this.clampedObjectApproachDistance(speed * deltaSeconds);
     this.bot.position.x += this.direction.x * moveDistance;
     this.bot.position.z += this.direction.z * moveDistance;
-    this.bot.velocity.set(this.direction.x * speed, 0, this.direction.z * speed);
+    const effectiveSpeed = deltaSeconds > 0 ? moveDistance / deltaSeconds : 0;
+    this.bot.velocity.set(this.direction.x * effectiveSpeed, 0, this.direction.z * effectiveSpeed);
     world.clampToArena(this.bot.position, this.bot.radius);
   }
 
@@ -172,7 +173,7 @@ export class BotController {
     const starterScale = this.starterCollectionScale();
 
     for (const object of world.queryObjects(this.bot.position, searchRadius)) {
-      if (!object.active || !canObjectFit(this.bot.radius, object.effectiveBoundingRadius)) {
+      if (!object.active || !this.canObjectEnterBotHole(object)) {
         continue;
       }
       if ((objectTargetClaims.get(object.id) ?? 0) > 0) {
@@ -214,7 +215,7 @@ export class BotController {
       object &&
       object.active &&
       !object.swallowAnimation &&
-      canObjectFit(this.bot.radius, object.effectiveBoundingRadius)
+      this.canObjectEnterBotHole(object)
     );
   }
 
@@ -255,7 +256,7 @@ export class BotController {
   }
 
   private objectHoldDistance(object: WorldObject): number {
-    return Math.max(0.08, Math.min(this.bot.radius * 0.18, object.effectiveBoundingRadius * 0.42));
+    return Math.max(0.18, Math.min(this.bot.radius * 0.32, object.effectiveBoundingRadius * 0.62));
   }
 
   private starterCollectionScale(): number {
@@ -267,6 +268,28 @@ export class BotController {
     if (resetThrottle) {
       this.movementThrottle = 1;
     }
+  }
+
+  private clampedObjectApproachDistance(requestedDistance: number): number {
+    if (!this.isValidObjectTarget(this.objectTarget) || requestedDistance <= 0) {
+      return requestedDistance;
+    }
+
+    const distance = this.bot.position.distanceTo(this.objectTarget.position);
+    const holdDistance = this.objectHoldDistance(this.objectTarget);
+    const remaining = distance - holdDistance;
+    if (remaining <= 0) {
+      return 0;
+    }
+
+    return Math.min(requestedDistance, Math.max(0, remaining));
+  }
+
+  private canObjectEnterBotHole(object: WorldObject): boolean {
+    return (
+      canObjectFit(this.bot.radius, object.effectiveBoundingRadius) &&
+      object.effectiveBoundingRadius <= this.bot.radius * 0.98
+    );
   }
 
   private pickWanderDirection(): void {

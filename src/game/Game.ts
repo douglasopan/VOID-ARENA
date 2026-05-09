@@ -3,7 +3,7 @@ import { AudioManager } from '../audio/AudioManager';
 import { getEngineConfig, saveEngineConfig, subscribeEngineConfig, type EngineConfig, type EngineControlsConfig } from '../admin/EngineConfig';
 import { detectLanguage, powerUpLabelKey, t, tf, type TranslationKey } from '../i18n/I18n';
 import { BOT_NAMES, CAMERA_ZOOM_MAX, CAMERA_ZOOM_MIN, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
-import type { ChatMessage, DayNightMode, GraphicsQuality, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary } from '../shared/types';
+import type { ChatMessage, DayNightMode, GraphicsQuality, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary, PlayerAudioPreferences } from '../shared/types';
 import { InputManager } from '../input/InputManager';
 import { NetworkClient } from '../network/NetworkClient';
 import { PlayerProfileStore } from '../player/PlayerProfileStore';
@@ -49,6 +49,7 @@ export class Game {
   private uiLayer!: HTMLDivElement;
   private deathNotice!: HTMLDivElement;
   private killNotice!: HTMLDivElement;
+  private deathFade!: HTMLDivElement;
   private sceneManager!: SceneManager;
   private inputManager!: InputManager;
   private readonly audioManager = new AudioManager();
@@ -83,6 +84,7 @@ export class Game {
   private chatEnabled = true;
   private cameraZoom = 1;
   private deathCameraEnabled = true;
+  private musicEnabled = true;
   private holeRimColor = RIM_COLORS[0];
   private holeRimStyle: HoleRimStyle = 'neon';
   private language: LanguageCode = detectLanguage();
@@ -128,7 +130,9 @@ export class Game {
     this.deathNotice.className = 'death-notice hidden';
     this.killNotice = document.createElement('div');
     this.killNotice.className = 'kill-notice hidden';
-    this.uiLayer.append(this.deathNotice, this.killNotice);
+    this.deathFade = document.createElement('div');
+    this.deathFade.className = 'death-fade';
+    this.uiLayer.append(this.deathFade, this.deathNotice, this.killNotice);
     this.shell.append(this.sceneLayer, this.uiLayer);
     this.root.appendChild(this.shell);
     this.bindUiButtonSounds();
@@ -192,7 +196,9 @@ export class Game {
           this.deathCameraElapsed,
           this.currentDisasterSnapshot
         );
+        this.updateDeathFade();
       } else {
+        this.setDeathFade(0);
         this.sceneManager.update(
           this.world,
           this.playerManager,
@@ -254,11 +260,14 @@ export class Game {
     this.state = 'menu';
     this.clearMatch();
     this.loadMenuPreview();
-    this.audioManager.startMenuMusic();
     this.hideMenus();
     this.hud.hide();
     this.chatUI.hide();
     const profile = this.profileStore.load();
+    if (profile) {
+      this.applyProfileAudioPreferences(profile);
+    }
+    this.startMenuMusicIfEnabled();
     if (!this.playerName && profile?.playerName) {
       this.playerName = profile.playerName;
     }
@@ -287,7 +296,7 @@ export class Game {
   private showSoloPresets(playerName: string): void {
     this.playerName = playerName;
     this.state = 'setup';
-    this.audioManager.startMenuMusic();
+    this.startMenuMusicIfEnabled();
     this.hideMenus();
     this.soloPresetMenu.show({
       onPreset: (preset, dayNightMode, mapSeed) => this.startMatch(this.createSoloPresetConfig(playerName, preset, dayNightMode, mapSeed)),
@@ -299,7 +308,7 @@ export class Game {
   private showCustomSoloSetup(playerName: string, mapSeed = generateMapSeed()): void {
     this.playerName = playerName;
     this.state = 'setup';
-    this.audioManager.startMenuMusic();
+    this.startMenuMusicIfEnabled();
     this.hideMenus();
     this.matchSetupMenu.show(playerName, {
       onStart: (config) => this.startMatch(config),
@@ -524,7 +533,7 @@ export class Game {
   private async showFindGames(playerName: string): Promise<void> {
     this.playerName = playerName;
     this.state = 'setup';
-    this.audioManager.startMenuMusic();
+    this.startMenuMusicIfEnabled();
     this.hideMenus();
     let rooms: Array<ServerRoomSummary | MockRoomSummary>;
     try {
@@ -558,7 +567,7 @@ export class Game {
   private showHostMatch(playerName: string): void {
     this.playerName = playerName;
     this.state = 'setup';
-    this.audioManager.startMenuMusic();
+    this.startMenuMusicIfEnabled();
     this.hideMenus();
     this.hostMenu.show(playerName, {
       onHost: (config) => void this.hostMultiplayerMatch(config),
@@ -740,7 +749,7 @@ export class Game {
     }
 
     this.audioManager.playMatchStart();
-    this.audioManager.startMusic(preparedConfig.mapSize);
+    this.startMatchMusicIfEnabled(preparedConfig.mapSize);
     this.state = 'playing';
     this.inputManager.setTouchControlsVisible(true);
     this.lastFrame = performance.now();
@@ -1095,6 +1104,7 @@ export class Game {
   private updateHud(): void {
     const local = this.playerManager.getLocalPlayer();
     if (local?.alive && this.deathCameraTargetId) {
+      this.sceneManager.startRespawnDrop(local);
       this.clearDeathCamera();
     }
     const mode = this.currentConfig?.matchMode ?? MatchMode.Timed;
@@ -1291,6 +1301,7 @@ export class Game {
     const profile = this.profileStore.getOrCreate(safeName);
     this.profileStore.updateAppearance(profile.playerName, this.holeRimColor, this.holeRimStyle);
     this.profileStore.updateLanguage(profile.playerName, this.language);
+    this.saveAudioPreferences(profile.playerName);
     this.playerName = profile.playerName;
     return profile.playerName;
   }
@@ -1477,8 +1488,9 @@ export class Game {
             this.chatUI.setVisible(visible);
           }
         },
-        onNextMusic: () => this.audioManager.nextMusicTrack(),
-        onStopMusic: () => this.audioManager.stopMusic(),
+        onNextMusic: () => this.nextMusicTrack(),
+        onStopMusic: () => this.stopMusicForProfile(),
+        onAudioSettingsChange: (settings) => this.applyAudioSettings(settings),
         onGraphicsQualityChange: (quality) => this.applyGraphicsQuality(quality),
         onSkyEffectsToggle: (enabled) => this.applyVisualSetting('skyEffectsEnabled', enabled),
         onLightingEffectsToggle: (enabled) => this.applyVisualSetting('lightingEffectsEnabled', enabled),
@@ -1497,7 +1509,8 @@ export class Game {
         language: this.language,
         controlsConfig: getEngineConfig().controls,
         skyEffectsEnabled: getEngineConfig().visual.skyEffectsEnabled,
-        lightingEffectsEnabled: getEngineConfig().visual.lightingEffectsEnabled
+        lightingEffectsEnabled: getEngineConfig().visual.lightingEffectsEnabled,
+        musicEnabled: this.musicEnabled
       }
     );
   }
@@ -1548,10 +1561,67 @@ export class Game {
       this.currentConfig.enableAds = this.currentConfig.enableAds && config.generation.adsEnabled;
     }
     if ((this.state === 'playing' || this.state === 'paused') && this.currentConfig) {
-      this.audioManager.startMusic(this.currentConfig.mapSize);
+      this.startMatchMusicIfEnabled(this.currentConfig.mapSize);
     } else if (this.state === 'menu' || this.state === 'setup') {
+      this.startMenuMusicIfEnabled();
+    }
+  }
+
+  private applyProfileAudioPreferences(profile: { audioPreferences: PlayerAudioPreferences }): void {
+    this.audioManager.setSfxVolume(profile.audioPreferences.sfxVolume);
+    this.audioManager.setMusicVolume(profile.audioPreferences.musicVolume);
+    this.musicEnabled = profile.audioPreferences.musicEnabled;
+  }
+
+  private applyAudioSettings(settings: PlayerAudioPreferences): void {
+    this.audioManager.setSfxVolume(settings.sfxVolume);
+    this.audioManager.setMusicVolume(settings.musicVolume);
+    this.musicEnabled = settings.musicEnabled;
+    this.saveAudioPreferences();
+  }
+
+  private saveAudioPreferences(playerName = this.playerName || this.profileStore.load()?.playerName): void {
+    if (!playerName) {
+      return;
+    }
+    this.profileStore.updateAudioPreferences(playerName, {
+      sfxVolume: this.audioManager.getSfxVolume(),
+      musicVolume: this.audioManager.getMusicVolume(),
+      musicEnabled: this.musicEnabled
+    });
+  }
+
+  private startMenuMusicIfEnabled(): void {
+    if (!this.musicEnabled) {
+      this.audioManager.stopMusic();
+      return;
+    }
+    this.audioManager.startMenuMusic();
+  }
+
+  private startMatchMusicIfEnabled(mapSize: MatchConfig['mapSize']): void {
+    if (!this.musicEnabled) {
+      this.audioManager.stopMusic();
+      return;
+    }
+    this.audioManager.startMusic(mapSize);
+  }
+
+  private nextMusicTrack(): void {
+    this.musicEnabled = true;
+    if ((this.state === 'playing' || this.state === 'paused') && this.currentConfig) {
+      this.audioManager.startMusic(this.currentConfig.mapSize);
+    } else {
       this.audioManager.startMenuMusic();
     }
+    this.audioManager.nextMusicTrack();
+    this.saveAudioPreferences();
+  }
+
+  private stopMusicForProfile(): void {
+    this.musicEnabled = false;
+    this.audioManager.stopMusic();
+    this.saveAudioPreferences();
   }
 
   private applyControlConfig(controls: EngineControlsConfig): void {
@@ -1598,8 +1668,9 @@ export class Game {
             this.chatUI.setVisible(visible);
           }
         },
-        onNextMusic: () => this.audioManager.nextMusicTrack(),
-        onStopMusic: () => this.audioManager.stopMusic(),
+        onNextMusic: () => this.nextMusicTrack(),
+        onStopMusic: () => this.stopMusicForProfile(),
+        onAudioSettingsChange: (settings) => this.applyAudioSettings(settings),
         onGraphicsQualityChange: (quality) => this.applyGraphicsQuality(quality),
         onSkyEffectsToggle: (enabled) => this.applyVisualSetting('skyEffectsEnabled', enabled),
         onLightingEffectsToggle: (enabled) => this.applyVisualSetting('lightingEffectsEnabled', enabled),
@@ -1621,7 +1692,8 @@ export class Game {
         language: this.language,
         controlsConfig: getEngineConfig().controls,
         skyEffectsEnabled: getEngineConfig().visual.skyEffectsEnabled,
-        lightingEffectsEnabled: getEngineConfig().visual.lightingEffectsEnabled
+        lightingEffectsEnabled: getEngineConfig().visual.lightingEffectsEnabled,
+        musicEnabled: this.musicEnabled
       }
     );
   }
@@ -1911,6 +1983,19 @@ export class Game {
   private clearDeathCamera(): void {
     this.deathCameraTargetId = null;
     this.deathCameraElapsed = 0;
+    this.setDeathFade(0);
+  }
+
+  private updateDeathFade(): void {
+    const progress = THREE.MathUtils.smoothstep(this.deathCameraElapsed, 1.02, 1.55);
+    this.setDeathFade(progress);
+  }
+
+  private setDeathFade(opacity: number): void {
+    if (!this.deathFade) {
+      return;
+    }
+    this.deathFade.style.opacity = `${THREE.MathUtils.clamp(opacity, 0, 1)}`;
   }
 
   private loadMenuPreview(): void {

@@ -51,6 +51,7 @@ export class WorldObject {
   routeT: number;
   routeSpeed: number;
   routeVelocity: number;
+  readonly lightsEnabled: boolean;
   readonly isAd: boolean;
   readonly adSurfaceId?: string;
   position: THREE.Vector3;
@@ -100,6 +101,7 @@ export class WorldObject {
     this.routeT = definition.routeT ?? 0;
     this.routeSpeed = definition.routeSpeed ?? 0;
     this.routeVelocity = this.routeSpeed;
+    this.lightsEnabled = definition.lightsEnabled !== false;
     this.isAd = Boolean(definition.isAd);
     this.adSurfaceId = definition.adSurfaceId;
   }

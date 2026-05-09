@@ -260,7 +260,33 @@ label {
 }
 
 .language-flag .flag-icon {
-  font-size: 1.2rem;
+  width: 34px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.language-flag .flag-svg {
+  display: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .language-flag .flag-svg {
+    display: block;
+  }
+
+  .language-flag .flag-fallback {
+    display: none;
+  }
 }
 
 .language-flag.active {
@@ -821,6 +847,16 @@ label {
 .death-notice.show {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
+}
+
+.death-fade {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 90ms linear;
 }
 
 .kill-notice {
