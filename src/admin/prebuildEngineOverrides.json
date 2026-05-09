@@ -6,10 +6,10 @@
     "textFont": "Open Sans"
   },
   "gameplay": {
-    "startSpeedMultiplier": 1.3,
-    "minSpeedMultiplier": 1,
-    "boostMultiplier": 1.6,
-    "staminaDrainMultiplier": 0.5,
+    "startSpeedMultiplier": 0,
+    "minSpeedMultiplier": 0.3,
+    "boostMultiplier": 1,
+    "staminaDrainMultiplier": 0,
     "staminaRegenMultiplier": 2,
     "magnetStrengthMultiplier": 5,
     "objectContactSecondsMultiplier": 1,
