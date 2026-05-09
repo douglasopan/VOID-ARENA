@@ -6,11 +6,11 @@
     "textFont": "Open Sans"
   },
   "gameplay": {
-    "startSpeedMultiplier": 0,
-    "minSpeedMultiplier": 0.1,
-    "boostMultiplier": 0.2,
-    "staminaDrainMultiplier": 0,
-    "staminaRegenMultiplier": 2,
+    "startSpeedMultiplier": 2,
+    "minSpeedMultiplier": 1,
+    "boostMultiplier": 1.58,
+    "staminaDrainMultiplier": 1,
+    "staminaRegenMultiplier": 1,
     "magnetStrengthMultiplier": 5,
     "objectContactSecondsMultiplier": 1,
     "rimSuctionMultiplier": 1.5,

@@ -15,10 +15,16 @@ import type { PlayerManager } from './PlayerManager';
 import type { World } from './World';
 import type { WorldObject } from './WorldObject';
 
+type ObjectTargetClaims = Map<string, number>;
+
+const STARTER_COLLECTION_SECONDS = 30;
+
 export class BotController {
   private decisionCooldown = 0;
   private matchElapsedSeconds = 0;
   private wantsBoost = false;
+  private movementThrottle = 1;
+  private objectTarget: WorldObject | null = null;
   private readonly direction = new THREE.Vector3();
   private readonly profile: BotDifficultyProfile;
 
@@ -27,21 +33,27 @@ export class BotController {
     this.pickWanderDirection();
   }
 
-  update(deltaSeconds: number, world: World, playerManager: PlayerManager): void {
+  getClaimedObjectTargetId(): string | null {
+    return this.isValidObjectTarget(this.objectTarget) ? this.objectTarget.id : null;
+  }
+
+  update(deltaSeconds: number, world: World, playerManager: PlayerManager, objectTargetClaims: ObjectTargetClaims = new Map()): void {
     if (!this.bot.alive) {
       this.bot.velocity.set(0, 0, 0);
+      this.clearObjectTarget();
       return;
     }
 
     this.matchElapsedSeconds += deltaSeconds;
     this.decisionCooldown -= deltaSeconds;
     if (this.decisionCooldown <= 0) {
-      this.wantsBoost = this.decide(world, playerManager);
+      this.wantsBoost = this.decide(world, playerManager, objectTargetClaims);
       this.decisionCooldown = this.profile.reactionMin + Math.random() * this.profile.reactionJitter;
     }
 
+    this.refreshObjectTargetSteering();
     this.bot.updateResources(deltaSeconds, this.wantsBoost);
-    const speed = this.bot.getSpeed(this.bot.isBoosting);
+    const speed = this.bot.getSpeed(this.bot.isBoosting) * this.movementThrottle;
     const moveDistance = speed * deltaSeconds;
     this.bot.position.x += this.direction.x * moveDistance;
     this.bot.position.z += this.direction.z * moveDistance;
@@ -49,8 +61,10 @@ export class BotController {
     world.clampToArena(this.bot.position, this.bot.radius);
   }
 
-  private decide(world: World, playerManager: PlayerManager): boolean {
+  private decide(world: World, playerManager: PlayerManager, objectTargetClaims: ObjectTargetClaims): boolean {
+    this.movementThrottle = 1;
     if (Math.random() < this.profile.mistakeChance) {
+      this.clearObjectTarget();
       this.pickWanderDirection();
       return false;
     }
@@ -58,6 +72,7 @@ export class BotController {
     const aggressionScale = this.attackAggressionScale();
     const danger = this.findDanger(playerManager);
     if (danger) {
+      this.clearObjectTarget();
       this.direction.subVectors(this.bot.position, danger.position);
       this.normalizeDirection();
       return Math.random() < this.profile.boostWhenFleeing;
@@ -65,18 +80,25 @@ export class BotController {
 
     const prey = aggressionScale > 0 ? this.findPrey(playerManager, aggressionScale) : null;
     if (prey) {
+      this.clearObjectTarget();
       this.direction.subVectors(prey.position, this.bot.position);
       this.normalizeDirection();
       return Math.random() < this.profile.boostWhenChasing * aggressionScale;
     }
 
-    const edible = this.findEdibleObject(world);
-    if (edible) {
-      this.direction.subVectors(edible.position, this.bot.position);
-      this.normalizeDirection();
+    if (this.shouldKeepObjectTarget(this.objectTarget, objectTargetClaims)) {
+      this.refreshObjectTargetSteering();
       return false;
     }
 
+    const edible = this.findEdibleObject(world, objectTargetClaims);
+    if (edible) {
+      this.objectTarget = edible;
+      this.refreshObjectTargetSteering();
+      return false;
+    }
+
+    this.clearObjectTarget();
     if (Math.random() < this.profile.wanderChance) {
       this.pickWanderDirection();
     }
@@ -143,21 +165,28 @@ export class BotController {
     return closest;
   }
 
-  private findEdibleObject(world: World): WorldObject | null {
+  private findEdibleObject(world: World, objectTargetClaims: ObjectTargetClaims): WorldObject | null {
     const searchRadius = Math.max(18, this.bot.radius * 8 * this.profile.objectAwareness);
     let best: WorldObject | null = null;
     let bestScore = Number.NEGATIVE_INFINITY;
+    const starterScale = this.starterCollectionScale();
 
     for (const object of world.queryObjects(this.bot.position, searchRadius)) {
       if (!object.active || !canObjectFit(this.bot.radius, object.effectiveBoundingRadius)) {
         continue;
       }
+      if ((objectTargetClaims.get(object.id) ?? 0) > 0) {
+        continue;
+      }
 
       const distance = Math.max(0.1, this.bot.position.distanceTo(object.position));
+      const fitRatio = object.effectiveBoundingRadius / Math.max(0.001, this.bot.radius);
+      const starterPreference = THREE.MathUtils.clamp(1 - fitRatio / 0.82, -0.25, 1);
       const score =
         object.mass * (2.2 + this.profile.objectGreed) +
         object.score * 0.4 * this.profile.objectGreed -
-        distance * this.profile.distanceDiscipline;
+        distance * this.profile.distanceDiscipline +
+        starterScale * (starterPreference * 32 - distance * 0.42 - Math.sqrt(object.mass) * 0.7);
       if (score > bestScore) {
         best = object;
         bestScore = score;
@@ -165,6 +194,79 @@ export class BotController {
     }
 
     return best;
+  }
+
+  private shouldKeepObjectTarget(object: WorldObject | null, objectTargetClaims: ObjectTargetClaims): object is WorldObject {
+    if (!this.isValidObjectTarget(object)) {
+      return false;
+    }
+
+    const distance = this.bot.position.distanceTo(object.position);
+    if (distance > Math.max(24, this.bot.radius * 10 * this.profile.objectAwareness)) {
+      return false;
+    }
+
+    return (objectTargetClaims.get(object.id) ?? 0) <= 0;
+  }
+
+  private isValidObjectTarget(object: WorldObject | null): object is WorldObject {
+    return Boolean(
+      object &&
+      object.active &&
+      !object.swallowAnimation &&
+      canObjectFit(this.bot.radius, object.effectiveBoundingRadius)
+    );
+  }
+
+  private refreshObjectTargetSteering(): void {
+    if (!this.isValidObjectTarget(this.objectTarget)) {
+      this.clearObjectTarget();
+      return;
+    }
+
+    const object = this.objectTarget;
+    const toTarget = new THREE.Vector3(
+      object.position.x - this.bot.position.x,
+      0,
+      object.position.z - this.bot.position.z
+    );
+    const distance = toTarget.length();
+    const holdDistance = this.objectHoldDistance(object);
+    if (distance <= holdDistance) {
+      this.direction.set(0, 0, 0);
+      this.movementThrottle = 0;
+      this.wantsBoost = false;
+      return;
+    }
+
+    this.direction.copy(toTarget.multiplyScalar(1 / Math.max(0.001, distance)));
+    const approachDistance = Math.max(2.2, this.bot.radius * 2.4, object.effectiveBoundingRadius * 4.4);
+    const progress = THREE.MathUtils.clamp((distance - holdDistance) / approachDistance, 0, 1);
+    const smooth = progress * progress * (3 - 2 * progress);
+    const starterScale = this.starterCollectionScale();
+    const smallTargetScale = object.effectiveBoundingRadius <= this.bot.radius * 0.62 ? 0.78 : 1;
+    const minThrottle = THREE.MathUtils.lerp(0.16, 0.24, 1 - starterScale);
+    const maxThrottle = THREE.MathUtils.lerp(0.66, 0.94, 1 - starterScale);
+    this.movementThrottle = THREE.MathUtils.clamp(
+      THREE.MathUtils.lerp(minThrottle, maxThrottle, smooth) * smallTargetScale,
+      0.12,
+      1
+    );
+  }
+
+  private objectHoldDistance(object: WorldObject): number {
+    return Math.max(0.08, Math.min(this.bot.radius * 0.18, object.effectiveBoundingRadius * 0.42));
+  }
+
+  private starterCollectionScale(): number {
+    return THREE.MathUtils.clamp(1 - this.matchElapsedSeconds / STARTER_COLLECTION_SECONDS, 0, 1);
+  }
+
+  private clearObjectTarget(resetThrottle = true): void {
+    this.objectTarget = null;
+    if (resetThrottle) {
+      this.movementThrottle = 1;
+    }
   }
 
   private pickWanderDirection(): void {

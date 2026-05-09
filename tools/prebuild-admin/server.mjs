@@ -75,7 +75,10 @@ app.post('/api/config/:section', async (request, response) => {
     return;
   }
 
-  await writeJson(files[section], request.body ?? {});
+  const body = section === 'engine'
+    ? sanitizeEngineConfigPayload(request.body ?? {})
+    : request.body ?? {};
+  await writeJson(files[section], body);
   response.json({ ok: true, section });
 });
 
@@ -279,6 +282,42 @@ function runFfmpeg(input, output) {
       reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`));
     });
   });
+}
+
+function sanitizeEngineConfigPayload(input) {
+  const output = JSON.parse(JSON.stringify(input ?? {}));
+  if (!output.gameplay || typeof output.gameplay !== 'object') {
+    return output;
+  }
+
+  const gameplayRanges = {
+    startSpeedMultiplier: [0.25, 6],
+    minSpeedMultiplier: [0.25, 6],
+    boostMultiplier: [1, 4.5],
+    staminaDrainMultiplier: [0.1, 5],
+    staminaRegenMultiplier: [0.1, 6],
+    magnetStrengthMultiplier: [0, 5],
+    objectContactSecondsMultiplier: [0.15, 6],
+    rimSuctionMultiplier: [0, 5],
+    swallowGravityMultiplier: [0.25, 5],
+    objectMissForgiveness: [0.35, 3]
+  };
+
+  for (const [key, range] of Object.entries(gameplayRanges)) {
+    if (Object.hasOwn(output.gameplay, key)) {
+      output.gameplay[key] = clampNumber(output.gameplay[key], range[0], range[1]);
+    }
+  }
+
+  return output;
+}
+
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, number));
 }
 
 function generateMapPreview(input) {
