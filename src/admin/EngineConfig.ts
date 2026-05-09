@@ -51,6 +51,7 @@ export const ALL_WORLD_OBJECT_KINDS: WorldObjectKind[] = [
   'emergency',
   'trailerTruck',
   'trafficLight',
+  'busStop',
   'building',
   'structure',
   'billboard',
@@ -87,6 +88,7 @@ export const DEFAULT_WORLD_OBJECT_SPAWN_HEIGHT_OFFSETS: Record<WorldObjectKind, 
   emergency: 0.14,
   trailerTruck: 0.09,
   trafficLight: 0,
+  busStop: 0,
   building: 0,
   structure: 0,
   billboard: 0,
@@ -159,6 +161,7 @@ export interface EngineConfig {
   };
   controls: EngineControlsConfig;
   audio: {
+    cityAmbience: string[];
     menuMusic: string[];
     mapMusic: string[];
     uiHover: string;
@@ -228,6 +231,7 @@ export function createDefaultEngineConfig(): EngineConfig {
       bindings: cloneControlBindings(DEFAULT_CONTROL_BINDINGS)
     },
     audio: {
+      cityAmbience: ['/audio/ambient/city_background_loop.ogg', '/audio/ambient/city_background_loop_1.ogg'],
       menuMusic: ['/audio/music/mainmenu1.ogg', '/audio/music/mainmenu2.ogg'],
       mapMusic: ['/audio/music/citymap1.ogg', '/audio/music/citymap2.ogg', '/audio/music/concrete_symphony.ogg'],
       uiHover: '/audio/ui/hover_button.ogg',
@@ -492,8 +496,10 @@ function sanitizeEngineConfig(input: Partial<EngineConfig>): EngineConfig {
   merged.controls.bindings = sanitizeControlBindings(merged.controls.bindings, defaults.controls.bindings);
 
   const prebuildAudio = (prebuildEngineOverrides as unknown as Partial<EngineConfig>).audio;
+  merged.audio.cityAmbience = mergeUniqueAudioPaths(merged.audio.cityAmbience, prebuildAudio?.cityAmbience);
   merged.audio.menuMusic = mergeUniqueAudioPaths(merged.audio.menuMusic, prebuildAudio?.menuMusic);
   merged.audio.mapMusic = mergeUniqueAudioPaths(merged.audio.mapMusic, prebuildAudio?.mapMusic);
+  merged.audio.cityAmbience = merged.audio.cityAmbience.map(normalizeOggAudioPath).filter(Boolean);
   merged.audio.menuMusic = merged.audio.menuMusic.map(normalizeOggAudioPath).filter(Boolean);
   merged.audio.mapMusic = merged.audio.mapMusic.map(normalizeOggAudioPath).filter(Boolean);
   merged.audio.uiHover = normalizeOggAudioPath(merged.audio.uiHover) || defaults.audio.uiHover;
@@ -508,6 +514,9 @@ function sanitizeEngineConfig(input: Partial<EngineConfig>): EngineConfig {
   }
   if (merged.audio.mapMusic.length === 0) {
     merged.audio.mapMusic = defaults.audio.mapMusic;
+  }
+  if (merged.audio.cityAmbience.length === 0) {
+    merged.audio.cityAmbience = defaults.audio.cityAmbience;
   }
 
   return merged;

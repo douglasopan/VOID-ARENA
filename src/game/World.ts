@@ -6,7 +6,7 @@ import {
 } from '../shared/constants';
 import { getEnabledPowerUpTypes } from '../admin/EngineConfig';
 import type { MapData } from '../shared/types';
-import type { PowerUpType, RoutePoint, TrafficRoute, TrafficSignalDefinition } from '../shared/types';
+import type { PedestrianPath, PowerUpType, RoutePoint, TrafficRoute, TrafficSignalDefinition } from '../shared/types';
 import { PlayerManager } from './PlayerManager';
 import { PowerUp } from './PowerUp';
 import { SpatialGrid } from './SpatialGrid';
@@ -57,7 +57,7 @@ export class World {
   }
 
   rebuildObjectGrid(): void {
-    this.grid.rebuild(this.objects.filter((object) => object.active));
+    this.grid.rebuild(this.objects.filter((object) => object.active && object.renderOpacity > 0.18));
   }
 
   queryObjects(position: THREE.Vector3, radius: number): WorldObject[] {
@@ -86,7 +86,7 @@ export class World {
     return completed;
   }
 
-  updateDynamicObjects(deltaSeconds: number): void {
+  updateDynamicObjects(deltaSeconds: number, now = Date.now() / 1000): void {
     this.trafficElapsedSeconds += deltaSeconds;
     const trafficByRoute = this.groupTrafficObjectsByRoute();
     for (const object of this.objects) {
@@ -104,6 +104,7 @@ export class World {
       if (object.routeId) {
         const route = this.routesById.get(object.routeId);
         if (route) {
+          const previousDistance = this.routeDistanceAtT(route, object.routeT);
           const desiredSpeed = this.desiredTrafficSpeed(object, route, trafficByRoute.get(route.id) ?? []);
           object.routeVelocity = this.moveTowards(
             object.routeVelocity,
@@ -114,6 +115,7 @@ export class World {
           object.routeT = result.t;
           object.position.set(result.position.x, object.homePosition.y, result.position.z);
           object.rotation.y = this.smoothAngle(object.rotation.y, result.rotationY, Math.min(1, deltaSeconds * 5.4));
+          this.updateTrafficEndpointFade(object, route, previousDistance, now);
         }
       }
 
@@ -124,7 +126,12 @@ export class World {
           object.routeT = result.t;
           object.position.set(result.position.x, object.homePosition.y + Math.sin(object.routeT * Math.PI * 2) * 0.03, result.position.z);
           object.rotation.y = this.smoothAngle(object.rotation.y, result.rotationY, Math.min(1, deltaSeconds * 6.8));
+          const targetFade = this.pedestrianPathVisibilityTarget(object, path);
+          object.visibilityFade = this.moveTowards(object.visibilityFade, targetFade, deltaSeconds * 3.2);
         }
+      } else if (object.category === 'pedestrian') {
+        const targetFade = this.isPedestrianInsideAnyBuilding(object) ? 0 : 1;
+        object.visibilityFade = this.moveTowards(object.visibilityFade, targetFade, deltaSeconds * 3.2);
       }
     }
 
@@ -133,7 +140,7 @@ export class World {
   }
 
   resolveObjectCollisions(deltaSeconds: number): void {
-    const collidable = this.objects.filter((object) => object.active && !object.swallowAnimation);
+    const collidable = this.objects.filter((object) => object.active && !object.swallowAnimation && object.renderOpacity > 0.18);
     if (collidable.length < 2) {
       return;
     }
@@ -411,7 +418,7 @@ export class World {
   private groupTrafficObjectsByRoute(): Map<string, WorldObject[]> {
     const grouped = new Map<string, WorldObject[]>();
     for (const object of this.objects) {
-      if (!object.active || object.swallowAnimation || object.isPhysicsControlled || !object.routeId) {
+      if (!object.active || object.swallowAnimation || object.isPhysicsControlled || !object.routeId || object.renderOpacity < 0.25) {
         continue;
       }
       const objects = grouped.get(object.routeId) ?? [];
@@ -423,6 +430,9 @@ export class World {
 
   private resolveObjectPairCollision(a: WorldObject, b: WorldObject, deltaSeconds: number): void {
     if (this.shouldKeepRouteTrafficAuthoritative(a, b)) {
+      return;
+    }
+    if (this.shouldAllowPedestrianEntry(a, b)) {
       return;
     }
 
@@ -494,6 +504,10 @@ export class World {
   }
 
   private tryStackOnCollision(top: WorldObject, bottom: WorldObject, normalFromBottomToTop: THREE.Vector3): boolean {
+    if (!this.canObjectRestOn(top, bottom)) {
+      return false;
+    }
+
     const topBottom = top.collisionBottom;
     const bottomTop = bottom.collisionTop;
     const topIsAbove = top.position.y > bottom.position.y + Math.min(0.45, bottom.collisionHalfHeight * 0.55);
@@ -514,15 +528,25 @@ export class World {
   }
 
   private resolveStackSupport(a: WorldObject, b: WorldObject): void {
-    if (this.isSupportedBy(a, b)) {
+    if (this.canObjectRestOn(a, b) && this.isSupportedBy(a, b)) {
       a.position.y = b.collisionTop + a.collisionHalfHeight + 0.012;
       a.physicsVelocity.y = Math.max(0, a.physicsVelocity.y) * 0.12;
       return;
     }
-    if (this.isSupportedBy(b, a)) {
+    if (this.canObjectRestOn(b, a) && this.isSupportedBy(b, a)) {
       b.position.y = a.collisionTop + b.collisionHalfHeight + 0.012;
       b.physicsVelocity.y = Math.max(0, b.physicsVelocity.y) * 0.12;
     }
+  }
+
+  private canObjectRestOn(top: WorldObject, bottom: WorldObject): boolean {
+    if (bottom.category === 'pedestrian' && top.category !== 'pedestrian') {
+      return false;
+    }
+    if (top.category === 'building' && bottom.category !== 'building') {
+      return false;
+    }
+    return top.mass <= bottom.mass * 5.5 || bottom.category === 'building';
   }
 
   private isSupportedBy(top: WorldObject, bottom: WorldObject): boolean {
@@ -572,8 +596,132 @@ export class World {
     return false;
   }
 
+  private shouldAllowPedestrianEntry(a: WorldObject, b: WorldObject): boolean {
+    const aPedestrian = a.category === 'pedestrian';
+    const bPedestrian = b.category === 'pedestrian';
+    if (aPedestrian === bPedestrian) {
+      return false;
+    }
+    const pedestrian = aPedestrian ? a : b;
+    const other = aPedestrian ? b : a;
+    return (
+      other.category === 'building' &&
+      (Boolean(pedestrian.pedestrianPathId?.startsWith('door-path-')) || this.isInsideObjectFootprint(pedestrian, other, 0.12))
+    );
+  }
+
   private isGuidedTraffic(object: WorldObject): boolean {
     return object.category === 'traffic' && Boolean(object.routeId) && !object.isPhysicsControlled;
+  }
+
+  private updateTrafficEndpointFade(
+    object: WorldObject,
+    route: TrafficRoute,
+    previousDistance: number,
+    now: number
+  ): void {
+    if (!this.shouldFadeTrafficEndpoint(route)) {
+      object.visibilityFade = 1;
+      return;
+    }
+
+    const metrics = this.routeMetrics.get(route.id) ?? this.createRouteMetrics(route);
+    const currentDistance = this.routeDistanceAtT(route, object.routeT);
+    const wrappedToStart = route.loop && currentDistance + 1.2 < previousDistance;
+    if (wrappedToStart) {
+      object.spawnFade = 0;
+      object.visibilityFade = 1;
+      return;
+    }
+
+    const remaining = Math.max(0, metrics.totalLength - currentDistance);
+    const fadeDistance = Math.max(8, object.size.z * 1.65, Math.abs(object.routeSpeed) * 1.2);
+    object.visibilityFade = THREE.MathUtils.smoothstep(remaining, 0, fadeDistance);
+
+    if (!route.loop && remaining <= 0.08 && object.visibilityFade <= 0.04) {
+      object.active = false;
+      object.routeVelocity = 0;
+      object.respawnAt = now + Math.max(0.35, Math.min(1.2, object.respawnDelay * 0.12));
+    }
+  }
+
+  private shouldFadeTrafficEndpoint(route: TrafficRoute): boolean {
+    if (route.id.startsWith('bus-line-')) {
+      return false;
+    }
+    return !route.loop || route.points.length <= 2 || route.id.includes('-traffic-');
+  }
+
+  private pedestrianPathVisibilityTarget(object: WorldObject, path: PedestrianPath): number {
+    if (this.isPedestrianInsideAnyBuilding(object)) {
+      return 0;
+    }
+
+    if (path.stopKind === 'door' || path.id.startsWith('door-path-') || this.isNearDoorPathEndpoint(object, path)) {
+      const lastT = Math.max(1, path.points.length - 1);
+      const normalized = ((object.routeT % lastT) + lastT) % lastT;
+      const doorDistanceT = Math.min(normalized, Math.abs(lastT - normalized));
+      return THREE.MathUtils.smoothstep(doorDistanceT, 0.08, 0.62);
+    }
+
+    if (path.id.startsWith('bus-stop-path-')) {
+      return this.busNearStop(path.points[0]) ? 0 : 1;
+    }
+
+    return 1;
+  }
+
+  private isNearDoorPathEndpoint(object: WorldObject, path: PedestrianPath): boolean {
+    if (path.points.length < 3 || object.category !== 'pedestrian') {
+      return false;
+    }
+    const first = path.points[0];
+    const last = path.points[path.points.length - 1];
+    return Math.hypot(first.x - last.x, first.z - last.z) < 0.05 && path.points.length === 3;
+  }
+
+  private isPedestrianInsideAnyBuilding(pedestrian: WorldObject): boolean {
+    if (pedestrian.category !== 'pedestrian') {
+      return false;
+    }
+
+    for (const object of this.objects) {
+      if (!object.active || object.category !== 'building') {
+        continue;
+      }
+      if (this.isInsideObjectFootprint(pedestrian, object, -0.04)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isInsideObjectFootprint(candidate: WorldObject, footprintOwner: WorldObject, padding = 0): boolean {
+    const dx = candidate.position.x - footprintOwner.position.x;
+    const dz = candidate.position.z - footprintOwner.position.z;
+    const sideX = Math.cos(footprintOwner.rotation.y);
+    const sideZ = -Math.sin(footprintOwner.rotation.y);
+    const forwardX = Math.sin(footprintOwner.rotation.y);
+    const forwardZ = Math.cos(footprintOwner.rotation.y);
+    const localX = dx * sideX + dz * sideZ;
+    const localZ = dx * forwardX + dz * forwardZ;
+    const halfWidth = footprintOwner.size.x * 0.5 + padding;
+    const halfDepth = footprintOwner.size.z * 0.5 + padding;
+    return Math.abs(localX) <= halfWidth && Math.abs(localZ) <= halfDepth;
+  }
+
+  private busNearStop(stop: RoutePoint): boolean {
+    for (const object of this.objects) {
+      if (!object.active || object.kind !== 'bus' || object.variantRole !== 'bus-line') {
+        continue;
+      }
+      const dx = object.position.x - stop.x;
+      const dz = object.position.z - stop.z;
+      if (dx * dx + dz * dz < 7.5 * 7.5) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private arenaCornerCut(): number {

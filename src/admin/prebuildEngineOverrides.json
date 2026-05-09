@@ -7,13 +7,13 @@
   },
   "gameplay": {
     "startSpeedMultiplier": 1,
-    "minSpeedMultiplier": 1,
-    "boostMultiplier": 1,
-    "staminaDrainMultiplier": 1,
-    "staminaRegenMultiplier": 1,
+    "minSpeedMultiplier": 1.1,
+    "boostMultiplier": 1.15,
+    "staminaDrainMultiplier": 0.8,
+    "staminaRegenMultiplier": 1.5,
     "magnetStrengthMultiplier": 5,
     "objectContactSecondsMultiplier": 1,
-    "rimSuctionMultiplier": 1.5,
+    "rimSuctionMultiplier": 2,
     "swallowGravityMultiplier": 5,
     "objectMissForgiveness": 1.7
   },
@@ -189,6 +189,10 @@
       "trafficLight": [
         "/audio/sfx/2.ogg"
       ]
-    }
+    },
+    "cityAmbience": [
+      "/audio/ambient/city_background_loop.ogg",
+      "/audio/ambient/city_background_loop_1.ogg"
+    ]
   }
 }

@@ -287,6 +287,9 @@ export class ObjectFactory {
       case 'trafficLight':
         fallback = this.createTrafficLight(object);
         break;
+      case 'busStop':
+        fallback = this.createBusStop(object);
+        break;
       case 'billboard':
       case 'screen':
         fallback = this.createAdFrame(object);
@@ -305,6 +308,7 @@ export class ObjectFactory {
 
   updateWorldObjectVisual(root: THREE.Object3D, object: WorldObject): void {
     this.updateUtilityLightState(root, object);
+    this.updateObjectOpacity(root, object.renderOpacity);
 
     if (object.category !== 'building') {
       return;
@@ -361,6 +365,55 @@ export class ObjectFactory {
         child.visible = renderVisible && fractureLevel < 0.72;
       }
     });
+  }
+
+  private updateObjectOpacity(root: THREE.Object3D, opacity: number): void {
+    const normalized = THREE.MathUtils.clamp(opacity, 0, 1);
+    const needsOpacityMaterials = normalized < 0.995 || root.userData.opacityMaterialsReady;
+    if (!needsOpacityMaterials) {
+      return;
+    }
+
+    if (!root.userData.opacityMaterialsReady) {
+      root.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh || !mesh.material) {
+          return;
+        }
+        if (Array.isArray(mesh.material)) {
+          mesh.material = mesh.material.map((material) => this.cloneMaterialForOpacity(material));
+        } else {
+          mesh.material = this.cloneMaterialForOpacity(mesh.material);
+        }
+      });
+      root.userData.opacityMaterialsReady = true;
+    }
+
+    root.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) {
+        return;
+      }
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) {
+        const baseOpacity = Number(material.userData.baseOpacity ?? material.opacity ?? 1);
+        const baseDepthWrite = material.userData.baseDepthWrite as boolean | undefined;
+        material.userData.baseOpacity = baseOpacity;
+        material.opacity = baseOpacity * normalized;
+        material.transparent = normalized < 0.995 || baseOpacity < 0.995 || material.transparent;
+        material.depthWrite = normalized < 0.995 ? false : baseDepthWrite ?? material.depthWrite;
+      }
+    });
+  }
+
+  private cloneMaterialForOpacity(material: THREE.Material): THREE.Material {
+    const cloned = material.clone();
+    cloned.userData = {
+      ...material.userData,
+      baseOpacity: material.opacity ?? 1,
+      baseDepthWrite: material.depthWrite
+    };
+    return cloned;
   }
 
   private updateUtilityLightState(root: THREE.Object3D, object: WorldObject): void {
@@ -1083,6 +1136,41 @@ export class ObjectFactory {
     pole.castShadow = true;
     arm.castShadow = true;
     group.add(pole, arm, box);
+    return group;
+  }
+
+  private createBusStop(object: WorldObject): THREE.Group {
+    const group = new THREE.Group();
+    const metal = this.getMaterial('#26313c', 0.62, 0.16);
+    const glass = this.getMaterial('#86d8ef', 0.24, 0.02);
+    glass.transparent = true;
+    glass.opacity = 0.38;
+    const signMaterial = this.createCityLightMaterial('#69f5ff', 0.28, 0.86);
+
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, object.size.y * 0.9, 8), metal);
+    pole.position.set(-object.size.x * 0.42, 0, -object.size.z * 0.38);
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.36, 0.06), signMaterial);
+    sign.position.set(-object.size.x * 0.42, object.size.y * 0.34, -object.size.z * 0.42);
+    this.markCityLight(sign, 0.12, 0.74);
+
+    const back = new THREE.Mesh(new THREE.BoxGeometry(object.size.x * 0.88, object.size.y * 0.48, 0.06), glass);
+    back.position.set(0, -object.size.y * 0.04, -object.size.z * 0.38);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(object.size.x * 0.96, 0.12, object.size.z * 0.86), metal);
+    roof.position.set(0, object.size.y * 0.28, 0);
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(object.size.x * 0.58, 0.18, 0.32), this.getMaterial('#8b5e3c', 0.7, 0.04));
+    bench.position.set(0.18, -object.size.y * 0.32, -object.size.z * 0.12);
+
+    for (const x of [-object.size.x * 0.36, object.size.x * 0.36]) {
+      const support = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, object.size.y * 0.62, 8), metal);
+      support.position.set(x, -object.size.y * 0.04, -object.size.z * 0.36);
+      support.castShadow = true;
+      group.add(support);
+    }
+
+    pole.castShadow = true;
+    roof.castShadow = true;
+    bench.castShadow = true;
+    group.add(pole, sign, back, roof, bench);
     return group;
   }
 

@@ -917,7 +917,7 @@ export class SceneManager {
         continue;
       }
 
-      mesh.visible = object.active || Boolean(object.swallowAnimation);
+      mesh.visible = (object.active || Boolean(object.swallowAnimation)) && object.renderOpacity > 0.012;
       mesh.position.copy(object.position);
       mesh.rotation.copy(object.rotation);
       const spawnScale = THREE.MathUtils.lerp(0.22, 1, THREE.MathUtils.smoothstep(object.spawnFade, 0, 1));

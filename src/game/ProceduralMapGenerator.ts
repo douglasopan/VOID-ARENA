@@ -168,6 +168,7 @@ export class ProceduralMapGenerator {
     this.addTrafficSignalObjects(objects, occupied, network.trafficSignals, rng);
     this.reserveCrosswalkFootprints(occupied, network.surfaces);
     this.addStreetlights(objects, occupied, network.surfaces, rng);
+    this.addBusStops(objects, occupied, network.pedestrianPaths, network.roads, network.surfaces, rng, options.size);
     this.addPlazas(objects, occupied, network.surfaces, network.roads, spawnPoints, rng, options.size);
     this.addParkingLots(objects, occupied, network.surfaces, network.roads, spawnPoints, rng, options.size);
     this.addResidentialLots(objects, occupied, network.roads, spawnPoints, rng, options.size);
@@ -177,6 +178,7 @@ export class ProceduralMapGenerator {
     this.addBenchTrashPairs(objects, occupied, rng);
     this.addBuildingServiceProps(objects, occupied, network.roads, rng, objectBudget);
     this.addEdgeNature(objects, occupied, network.roads, spawnPoints, rng, options.size, objectBudget);
+    this.addBusLineTraffic(objects, occupied, network.trafficRoutes, rng, options.size);
     this.addTraffic(objects, occupied, network.trafficRoutes, network.roads, network.surfaces, rng, objectBudget);
     this.addParkedVehicles(objects, occupied, network.roads, network.surfaces, spawnPoints, rng, objectBudget);
     this.addPedestrians(objects, occupied, network.pedestrianPaths, rng, objectBudget);
@@ -287,6 +289,7 @@ export class ProceduralMapGenerator {
     }
 
     trafficRoutes.push(...this.createTurningTrafficRoutes(roads, rng));
+    trafficRoutes.push(...this.createBusLineRoutes(roads));
 
     for (const road of roads) {
       this.addRoadSurfaces(road, roads, surfaces);
@@ -725,6 +728,42 @@ export class ProceduralMapGenerator {
       }
     }
     return routes;
+  }
+
+  private createBusLineRoutes(roads: RoadSegment[]): TrafficRoute[] {
+    const verticals = roads
+      .filter((road) => road.id.startsWith('avenue-v') && Math.abs(Math.sin(road.rotationY)) < 0.5)
+      .sort((a, b) => a.x - b.x);
+    const horizontals = roads
+      .filter((road) => road.id.startsWith('avenue-h') && Math.abs(Math.cos(road.rotationY)) < 0.5)
+      .sort((a, b) => a.z - b.z);
+    if (verticals.length < 2 || horizontals.length < 2) {
+      return [];
+    }
+
+    const west = verticals[0];
+    const east = verticals[verticals.length - 1];
+    const north = horizontals[0];
+    const south = horizontals[horizontals.length - 1];
+    const xMin = west.x + west.width * 0.22;
+    const xMax = east.x - east.width * 0.22;
+    const zMin = north.z + north.width * 0.22;
+    const zMax = south.z - south.width * 0.22;
+    if (Math.abs(xMax - xMin) < 18 || Math.abs(zMax - zMin) < 18) {
+      return [];
+    }
+
+    return [{
+      id: 'bus-line-main',
+      loop: true,
+      points: [
+        { x: xMin, z: zMin },
+        { x: xMax, z: zMin },
+        { x: xMax, z: zMax },
+        { x: xMin, z: zMax },
+        { x: xMin, z: zMin }
+      ]
+    }];
   }
 
   private quadraticRoutePoints(start: RoutePoint, control: RoutePoint, end: RoutePoint, steps: number): RoutePoint[] {
@@ -1624,6 +1663,127 @@ export class ProceduralMapGenerator {
     return rng.pick(pools[zone]);
   }
 
+  private addBusStops(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    paths: PedestrianPath[],
+    roads: RoadSegment[],
+    surfaces: SurfaceSegment[],
+    rng: SeededRandom,
+    size: MapSize
+  ): void {
+    const avenues = roads.filter((road) => road.id.startsWith('avenue'));
+    if (avenues.length === 0) {
+      return;
+    }
+
+    const targetBySize = { small: 4, medium: 7, large: 11, huge: 15 } satisfies Record<MapSize, number>;
+    const target = targetBySize[size];
+    let placed = 0;
+    let attempts = 0;
+    while (placed < target && attempts < target * 18) {
+      attempts += 1;
+      const road = rng.pick(avenues);
+      const forward = this.forwardVector(road.rotationY);
+      const side = this.sideVector(road.rotationY);
+      const sideSign = rng.pick([-1, 1]);
+      const along = rng.range(-road.length * 0.42, road.length * 0.42);
+      const offset = road.width * 0.5 + road.sidewalkWidth * 0.48;
+      const x = road.x + forward.x * along + side.x * offset * sideSign;
+      const z = road.z + forward.z * along + side.z * offset * sideSign;
+      const rotationY = road.rotationY + (sideSign === 1 ? Math.PI : 0);
+      const stop = this.createObjectDefinition('busStop', objects.length, { x, z, rotationY }, rng);
+      stop.label = 'Bus Stop';
+      stop.variantRole = 'bus-stop';
+      if (
+        this.overlapsOccupied(x, z, Math.max(1.15, stop.boundingRadius), occupied) ||
+        this.pointConflictsCrosswalks(x, z, 2.1, surfaces)
+      ) {
+        continue;
+      }
+
+      objects.push(stop);
+      occupied.push({
+        x,
+        z,
+        radius: stop.boundingRadius,
+        halfWidth: stop.size.x * 0.5 + 0.18,
+        halfDepth: stop.size.z * 0.5 + 0.18,
+        rotationY
+      });
+
+      const pathId = `bus-stop-path-${paths.length}`;
+      const waitA = { x: x - forward.x * 0.7, z: z - forward.z * 0.7 };
+      const waitB = { x: x + forward.x * 1.15, z: z + forward.z * 1.15 };
+      paths.push({
+        id: pathId,
+        points: [waitA, waitB, waitA],
+        loop: true,
+        stopKind: 'busStop'
+      });
+
+      const waitingCount = rng.int(1, size === 'small' ? 2 : 3);
+      for (let index = 0; index < waitingCount; index += 1) {
+        const px = x + forward.x * rng.range(-1.15, 1.15) - side.x * sideSign * rng.range(0.25, 0.75);
+        const pz = z + forward.z * rng.range(-1.15, 1.15) - side.z * sideSign * rng.range(0.25, 0.75);
+        const person = this.createObjectDefinition('pedestrian', objects.length, {
+          x: px,
+          z: pz,
+          rotationY: rotationY + Math.PI
+        }, rng);
+        this.decoratePedestrian(person, rng);
+        person.pedestrianPathId = pathId;
+        person.routeT = rng.range(0, 1.8);
+        person.routeSpeed = rng.range(0.08, 0.24);
+        person.label = `Waiting ${person.label}`;
+        if (this.overlapsOccupied(px, pz, 0.28, occupied)) {
+          continue;
+        }
+        objects.push(person);
+        occupied.push({ x: px, z: pz, radius: 0.28 });
+      }
+
+      placed += 1;
+    }
+  }
+
+  private addBusLineTraffic(
+    objects: ObjectSpawnDefinition[],
+    occupied: OccupiedFootprint[],
+    routes: TrafficRoute[],
+    rng: SeededRandom,
+    size: MapSize
+  ): void {
+    const route = routes.find((candidate) => candidate.id === 'bus-line-main');
+    if (!route) {
+      return;
+    }
+
+    const countBySize = { small: 2, medium: 3, large: 5, huge: 7 } satisfies Record<MapSize, number>;
+    const count = countBySize[size];
+    const lastT = Math.max(1, route.points.length - 1);
+    for (let index = 0; index < count; index += 1) {
+      const t = (lastT * index) / count + rng.range(0.02, 0.16);
+      const point = this.routePoint(route, t);
+      const bus = this.createObjectDefinition('bus', objects.length, {
+        x: point.position.x,
+        z: point.position.z,
+        rotationY: point.rotationY
+      }, rng);
+      bus.label = 'City Bus Line';
+      bus.variantRole = 'bus-line';
+      bus.routeId = route.id;
+      bus.routeT = t;
+      bus.routeSpeed = rng.range(2.7, 4.2);
+      bus.lightsEnabled = true;
+      if (this.overlapsOccupied(bus.position.x, bus.position.z, bus.boundingRadius * 0.32, occupied)) {
+        continue;
+      }
+      objects.push(bus);
+      occupied.push({ x: bus.position.x, z: bus.position.z, radius: bus.boundingRadius * 0.32 });
+    }
+  }
+
   private addTraffic(
     objects: ObjectSpawnDefinition[],
     occupied: OccupiedFootprint[],
@@ -1670,7 +1830,7 @@ export class ProceduralMapGenerator {
   }
 
   private isTrafficSpawnRoute(route: TrafficRoute): boolean {
-    return !route.id.startsWith('turn-') && route.points.length >= 2;
+    return !route.id.startsWith('turn-') && !route.id.startsWith('bus-line-') && route.points.length >= 2;
   }
 
   private trafficSpawnRadius(object: ObjectSpawnDefinition): number {
@@ -1837,7 +1997,8 @@ export class ProceduralMapGenerator {
       paths.push({
         id: pathId,
         points: [door, walk, door],
-        loop: true
+        loop: true,
+        stopKind: 'door'
       });
       const person = this.createObjectDefinition('pedestrian', objects.length, {
         x: walk.x,
@@ -2199,6 +2360,8 @@ export class ProceduralMapGenerator {
       }
       case 'trafficLight':
         return this.withSize(base, 'Traffic Light', { x: 0.46, y: 3.05, z: 0.46 }, '#27313c', 0.42, 6.5, 12);
+      case 'busStop':
+        return this.withSize(base, 'Bus Stop', { x: 2.35, y: 2.35, z: 1.15 }, '#69f5ff', 1.22, 12, 22);
       case 'structure': {
         const width = rng.range(1.6, 4.4);
         const depth = rng.range(1.5, 4.4);
@@ -2275,7 +2438,7 @@ export class ProceduralMapGenerator {
     if (kind === 'tree' || kind === 'rock' || kind === 'planter') return 'nature';
     if (kind === 'billboard' || kind === 'screen') return 'ad';
     if (kind === 'pedestrian') return 'pedestrian';
-    if (kind === 'bench' || kind === 'trash' || kind === 'bike' || kind === 'kiosk' || kind === 'fountain' || kind === 'statue') return 'sidewalk';
+    if (kind === 'bench' || kind === 'trash' || kind === 'bike' || kind === 'kiosk' || kind === 'fountain' || kind === 'statue' || kind === 'busStop') return 'sidewalk';
     return 'decor';
   }
 
@@ -2381,6 +2544,7 @@ export class ProceduralMapGenerator {
     if (object.category === 'traffic') return 92;
     if (object.category === 'pedestrian') return 88;
     if (object.kind === 'post') return 82;
+    if (object.kind === 'busStop') return 80;
     if (object.kind === 'kiosk' || object.kind === 'structure') return 76;
     if (object.kind === 'tree') return 70;
     if (object.kind === 'bench' || object.kind === 'bike' || object.kind === 'planter') return 64;
@@ -2396,6 +2560,7 @@ export class ProceduralMapGenerator {
       object.category === 'traffic' ||
       object.kind === 'structure' ||
       object.kind === 'kiosk' ||
+      object.kind === 'busStop' ||
       object.kind === 'bench' ||
       object.kind === 'bike' ||
       object.kind === 'fountain' ||
@@ -2525,7 +2690,8 @@ export class ProceduralMapGenerator {
     const shouldStayOffPedestrianLane =
       object.category !== 'pedestrian' &&
       object.category !== 'traffic' &&
-      object.kind !== 'trafficLight';
+      object.kind !== 'trafficLight' &&
+      object.kind !== 'busStop';
     if (
       shouldStayOffPedestrianLane &&
       this.pointConflictsPedestrianPaths(

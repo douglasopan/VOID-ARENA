@@ -766,7 +766,7 @@ export class Game {
       player.updatePowerUps(now);
     }
 
-    this.world.updateDynamicObjects(deltaSeconds);
+    this.world.updateDynamicObjects(deltaSeconds, now);
     this.world.rebuildObjectGrid();
     this.currentDisasterSnapshot = this.naturalDisasterSystem.update(deltaSeconds, this.world, this.playerManager);
     if (this.currentDisasterSnapshot.started) {
@@ -1570,12 +1570,14 @@ export class Game {
   private applyProfileAudioPreferences(profile: { audioPreferences: PlayerAudioPreferences }): void {
     this.audioManager.setSfxVolume(profile.audioPreferences.sfxVolume);
     this.audioManager.setMusicVolume(profile.audioPreferences.musicVolume);
+    this.audioManager.setCityAmbienceVolume(profile.audioPreferences.cityAmbienceVolume);
     this.musicEnabled = profile.audioPreferences.musicEnabled;
   }
 
   private applyAudioSettings(settings: PlayerAudioPreferences): void {
     this.audioManager.setSfxVolume(settings.sfxVolume);
     this.audioManager.setMusicVolume(settings.musicVolume);
+    this.audioManager.setCityAmbienceVolume(settings.cityAmbienceVolume);
     this.musicEnabled = settings.musicEnabled;
     this.saveAudioPreferences();
   }
@@ -1587,11 +1589,13 @@ export class Game {
     this.profileStore.updateAudioPreferences(playerName, {
       sfxVolume: this.audioManager.getSfxVolume(),
       musicVolume: this.audioManager.getMusicVolume(),
+      cityAmbienceVolume: this.audioManager.getCityAmbienceVolume(),
       musicEnabled: this.musicEnabled
     });
   }
 
   private startMenuMusicIfEnabled(): void {
+    this.audioManager.startCityAmbience();
     if (!this.musicEnabled) {
       this.audioManager.stopMusic();
       return;
@@ -1600,6 +1604,7 @@ export class Game {
   }
 
   private startMatchMusicIfEnabled(mapSize: MatchConfig['mapSize']): void {
+    this.audioManager.startCityAmbience();
     if (!this.musicEnabled) {
       this.audioManager.stopMusic();
       return;

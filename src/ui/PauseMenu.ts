@@ -14,7 +14,7 @@ export interface PauseCallbacks {
   onHudDisplayToggle?: (key: HudDisplayKey, visible: boolean) => void;
   onNextMusic?: () => void;
   onStopMusic?: () => void;
-  onAudioSettingsChange?: (settings: { sfxVolume: number; musicVolume: number; musicEnabled: boolean }) => void;
+  onAudioSettingsChange?: (settings: { sfxVolume: number; musicVolume: number; cityAmbienceVolume: number; musicEnabled: boolean }) => void;
   onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
   onSkyEffectsToggle?: (enabled: boolean) => void;
   onLightingEffectsToggle?: (enabled: boolean) => void;
@@ -103,6 +103,9 @@ export class PauseMenu {
               </label>
               <label class="field">${t(language, 'music')}
                 <div class="range-row"><input class="music" type="range" min="0" max="100" value="${Math.round(this.audioManager.getMusicVolume() * 100)}" /><span class="music-value"></span></div>
+              </label>
+              <label class="field">${t(language, 'cityAmbience')}
+                <div class="range-row"><input class="city-ambience" type="range" min="0" max="100" value="${Math.round(this.audioManager.getCityAmbienceVolume() * 100)}" /><span class="city-ambience-value"></span></div>
               </label>
               <div class="pause-track-card">
                 <span>${t(language, 'musicTrack')}</span>
@@ -193,11 +196,14 @@ export class PauseMenu {
 
     const sfx = element.querySelector<HTMLInputElement>('.sfx');
     const music = element.querySelector<HTMLInputElement>('.music');
+    const cityAmbience = element.querySelector<HTMLInputElement>('.city-ambience');
     const sfxValue = element.querySelector<HTMLElement>('.sfx-value');
     const musicValue = element.querySelector<HTMLElement>('.music-value');
+    const cityAmbienceValue = element.querySelector<HTMLElement>('.city-ambience-value');
     const syncValues = (): void => {
       if (sfxValue && sfx) sfxValue.textContent = `${sfx.value}%`;
       if (musicValue && music) musicValue.textContent = `${music.value}%`;
+      if (cityAmbienceValue && cityAmbience) cityAmbienceValue.textContent = `${cityAmbience.value}%`;
     };
     let musicEnabled = options.musicEnabled !== false;
     const emitAudioSettings = (nextMusicEnabled = musicEnabled): void => {
@@ -205,6 +211,7 @@ export class PauseMenu {
       callbacks.onAudioSettingsChange?.({
         sfxVolume: this.audioManager.getSfxVolume(),
         musicVolume: this.audioManager.getMusicVolume(),
+        cityAmbienceVolume: this.audioManager.getCityAmbienceVolume(),
         musicEnabled
       });
     };
@@ -232,6 +239,11 @@ export class PauseMenu {
     });
     music?.addEventListener('input', () => {
       this.audioManager.setMusicVolume(Number(music.value) / 100);
+      syncValues();
+      emitAudioSettings();
+    });
+    cityAmbience?.addEventListener('input', () => {
+      this.audioManager.setCityAmbienceVolume(Number(cityAmbience.value) / 100);
       syncValues();
       emitAudioSettings();
     });

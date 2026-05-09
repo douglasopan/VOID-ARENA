@@ -232,6 +232,29 @@
       },
       "notes": ""
     },
+    "busStop": {
+      "source": "",
+      "format": "primitive",
+      "scale": 1,
+      "offsetY": 0,
+      "rotationY": 0,
+      "collider": "auto",
+      "hitbox": {
+        "x": 2.35,
+        "y": 2.35,
+        "z": 1.15
+      },
+      "materialSet": "",
+      "atlasRegion": "",
+      "previewColor": "#69f5ff",
+      "lighting": {
+        "enabled": true,
+        "color": "#69f5ff",
+        "intensity": 0.7,
+        "windowRows": 0
+      },
+      "notes": ""
+    },
     "building": {
       "source": "",
       "format": "primitive",
@@ -591,7 +614,7 @@
       "label": "Veiculos"
     },
     {
-      "id": "streetprops",
+      "id": "streetProps",
       "label": "Rua e calcada"
     },
     {

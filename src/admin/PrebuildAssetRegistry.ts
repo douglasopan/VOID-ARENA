@@ -34,6 +34,7 @@ const WORLD_OBJECT_KINDS = new Set<WorldObjectKind>([
   'emergency',
   'trailerTruck',
   'trafficLight',
+  'busStop',
   'building',
   'structure',
   'billboard',

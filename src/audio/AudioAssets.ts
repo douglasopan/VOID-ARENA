@@ -11,6 +11,11 @@ export const MENU_MUSIC_ASSETS = [
   '/audio/music/mainmenu2.ogg'
 ];
 
+export const CITY_AMBIENCE_ASSETS = [
+  '/audio/ambient/city_background_loop.ogg',
+  '/audio/ambient/city_background_loop_1.ogg'
+];
+
 export const MAP_MUSIC_ASSETS: Record<MapSize, string[]> = {
   small: CITY_MAP_MUSIC_ASSETS,
   medium: CITY_MAP_MUSIC_ASSETS,

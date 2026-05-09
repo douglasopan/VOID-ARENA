@@ -63,6 +63,7 @@ export class WorldObject {
   mesh: THREE.Object3D | null = null;
   swallowAnimation: ObjectSwallowAnimation | null = null;
   spawnFade = 1;
+  visibilityFade = 1;
   physicsAwake = false;
   physicsToppled = false;
   physicsToppledSeconds = 0;
@@ -156,6 +157,13 @@ export class WorldObject {
 
   get hasSwallowContact(): boolean {
     return this.swallowContactSeconds > 0;
+  }
+
+  get renderOpacity(): number {
+    const spawnOpacity = this.category === 'traffic'
+      ? THREE.MathUtils.smoothstep(this.spawnFade, 0, 1)
+      : 1;
+    return THREE.MathUtils.clamp(this.visibilityFade * spawnOpacity, 0, 1);
   }
 
   recordSwallowContact(targetPlayerId: string, deltaSeconds: number): number {
@@ -466,6 +474,7 @@ export class WorldObject {
     this.swallowAnimation = null;
     this.swallowScale = 1;
     this.spawnFade = 0;
+    this.visibilityFade = 1;
     this.temporaryScale = 1;
     this.physicsAwake = false;
     this.physicsToppled = false;

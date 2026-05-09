@@ -1,6 +1,7 @@
 import {
   BUTTON_CLICK_SFX_ASSET,
   BUTTON_HOVER_SFX_ASSET,
+  CITY_AMBIENCE_ASSETS,
   HOLE_SWALLOW_SFX_ASSET,
   MAP_MUSIC_ASSETS,
   MENU_MUSIC_ASSETS,
@@ -23,6 +24,7 @@ export class AudioManager {
   private context: AudioContext | null = null;
   private sfxVolume = 0.55;
   private musicVolume = 0.3;
+  private cityAmbienceVolume = 0.16;
   private muted = false;
   private unlocked = false;
   private musicOscillator: OscillatorNode | null = null;
@@ -38,6 +40,9 @@ export class AudioManager {
   private activeMusicKey: string | null = null;
   private activeMusicAssets: string[] = [];
   private activeMusicIndex = 0;
+  private readonly cityAmbienceElements = new Set<HTMLAudioElement>();
+  private activeCityAmbienceAssets: string[] = [];
+  private cityAmbiencePending = false;
   private pendingMusicRequest: {
     key: string;
     assets: string[];
@@ -65,6 +70,11 @@ export class AudioManager {
     }
   }
 
+  setCityAmbienceVolume(value: number): void {
+    this.cityAmbienceVolume = this.clamp01(value);
+    this.applyCityAmbienceVolume();
+  }
+
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (this.musicGain) {
@@ -74,6 +84,7 @@ export class AudioManager {
       audio.muted = muted;
       this.applyMusicElementVolume(audio);
     }
+    this.applyCityAmbienceVolume();
   }
 
   getSfxVolume(): number {
@@ -82,6 +93,10 @@ export class AudioManager {
 
   getMusicVolume(): number {
     return this.musicVolume;
+  }
+
+  getCityAmbienceVolume(): number {
+    return this.cityAmbienceVolume;
   }
 
   getCurrentMusicLabel(): string {
@@ -187,6 +202,16 @@ export class AudioManager {
         void audio.play().catch(() => undefined);
       }
     }
+    if (this.cityAmbiencePending || this.cityAmbienceElements.size > 0) {
+      this.cityAmbiencePending = false;
+      for (const audio of this.cityAmbienceElements) {
+        if (audio.paused) {
+          void audio.play().catch(() => {
+            this.cityAmbiencePending = true;
+          });
+        }
+      }
+    }
 
     const pending = this.pendingMusicRequest;
     if (pending) {
@@ -201,11 +226,13 @@ export class AudioManager {
   }
 
   startMenuMusic(): void {
+    this.startCityAmbience();
     const assets = getEngineConfig().audio.menuMusic;
     this.startTrackGroup('menu', assets.length ? assets : MENU_MUSIC_ASSETS);
   }
 
   startMusic(mapSize?: MapSize): void {
+    this.startCityAmbience();
     const configuredAssets = getEngineConfig().audio.mapMusic;
     const assets = configuredAssets.length ? configuredAssets : mapSize ? MAP_MUSIC_ASSETS[mapSize] : undefined;
     if (assets?.length) {
@@ -214,6 +241,48 @@ export class AudioManager {
     }
 
     this.startGeneratedMusic();
+  }
+
+  startCityAmbience(): void {
+    const configuredAssets = getEngineConfig().audio.cityAmbience;
+    const playlist = this.dedupeMusicAssets(configuredAssets.length ? configuredAssets : CITY_AMBIENCE_ASSETS);
+    if (playlist.length === 0) {
+      this.stopCityAmbience();
+      return;
+    }
+    if (this.cityAmbienceElements.size > 0 && this.sameMusicAssets(this.activeCityAmbienceAssets, playlist)) {
+      this.applyCityAmbienceVolume();
+      return;
+    }
+
+    this.stopCityAmbience();
+    this.activeCityAmbienceAssets = [...playlist];
+
+    for (const asset of playlist) {
+      const audio = new Audio(asset);
+      audio.loop = true;
+      audio.preload = 'auto';
+      audio.volume = 0;
+      audio.muted = this.muted;
+      audio.onerror = () => this.releaseCityAmbienceElement(audio);
+      this.cityAmbienceElements.add(audio);
+      this.applyCityAmbienceElementVolume(audio);
+      void audio.play().catch(() => {
+        if (!this.unlocked) {
+          this.cityAmbiencePending = true;
+          return;
+        }
+        this.releaseCityAmbienceElement(audio);
+      });
+    }
+  }
+
+  stopCityAmbience(): void {
+    for (const audio of [...this.cityAmbienceElements]) {
+      this.releaseCityAmbienceElement(audio);
+    }
+    this.activeCityAmbienceAssets = [];
+    this.cityAmbiencePending = false;
   }
 
   nextMusicTrack(): void {
@@ -439,6 +508,31 @@ export class AudioManager {
     if (this.musicAutoAdvanceAudio === audio) {
       this.musicAutoAdvanceAudio = null;
     }
+  }
+
+  private applyCityAmbienceVolume(): void {
+    for (const audio of this.cityAmbienceElements) {
+      this.applyCityAmbienceElementVolume(audio);
+    }
+  }
+
+  private applyCityAmbienceElementVolume(audio: HTMLAudioElement): void {
+    const layerCount = Math.max(1, this.cityAmbienceElements.size);
+    audio.muted = this.muted;
+    audio.volume = this.muted ? 0 : this.clamp01((this.cityAmbienceVolume * 0.42) / Math.sqrt(layerCount));
+  }
+
+  private releaseCityAmbienceElement(audio: HTMLAudioElement): void {
+    this.cityAmbienceElements.delete(audio);
+    audio.onerror = null;
+    try {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    } catch {
+      // Best effort cleanup for browser media nodes.
+    }
+    this.applyCityAmbienceVolume();
   }
 
   private formatMusicAssetLabel(asset: string): string {

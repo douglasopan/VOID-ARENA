@@ -8,6 +8,7 @@ const MAX_HISTORY_ENTRIES = 60;
 const DEFAULT_AUDIO_PREFERENCES: PlayerAudioPreferences = {
   sfxVolume: 0.55,
   musicVolume: 0.3,
+  cityAmbienceVolume: 0.16,
   musicEnabled: true
 };
 
@@ -133,6 +134,7 @@ export class PlayerProfileStore {
     return {
       sfxVolume: this.clamp01(Number(input?.sfxVolume ?? DEFAULT_AUDIO_PREFERENCES.sfxVolume)),
       musicVolume: this.clamp01(Number(input?.musicVolume ?? DEFAULT_AUDIO_PREFERENCES.musicVolume)),
+      cityAmbienceVolume: this.clamp01(Number(input?.cityAmbienceVolume ?? DEFAULT_AUDIO_PREFERENCES.cityAmbienceVolume)),
       musicEnabled: input?.musicEnabled !== false
     };
   }

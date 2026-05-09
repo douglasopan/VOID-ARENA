@@ -27,6 +27,7 @@ export type WorldObjectKind =
   | 'emergency'
   | 'trailerTruck'
   | 'trafficLight'
+  | 'busStop'
   | 'building'
   | 'structure'
   | 'billboard'
@@ -141,6 +142,7 @@ export interface PedestrianPath {
   id: string;
   points: RoutePoint[];
   loop: boolean;
+  stopKind?: 'door' | 'busStop';
 }
 
 export interface PowerUpSpawnDefinition {
@@ -247,6 +249,7 @@ export interface MatchHistoryEntry extends MatchResult {
 export interface PlayerAudioPreferences {
   sfxVolume: number;
   musicVolume: number;
+  cityAmbienceVolume: number;
   musicEnabled: boolean;
 }
 
