@@ -59,7 +59,8 @@ export class HostMenu {
           ], state.mapSize)}
           ${this.segment(t(language, 'matchMode'), 'matchMode', [
             [MatchMode.Timed, t(language, 'timedMatch')],
-            [MatchMode.LastHoleStanding, t(language, 'lastHoleStanding')]
+            [MatchMode.LastHoleStanding, t(language, 'lastHoleStanding')],
+            [MatchMode.EliminationRush, t(language, 'eliminationRushMode')]
           ], state.matchMode)}
           ${this.segment(t(language, 'duration'), 'durationSeconds', [
             ['120', t(language, 'twoMinutes')],

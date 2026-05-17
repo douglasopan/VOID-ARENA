@@ -1,4 +1,4 @@
-import { MatchMode } from '../game/MatchMode';
+import { MatchMode, getMatchModeLabel } from '../game/MatchMode';
 import { t } from '../i18n/I18n';
 import type { LanguageCode, MockRoomSummary } from '../shared/types';
 import type { ServerRoomSummary } from '../../server/shared/serverTypes';
@@ -32,7 +32,7 @@ export class FindGamesMenu {
                   </div>
                   <div>${room.players}/${room.maxPlayers}</div>
                   <div>${room.botsEnabled ? ('bots' in room ? `${t(language, 'bots')} ${room.bots}` : t(language, 'botsOn')) : t(language, 'botsOff')}</div>
-                  <div>${room.matchMode === MatchMode.Timed ? t(language, 'timedMatch') : t(language, 'lastHoleStanding')}</div>
+                  <div>${this.matchModeLabel(room.matchMode, language)}</div>
                   <div>${room.mapSize}</div>
                   <button class="join">${t(language, 'join')}</button>
                 </div>`
@@ -60,5 +60,14 @@ export class FindGamesMenu {
   hide(): void {
     this.element?.remove();
     this.element = null;
+  }
+
+  private matchModeLabel(mode: MatchMode, language: LanguageCode): string {
+    if (mode === MatchMode.Timed) return t(language, 'timedMatch');
+    if (mode === MatchMode.LastHoleStanding) return t(language, 'lastHoleStanding');
+    if (mode === MatchMode.EliminationRush) return t(language, 'eliminationRushMode');
+    if (mode === MatchMode.TimeTrial) return t(language, 'timeTrialMode');
+    if (mode === MatchMode.Creative) return t(language, 'creativeMode');
+    return getMatchModeLabel(mode);
   }
 }

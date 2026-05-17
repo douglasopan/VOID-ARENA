@@ -37,13 +37,10 @@ export const OBJECT_SWALLOW_SFX_ASSETS: Partial<Record<WorldObjectKind, string |
     '/audio/sfx/car_horn_away_2.ogg'
   ],
   pedestrian: [
-    '/audio/sfx/person_fall_man_1.ogg',
-    '/audio/sfx/person_fall_man_2.ogg',
-    '/audio/sfx/person_fall_man_3.ogg',
-    '/audio/sfx/person_fall_man_4.ogg',
-    '/audio/sfx/person_fall_man_5.ogg',
-    '/audio/sfx/person_fall_woman_1.ogg',
-    '/audio/sfx/person_fall_woman_2.ogg'
+    '/audio/sfx/person_fall_man_no_1.ogg',
+    '/audio/sfx/person_fall_man_no_2.ogg',
+    '/audio/sfx/person_fall_woman_no_1.ogg',
+    '/audio/sfx/person_fall_woman_no_2.ogg'
   ]
 };
 

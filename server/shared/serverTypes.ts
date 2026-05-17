@@ -1,4 +1,4 @@
-import type { DayNightMode, HoleRimStyle, MapSize } from '../../src/shared/types';
+import type { DayNightMode, HoleRimStyle, MapSize, PowerUpType, PublicPlayerProfile, Vec3Data, WorldTrafficSnapshotEntry } from '../../src/shared/types';
 import type { BotDifficultyMix } from '../../src/game/BotDifficulty';
 import { MatchMode } from '../../src/game/MatchMode';
 
@@ -30,6 +30,7 @@ export interface RoomCreateOptions {
 export interface ServerRoomSummary {
   id: string;
   roomName: string;
+  status: ServerRoomStatus;
   mapSize: MapSize;
   players: number;
   maxPlayers: number;
@@ -47,6 +48,22 @@ export interface ServerRoomSummary {
   powerUpRespawnEnabled: boolean;
   botDifficultyMix: BotDifficultyMix;
   seed: string;
+  createdAt: number;
+  startedAt: number;
+  endsAt: number | null;
+  serverNow: number;
+  authorityId: string | null;
+}
+
+export type ServerRoomStatus = 'running' | 'ended';
+
+export interface ServerRoomClock {
+  roomId: string;
+  status: ServerRoomStatus;
+  serverNow: number;
+  startedAt: number;
+  endsAt: number | null;
+  authorityId: string | null;
 }
 
 export interface ServerPlayerState {
@@ -71,3 +88,37 @@ export interface JoinRoomResult {
   room?: ServerRoomSummary;
   reason?: string;
 }
+
+export type ServerWorldEventType = 'powerup:collected' | 'object:swallow-started' | 'object:swallowed';
+
+export interface ServerWorldEventInput {
+  type: ServerWorldEventType;
+  targetId: string;
+  playerId: string;
+  respawnDelayMs?: number;
+  position?: Vec3Data;
+  powerUpType?: PowerUpType;
+  collectedPowerUpType?: PowerUpType;
+  scoreDelta?: number;
+  massDelta?: number;
+  holeCenter?: Vec3Data;
+  playerVelocity?: Vec3Data;
+  holeRadius?: number;
+  insideFraction?: number;
+}
+
+export interface ServerWorldEvent extends ServerWorldEventInput {
+  id: string;
+  roomId: string;
+  timestamp: number;
+  respawnAt: number | null;
+}
+
+export interface ServerWorldSnapshot {
+  roomId: string;
+  authorityId: string;
+  timestamp: number;
+  traffic: WorldTrafficSnapshotEntry[];
+}
+
+export type ServerPublicProfile = PublicPlayerProfile;

@@ -5,7 +5,7 @@ import {
   ARENA_MIN_CORNER_CUT
 } from '../shared/constants';
 import { getEnabledPowerUpTypes } from '../admin/EngineConfig';
-import type { MapData } from '../shared/types';
+import type { MapData, WorldTrafficSnapshotEntry } from '../shared/types';
 import type { PedestrianPath, PowerUpType, RoutePoint, TrafficRoute, TrafficSignalDefinition } from '../shared/types';
 import { PlayerManager } from './PlayerManager';
 import { PowerUp } from './PowerUp';
@@ -218,6 +218,69 @@ export class World {
       }
     }
     return respawned;
+  }
+
+  findPowerUp(id: string): PowerUp | undefined {
+    return this.powerUps.find((powerUp) => powerUp.id === id);
+  }
+
+  findObject(id: string): WorldObject | undefined {
+    return this.objects.find((object) => object.id === id);
+  }
+
+  createTrafficSnapshot(): WorldTrafficSnapshotEntry[] {
+    return this.objects
+      .filter((object) => object.category === 'traffic' && Boolean(object.routeId))
+      .map((object) => ({
+        id: object.id,
+        x: object.position.x,
+        y: object.position.y,
+        z: object.position.z,
+        rotationY: object.rotation.y,
+        routeT: object.routeT,
+        routeVelocity: object.routeVelocity,
+        spawnFade: object.spawnFade,
+        visibilityFade: object.visibilityFade,
+        active: object.active
+      }));
+  }
+
+  applyTrafficSnapshot(entries: WorldTrafficSnapshotEntry[], interpolation = 0.42): void {
+    let changed = false;
+    for (const entry of entries) {
+      const object = this.findObject(entry.id);
+      if (!object || object.category !== 'traffic' || object.swallowAnimation || object.isPhysicsControlled || !object.active) {
+        continue;
+      }
+      object.position.lerp(new THREE.Vector3(entry.x, entry.y, entry.z), interpolation);
+      object.rotation.y = this.smoothAngle(object.rotation.y, entry.rotationY, interpolation);
+      object.routeT = entry.routeT;
+      object.routeVelocity = entry.routeVelocity;
+      object.spawnFade = entry.spawnFade;
+      object.visibilityFade = entry.visibilityFade;
+      if (!entry.active) {
+        object.active = false;
+      }
+      changed = true;
+    }
+    if (changed) {
+      this.rebuildObjectGrid();
+    }
+  }
+
+  createPowerUpRespawnPlan(
+    powerUp: PowerUp,
+    playerManager?: PlayerManager,
+    safeRadius = 7
+  ): { type: PowerUpType; position: THREE.Vector3 } | null {
+    const position = this.randomPowerUpPosition(powerUp, playerManager, safeRadius);
+    if (!position) {
+      return null;
+    }
+    return {
+      type: this.nextPowerUpType(powerUp.type),
+      position
+    };
   }
 
   private randomPowerUpPosition(

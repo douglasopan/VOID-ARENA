@@ -17,6 +17,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Runtime server data
+data/*.json
+
 # Local screenshots / smoke artifacts
 .codex-screenshots/
 smoke*.png

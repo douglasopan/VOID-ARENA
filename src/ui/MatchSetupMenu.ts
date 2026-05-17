@@ -35,6 +35,7 @@ export class MatchSetupMenu {
           ${this.segment(t(language, 'matchMode'), 'matchMode', [
             [MatchMode.Timed, t(language, 'timedMatch')],
             [MatchMode.LastHoleStanding, t(language, 'lastHoleStanding')],
+            [MatchMode.EliminationRush, t(language, 'eliminationRushMode')],
             [MatchMode.TimeTrial, t(language, 'timeTrialMode')],
             [MatchMode.Creative, t(language, 'creativeMode')]
           ], state.matchMode)}

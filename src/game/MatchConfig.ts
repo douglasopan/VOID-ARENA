@@ -42,6 +42,10 @@ export interface MatchConfig {
   roomName?: string;
   roomId?: string;
   mapSeed?: string;
+  serverStartedAt?: number;
+  serverEndsAt?: number | null;
+  serverNow?: number;
+  serverAuthorityId?: string | null;
   maxPlayers?: number;
   fillBots?: boolean;
 }

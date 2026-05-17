@@ -34,6 +34,8 @@ export interface HudObjectiveStatus {
   complete: boolean;
 }
 
+export type HudScoreMode = 'score' | 'eliminations';
+
 const DISPLAY_STORAGE_KEY = 'void-arena-hud-display-v1';
 const DEFAULT_DISPLAY_SETTINGS: HudDisplaySettings = {
   stats: true,
@@ -131,7 +133,8 @@ export class HUD {
     timer: MatchTimer | null,
     remainingPlayers: number,
     disasterWarning: HudDisasterWarning | null = null,
-    objective: HudObjectiveStatus | null = null
+    objective: HudObjectiveStatus | null = null,
+    scoreMode: HudScoreMode = 'score'
   ): void {
     if (!this.element) {
       this.show(this.callbacks ?? undefined);
@@ -148,7 +151,7 @@ export class HUD {
               <div class="stamina-fill" style="width: ${Math.max(0, Math.min(100, player.stamina))}%"></div>
             </div>
           </div>
-          <div class="hud-row"><span>${t(this.language, 'score')}</span><strong>${player.score}</strong></div>
+          <div class="hud-row"><span>${scoreMode === 'eliminations' ? t(this.language, 'eliminations') : t(this.language, 'score')}</span><strong>${scoreMode === 'eliminations' ? player.eliminations : player.score}</strong></div>
           <div class="hud-row"><span>${timer ? t(this.language, 'time') : t(this.language, 'alive')}</span><strong>${timer ? timer.format() : remainingPlayers}</strong></div>
           ${objective ? `
             <div class="objective-box ${objective.complete ? 'complete' : ''}">
@@ -169,7 +172,7 @@ export class HUD {
           <div class="leader-row ${entry.isLocal ? 'local' : ''}">
             <span>${index + 1}</span>
             <span>${entry.alive ? '' : 'KO '} ${this.escapeHtml(entry.name)}</span>
-            <strong>${entry.score}</strong>
+            <strong>${scoreMode === 'eliminations' ? entry.eliminations : entry.score}</strong>
           </div>`
         )
         .join('');

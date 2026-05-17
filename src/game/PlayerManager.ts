@@ -109,6 +109,10 @@ export class PlayerManager {
         return a.alive ? -1 : 1;
       }
 
+      if (mode === MatchMode.EliminationRush && b.eliminations !== a.eliminations) {
+        return b.eliminations - a.eliminations;
+      }
+
       if (b.score !== a.score) {
         return b.score - a.score;
       }

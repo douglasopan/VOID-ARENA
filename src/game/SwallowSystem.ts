@@ -9,6 +9,15 @@ import type { World } from './World';
 import type { WorldObject } from './WorldObject';
 
 export type SwallowEvent =
+  | {
+      type: 'objectSwallowStarted';
+      player: Player;
+      object: WorldObject;
+      holeCenter: THREE.Vector3;
+      holeRadius: number;
+      playerVelocity: THREE.Vector3;
+      insideFraction: number;
+    }
   | { type: 'objectSwallowed'; player: Player; object: WorldObject }
   | { type: 'holeSwallowed'; attacker: Player; victim: Player }
   | { type: 'holeSwallowCompleted'; attacker: Player | null; victim: Player };
@@ -19,14 +28,15 @@ export class SwallowSystem {
   constructor(
     private readonly world: World,
     private readonly playerManager: PlayerManager,
-    private readonly config: MatchConfig
+    private readonly config: MatchConfig,
+    private readonly localPlayerId?: string
   ) {}
 
   update(deltaSeconds: number, now: number): SwallowEvent[] {
     this.matchStartedAt ??= now;
     const events: SwallowEvent[] = [];
     this.world.rebuildObjectGrid();
-    this.tryStartObjectSwallows(deltaSeconds);
+    this.tryStartObjectSwallows(deltaSeconds, events);
     this.tryStartHoleSwallows(now, events);
 
     const completedObjects = this.world.updateSwallowing(deltaSeconds, this.playerManager);
@@ -34,6 +44,10 @@ export class SwallowSystem {
       const player = this.playerManager.get(completed.targetPlayerId);
       if (!player || !player.renderVisible) {
         completed.object.scheduleRespawn(now);
+        continue;
+      }
+
+      if (this.config.multiplayer && player.id !== this.localPlayerId) {
         continue;
       }
 
@@ -61,10 +75,13 @@ export class SwallowSystem {
     return events;
   }
 
-  private tryStartObjectSwallows(deltaSeconds: number): void {
+  private tryStartObjectSwallows(deltaSeconds: number, events: SwallowEvent[]): void {
     const contactedObjects = new Set<string>();
 
     for (const player of this.playerManager.alivePlayers()) {
+      if (this.config.multiplayer && player.id !== this.localPlayerId) {
+        continue;
+      }
       const candidates = this.world.queryObjects(player.position, Math.max(4, player.radius * 1.6 + 8));
 
       for (const object of candidates) {
@@ -95,10 +112,20 @@ export class SwallowSystem {
             insideFraction
           );
           if (contactSeconds >= requiredContactSeconds) {
-            object.startSwallow(player.id, {
+            const fallOptions = {
               holeCenter: player.position,
               holeRadius: player.radius,
               playerVelocity: player.velocity,
+              insideFraction
+            };
+            object.startSwallow(player.id, fallOptions);
+            events.push({
+              type: 'objectSwallowStarted',
+              player,
+              object,
+              holeCenter: player.position.clone(),
+              holeRadius: player.radius,
+              playerVelocity: player.velocity.clone(),
               insideFraction
             });
           }
@@ -264,6 +291,9 @@ export class SwallowSystem {
 
     for (const attacker of players) {
       if (!attacker.alive) {
+        continue;
+      }
+      if (this.config.multiplayer && attacker.id !== this.localPlayerId) {
         continue;
       }
 

@@ -3,7 +3,7 @@ import { AudioManager } from '../audio/AudioManager';
 import { getEngineConfig, saveEngineConfig, subscribeEngineConfig, type EngineConfig, type EngineControlsConfig } from '../admin/EngineConfig';
 import { detectLanguage, powerUpLabelKey, t, tf, type TranslationKey } from '../i18n/I18n';
 import { BOT_NAMES, CAMERA_ZOOM_MAX, CAMERA_ZOOM_MIN, MAGNET_PULL_STRENGTH, RIM_COLORS } from '../shared/constants';
-import type { ChatMessage, DayNightMode, GraphicsQuality, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary, PlayerAudioPreferences } from '../shared/types';
+import type { ChatMessage, DayNightMode, GraphicsQuality, HoleRimStyle, LanguageCode, MatchResult, MockRoomSummary, PlayerAudioPreferences, PlayerProfile, PowerUpType, PublicPlayerProfile } from '../shared/types';
 import { InputManager } from '../input/InputManager';
 import { NetworkClient } from '../network/NetworkClient';
 import { PlayerProfileStore } from '../player/PlayerProfileStore';
@@ -17,6 +17,8 @@ import { HUD, type HudDisasterWarning, type HudObjectiveStatus } from '../ui/HUD
 import { MainMenu } from '../ui/MainMenu';
 import { MatchSetupMenu } from '../ui/MatchSetupMenu';
 import { PauseMenu } from '../ui/PauseMenu';
+import { ProfileMenu } from '../ui/ProfileMenu';
+import { RankingMenu } from '../ui/RankingMenu';
 import { SoloPresetMenu, type SoloPreset } from '../ui/SoloPresetMenu';
 import { BotController } from './BotController';
 import { BotManager } from './BotManager';
@@ -34,12 +36,13 @@ import {
 } from './NaturalDisasterSystem';
 import type { Player } from './Player';
 import { PlayerManager } from './PlayerManager';
+import type { PowerUp } from './PowerUp';
 import { ProceduralMapGenerator } from './ProceduralMapGenerator';
 import { RespawnSystem } from './RespawnSystem';
 import { SwallowSystem, type SwallowEvent } from './SwallowSystem';
 import { World } from './World';
 import type { WorldObject } from './WorldObject';
-import type { RoomCreateOptions, ServerPlayerState, ServerRoomSummary } from '../../server/shared/serverTypes';
+import type { RoomCreateOptions, ServerPlayerState, ServerRoomClock, ServerRoomSummary, ServerWorldEvent, ServerWorldSnapshot } from '../../server/shared/serverTypes';
 
 type GameState = 'booting' | 'menu' | 'setup' | 'playing' | 'paused' | 'ended';
 
@@ -65,6 +68,8 @@ export class Game {
   private hostMenu!: HostMenu;
   private soloPresetMenu!: SoloPresetMenu;
   private pauseMenu!: PauseMenu;
+  private profileMenu!: ProfileMenu;
+  private rankingMenu!: RankingMenu;
   private chatUI!: ChatUI;
   private hud!: HUD;
   private endScreen!: EndScreen;
@@ -94,7 +99,14 @@ export class Game {
   private readonly sizeAnnouncements = new Map<string, number>();
   private networkHooksBound = false;
   private networkSendAccumulator = 0;
+  private networkWorldSnapshotAccumulator = 0;
+  private networkClockAccumulator = 0;
   private readonly appliedNetworkSwallows = new Set<string>();
+  private readonly appliedWorldEvents = new Set<string>();
+  private readonly publicRankingProfiles = new Map<string, PublicPlayerProfile>();
+  private readonly pendingPowerUpRespawns = new Map<string, { respawnAt: number; type: PowerUpType; position: THREE.Vector3 }>();
+  private serverTimeOffsetMs = 0;
+  private lastServerWorldEventTimestamp = 0;
   private deathNoticeTimer = 0;
   private killNoticeTimer = 0;
   private localHoleCombo = 0;
@@ -153,6 +165,8 @@ export class Game {
     this.hostMenu = new HostMenu(this.uiLayer);
     this.soloPresetMenu = new SoloPresetMenu(this.uiLayer);
     this.pauseMenu = new PauseMenu(this.uiLayer, this.audioManager);
+    this.profileMenu = new ProfileMenu(this.uiLayer);
+    this.rankingMenu = new RankingMenu(this.uiLayer);
     this.chatUI = new ChatUI(this.uiLayer);
     this.hud = new HUD(this.uiLayer);
     this.endScreen = new EndScreen(this.uiLayer);
@@ -208,6 +222,16 @@ export class Game {
           this.currentDisasterSnapshot
         );
       }
+    } else if (this.state === 'paused' && this.currentConfig?.multiplayer && this.world) {
+      this.updatePausedMultiplayer(deltaSeconds);
+      this.sceneManager.update(
+        this.world,
+        this.playerManager,
+        this.playerManager.getLocalPlayer(),
+        deltaSeconds,
+        this.cameraZoom,
+        this.currentDisasterSnapshot
+      );
     } else if (this.state === 'menu' && this.menuWorld) {
       this.menuPreviewElapsed += deltaSeconds;
       this.menuWorld.updateDynamicObjects(deltaSeconds);
@@ -266,6 +290,7 @@ export class Game {
     const profile = this.profileStore.load();
     if (profile) {
       this.applyProfileAudioPreferences(profile);
+      void this.syncPublicProfile(profile);
     }
     this.startMenuMusicIfEnabled();
     if (!this.playerName && profile?.playerName) {
@@ -282,6 +307,28 @@ export class Game {
         onFindGames: (name) => void this.showFindGames(this.activateProfile(name)),
         onHostMatch: (name) => this.showHostMatch(this.activateProfile(name)),
         onSettings: () => this.showSettingsOverlay(false),
+        onProfile: () => this.showProfilePage(),
+        onRanking: () => this.showRankingPage(),
+        onLogout: () => {
+          this.profileStore.logout();
+          this.playerName = '';
+          this.showMainMenu();
+        },
+        onLogin: async (identifier, password) => {
+          const loggedIn = await this.loginProfile(identifier, password);
+          this.playerName = loggedIn.playerName;
+          this.applyProfileAudioPreferences(loggedIn);
+          this.showMainMenu();
+        },
+        onRegister: async (username, email, password) => {
+          const registered = this.profileStore.activateSyncedProfile(
+            await this.networkClient.registerAccount(username, email, password)
+          );
+          this.playerName = registered.playerName;
+          this.applyProfileAudioPreferences(registered);
+          await this.syncPublicProfile(registered);
+          this.showMainMenu();
+        },
         onLanguageChange: (language, playerName) => {
           this.applyLanguage(language, playerName);
           this.showMainMenu();
@@ -379,6 +426,19 @@ export class Game {
             title: t(this.language, 'objectiveTimeTrialBuildingsTitle'),
             description: t(this.language, 'objectiveTimeTrialBuildingsDesc')
           }
+        };
+      case 'eliminationRush':
+        return {
+          ...config,
+          singlePlayerMode: 'quick',
+          matchMode: MatchMode.EliminationRush,
+          mapSize: 'medium',
+          durationSeconds: 180,
+          botCount: 18,
+          botDifficultyMix: 'competitive',
+          objectDensityMultiplier: 1.04,
+          powerUpCount: 44,
+          respawnSafeRadius: 12
         };
       case 'careerBuildings':
         return this.createCareerStageConfig(config, 'career-buildings', {
@@ -525,9 +585,149 @@ export class Game {
     return (
       config.durationSeconds > 0 &&
       (config.matchMode === MatchMode.Timed ||
+        config.matchMode === MatchMode.EliminationRush ||
         config.matchMode === MatchMode.TimeTrial ||
         config.matchMode === MatchMode.Career)
     );
+  }
+
+  private async loginProfile(identifier: string, password: string): Promise<PlayerProfile> {
+    try {
+      return this.profileStore.activateSyncedProfile(await this.networkClient.loginAccount(identifier, password));
+    } catch (serverError) {
+      try {
+        const localProfile = await this.profileStore.login(identifier, password);
+        await this.syncPublicProfile(localProfile);
+        return localProfile;
+      } catch {
+        throw serverError;
+      }
+    }
+  }
+
+  private showProfilePage(accountId?: string, returnToRanking = false): void {
+    const activeProfile = this.profileStore.load();
+    const profile = accountId
+      ? this.profileStore.listProfiles().find((item) => item.accountId === accountId) ?? this.publicRankingProfiles.get(accountId) ?? null
+      : activeProfile;
+    if (!profile) {
+      if (returnToRanking) {
+        this.showRankingPage();
+      } else {
+        this.showMainMenu();
+      }
+      return;
+    }
+    const editable = Boolean(activeProfile && activeProfile.accountId === profile.accountId);
+    this.state = 'menu';
+    this.startMenuMusicIfEnabled();
+    this.hideMenus();
+    this.profileMenu.show(profile, {
+      onBack: () => returnToRanking ? this.showRankingPage() : this.showMainMenu(),
+      onAvatarChange: (avatarDataUrl) => {
+        if (!editable) {
+          return;
+        }
+        const updated = this.profileStore.updateAvatar(avatarDataUrl);
+        if (updated) {
+          void this.syncPublicProfile(updated);
+        }
+        this.showProfilePage();
+      },
+      onProfileUpdate: (input) => {
+        if (!editable) {
+          return;
+        }
+        const updated = this.profileStore.updatePublicProfile(input);
+        if (updated) {
+          this.holeRimColor = updated.holeRimColor;
+          void this.syncPublicProfile(updated);
+          this.showProfilePage(updated.accountId, returnToRanking);
+        }
+      }
+    }, this.language, { editable });
+  }
+
+  private showRankingPage(): void {
+    this.state = 'menu';
+    this.startMenuMusicIfEnabled();
+    this.hideMenus();
+    void this.syncKnownPublicProfiles();
+    this.rankingMenu.show(this.mergedRankingProfiles(), {
+      onBack: () => this.showMainMenu(),
+      onOpenProfile: (accountId) => this.showProfilePage(accountId, true)
+    }, this.language);
+    void this.refreshPublicRanking();
+  }
+
+  private mergedRankingProfiles(): PublicPlayerProfile[] {
+    const merged = new Map<string, PublicPlayerProfile>();
+    for (const profile of this.publicRankingProfiles.values()) {
+      merged.set(profile.accountId, profile);
+    }
+    for (const profile of this.profileStore.listProfiles()) {
+      merged.set(profile.accountId, this.profileStore.toPublicProfile(profile));
+    }
+    return [...merged.values()];
+  }
+
+  private async refreshPublicRanking(): Promise<void> {
+    try {
+      const profiles = await this.networkClient.listPublicProfiles();
+      this.publicRankingProfiles.clear();
+      for (const profile of profiles) {
+        this.publicRankingProfiles.set(profile.accountId, profile);
+      }
+      if (this.state === 'menu') {
+        this.rankingMenu.show(this.mergedRankingProfiles(), {
+          onBack: () => this.showMainMenu(),
+          onOpenProfile: (accountId) => this.showProfilePage(accountId, true)
+        }, this.language);
+      }
+    } catch {
+      // Ranking online is best-effort; local profiles stay available offline.
+    }
+  }
+
+  private async syncPublicProfile(profile: PlayerProfile | PublicPlayerProfile | null): Promise<void> {
+    if (!profile) {
+      return;
+    }
+    let publicProfile = 'email' in profile ? this.profileStore.toPublicProfile(profile) : profile;
+    try {
+      if ('email' in profile) {
+        const savedProfile = this.profileStore.activateSyncedProfile(await this.networkClient.savePrivateProfile(profile));
+        publicProfile = this.profileStore.toPublicProfile(savedProfile);
+      }
+      await this.networkClient.syncPublicProfile(publicProfile);
+      this.publicRankingProfiles.set(publicProfile.accountId, publicProfile);
+    } catch {
+      // Keep profile changes locally when the multiplayer server is offline.
+    }
+  }
+
+  private async syncKnownPublicProfiles(): Promise<void> {
+    const localProfiles = this.profileStore.listProfiles();
+    const publicProfiles = localProfiles.map((profile) => this.profileStore.toPublicProfile(profile));
+    if (publicProfiles.length === 0) {
+      return;
+    }
+    try {
+      for (const profile of localProfiles) {
+        if (profile.email && profile.passwordHash && profile.passwordSalt) {
+          await this.networkClient.savePrivateProfile(profile);
+        }
+      }
+      await this.networkClient.syncPublicProfiles(publicProfiles);
+      for (const profile of publicProfiles) {
+        this.publicRankingProfiles.set(profile.accountId, profile);
+      }
+      await this.refreshPublicRanking();
+    } catch {
+      for (const profile of publicProfiles) {
+        this.publicRankingProfiles.set(profile.accountId, profile);
+      }
+    }
   }
 
   private async showFindGames(playerName: string): Promise<void> {
@@ -635,28 +835,42 @@ export class Game {
         return;
       }
 
+      const serverRoom = joined.room ?? room;
+      this.applyRoomClock({
+        roomId: serverRoom.id,
+        status: serverRoom.status,
+        serverNow: serverRoom.serverNow,
+        startedAt: serverRoom.startedAt,
+        endsAt: serverRoom.endsAt,
+        authorityId: serverRoom.authorityId
+      });
+
       const config: MatchConfig = {
         ...baseConfig,
         playerName,
-        mapSize: room.mapSize,
-        matchMode: room.matchMode,
-        durationSeconds: room.durationSeconds,
-        enableAds: room.enableAds,
-        enableChat: room.enableChat,
-        dayNightMode: room.dayNightMode ?? 'cycle',
+        mapSize: serverRoom.mapSize,
+        matchMode: serverRoom.matchMode,
+        durationSeconds: serverRoom.durationSeconds,
+        enableAds: serverRoom.enableAds,
+        enableChat: serverRoom.enableChat,
+        dayNightMode: serverRoom.dayNightMode ?? 'cycle',
         multiplayer: true,
-        roomId: room.id,
-        roomName: room.roomName,
-        mapSeed: room.seed,
-        objectDensityMultiplier: room.objectDensityMultiplier,
-        powerUpCount: room.powerUpCount,
-        respawnSafeRadius: room.respawnSafeRadius,
-        itemRespawnEnabled: room.itemRespawnEnabled ?? true,
-        powerUpRespawnEnabled: room.powerUpRespawnEnabled ?? true,
-        botDifficultyMix: room.botDifficultyMix,
+        roomId: serverRoom.id,
+        roomName: serverRoom.roomName,
+        mapSeed: serverRoom.seed,
+        objectDensityMultiplier: serverRoom.objectDensityMultiplier,
+        powerUpCount: serverRoom.powerUpCount,
+        respawnSafeRadius: serverRoom.respawnSafeRadius,
+        itemRespawnEnabled: serverRoom.itemRespawnEnabled ?? true,
+        powerUpRespawnEnabled: serverRoom.powerUpRespawnEnabled ?? true,
+        botDifficultyMix: serverRoom.botDifficultyMix,
         botCount: 0,
-        fillBots: room.botsEnabled,
-        maxPlayers: room.maxPlayers
+        fillBots: serverRoom.botsEnabled,
+        maxPlayers: serverRoom.maxPlayers,
+        serverStartedAt: serverRoom.startedAt,
+        serverEndsAt: serverRoom.endsAt,
+        serverNow: serverRoom.serverNow,
+        serverAuthorityId: serverRoom.authorityId
       };
       this.startMatch(config);
     } catch (error) {
@@ -694,7 +908,9 @@ export class Game {
       powerUpCount: preparedConfig.powerUpCount
     });
     this.world = new World(mapData);
-    this.delayInitialPowerUps(20);
+    if (!preparedConfig.multiplayer) {
+      this.delayInitialPowerUps(20);
+    }
     this.sceneManager.setGraphicsQuality(preparedConfig.graphicsQuality);
     const localSpawn = this.world.getSpawnPoint(0);
     const localId = preparedConfig.multiplayer && this.networkClient.socketId ? this.networkClient.socketId : 'local-player';
@@ -722,11 +938,12 @@ export class Game {
 
     this.sceneManager.loadWorld(this.world, this.language);
     this.sceneManager.setDayNightMode(preparedConfig.dayNightMode);
-    this.swallowSystem = new SwallowSystem(this.world, this.playerManager, this.currentConfig);
+    this.swallowSystem = new SwallowSystem(this.world, this.playerManager, this.currentConfig, this.playerManager.localPlayerId);
     this.respawnSystem = new RespawnSystem(this.world, this.playerManager, this.currentConfig);
     this.timer = this.shouldUseMatchTimer(this.currentConfig)
       ? new MatchTimer(this.currentConfig.durationSeconds)
       : null;
+    this.syncTimerToServerClock();
 
     this.hud.show({
       onZoomIn: () => this.adjustCameraZoom(-0.08),
@@ -752,6 +969,10 @@ export class Game {
     this.startMatchMusicIfEnabled(preparedConfig.mapSize);
     this.state = 'playing';
     this.inputManager.setTouchControlsVisible(true);
+    if (this.currentConfig.multiplayer && this.currentConfig.roomId) {
+      this.networkClient.requestRoomClock(this.currentConfig.roomId);
+      this.networkClient.requestWorldEvents(this.currentConfig.roomId, this.lastServerWorldEventTimestamp);
+    }
     this.lastFrame = performance.now();
   }
 
@@ -821,8 +1042,13 @@ export class Game {
     const swallowEvents = this.swallowSystem.update(deltaSeconds, now);
     const respawnEvents = this.respawnSystem.update(now);
     this.world.updateRespawns(now, this.playerManager, this.currentConfig.respawnSafeRadius);
-    this.world.updatePowerUps(deltaSeconds, now, this.playerManager, this.currentConfig.respawnSafeRadius);
-    this.timer?.update(deltaSeconds);
+    if (this.currentConfig.multiplayer) {
+      this.updateMultiplayerPowerUpRespawns(now);
+      this.syncTimerToServerClock();
+    } else {
+      this.world.updatePowerUps(deltaSeconds, now, this.playerManager, this.currentConfig.respawnSafeRadius);
+      this.timer?.update(deltaSeconds);
+    }
 
     this.processSwallowEvents(swallowEvents);
     for (const event of respawnEvents) {
@@ -835,13 +1061,38 @@ export class Game {
     this.checkMatchEnd();
   }
 
+  private updatePausedMultiplayer(deltaSeconds: number): void {
+    if (!this.world || !this.currentConfig?.multiplayer) {
+      return;
+    }
+
+    const now = performance.now() / 1000;
+    for (const player of this.playerManager.all()) {
+      player.updatePowerUps(now);
+    }
+    this.world.updateDynamicObjects(deltaSeconds, now);
+    this.world.rebuildObjectGrid();
+    this.world.updateRespawns(now, this.playerManager, this.currentConfig.respawnSafeRadius);
+    this.updateMultiplayerPowerUpRespawns(now);
+    this.syncTimerToServerClock();
+    this.updateHud();
+    this.updateNetwork(deltaSeconds);
+    this.checkMatchEnd();
+  }
+
   private processSwallowEvents(events: SwallowEvent[]): void {
     for (const event of events) {
       switch (event.type) {
+        case 'objectSwallowStarted':
+          if (event.player.id === this.playerManager.localPlayerId) {
+            this.broadcastObjectSwallowStarted(event);
+          }
+          break;
         case 'objectSwallowed':
           if (event.player.id === this.playerManager.localPlayerId) {
             this.audioManager.playObjectSwallow(event.object.kind, event.object.category, event.object.mass);
             this.applyObjectiveObjectProgress(event.object);
+            this.broadcastObjectSwallowed(event.object, event.player.id);
           }
           this.maybeAnnounceSize(event.player.id);
           break;
@@ -879,7 +1130,10 @@ export class Game {
 
   private collectPowerUps(now: number): void {
     if (!this.world) return;
-    for (const player of this.playerManager.alivePlayers()) {
+    const players = this.currentConfig?.multiplayer
+      ? [this.playerManager.getLocalPlayer()].filter((player): player is Player => Boolean(player?.alive))
+      : this.playerManager.alivePlayers();
+    for (const player of players) {
       const candidates = this.world.queryPowerUps(player.position, player.radius + 1.4);
       for (const powerUp of candidates) {
         if (getEngineConfig().powerUps[powerUp.type]?.enabled === false) {
@@ -887,8 +1141,11 @@ export class Game {
         }
         const distance = player.position.distanceTo(powerUp.position);
         if (distance > player.radius + powerUp.radius + 0.45) continue;
+        const multiplayerRespawnPlan = this.currentConfig?.multiplayer && this.currentConfig.powerUpRespawnEnabled
+          ? this.world.createPowerUpRespawnPlan(powerUp, this.playerManager, this.currentConfig.respawnSafeRadius)
+          : null;
         powerUp.collect(now);
-        if (this.currentConfig?.powerUpRespawnEnabled === false) {
+        if (this.currentConfig?.multiplayer || this.currentConfig?.powerUpRespawnEnabled === false) {
           powerUp.respawnAt = Number.POSITIVE_INFINITY;
         }
         player.addPowerUp(powerUp.type, powerUp.durationSeconds, now);
@@ -898,6 +1155,7 @@ export class Game {
         }));
         if (player.id === this.playerManager.localPlayerId) {
           this.audioManager.playPowerUp(powerUp.type);
+          this.broadcastPowerUpCollected(powerUp, player.id, multiplayerRespawnPlan);
         }
       }
     }
@@ -1108,13 +1366,17 @@ export class Game {
       this.clearDeathCamera();
     }
     const mode = this.currentConfig?.matchMode ?? MatchMode.Timed;
+    const showEliminationScore =
+      mode === MatchMode.EliminationRush || this.currentConfig?.objective?.type === 'eliminateHoles';
+    const leaderboardMode = showEliminationScore ? MatchMode.EliminationRush : mode;
     this.hud.update(
       local,
-      this.playerManager.getLeaderboard(mode),
+      this.playerManager.getLeaderboard(leaderboardMode),
       this.timer,
       this.playerManager.alivePlayers().length,
       this.createDisasterWarning(),
-      this.createObjectiveStatus()
+      this.createObjectiveStatus(),
+      showEliminationScore ? 'eliminations' : 'score'
     );
     this.inputManager.setTouchActionAvailability({
       dash: Boolean(local?.alive && local.hasPowerUp('dash')),
@@ -1213,6 +1475,11 @@ export class Game {
       return;
     }
 
+    if (this.currentConfig.matchMode === MatchMode.EliminationRush && this.timer?.complete) {
+      this.endMatch();
+      return;
+    }
+
     if (this.currentConfig.matchMode === MatchMode.LastHoleStanding && this.playerManager.alivePlayers().length <= 1) {
       this.endMatch();
     }
@@ -1224,6 +1491,9 @@ export class Game {
     }
 
     this.state = 'ended';
+    if (this.currentConfig.multiplayer && this.currentConfig.roomId && this.networkClient.connected) {
+      this.networkClient.endRoom(this.currentConfig.roomId, 'match-ended');
+    }
     if (this.currentConfig.objective) {
       this.objectiveCompleted = challengeCompleted ?? this.objectiveTargetReached();
       this.objectiveFailed = !this.objectiveCompleted;
@@ -1294,6 +1564,7 @@ export class Game {
       durationSeconds: this.currentConfig.durationSeconds,
       leaderboard
     });
+    void this.syncPublicProfile(this.profileStore.load());
   }
 
   private activateProfile(playerName: string): string {
@@ -1314,7 +1585,285 @@ export class Game {
     this.networkClient.onPlayerStates((states) => this.applyRemotePlayerStates(states));
     this.networkClient.onChat((message) => this.addChatMessage(message));
     this.networkClient.onHoleSwallowed((payload) => this.applyNetworkHoleSwallow(payload));
+    this.networkClient.onRoomClock((clock) => this.applyRoomClock(clock));
+    this.networkClient.onRoomEnded((payload) => this.handleRoomEnded(payload.roomId));
+    this.networkClient.onWorldEvents((events) => this.applyWorldEvents(events));
+    this.networkClient.onWorldEvent((event) => this.applyWorldEvent(event));
+    this.networkClient.onWorldSnapshot((snapshot) => this.applyWorldSnapshot(snapshot));
     this.networkHooksBound = true;
+  }
+
+  private applyRoomClock(clock: ServerRoomClock): void {
+    this.serverTimeOffsetMs = clock.serverNow - Date.now();
+    if (this.currentConfig?.multiplayer && this.currentConfig.roomId === clock.roomId) {
+      this.currentConfig.serverStartedAt = clock.startedAt;
+      this.currentConfig.serverEndsAt = clock.endsAt;
+      this.currentConfig.serverNow = clock.serverNow;
+      this.currentConfig.serverAuthorityId = clock.authorityId;
+      this.syncTimerToServerClock();
+      if (clock.status === 'ended') {
+        this.handleRoomEnded(clock.roomId);
+      }
+    }
+  }
+
+  private currentServerNowMs(): number {
+    return Date.now() + this.serverTimeOffsetMs;
+  }
+
+  private serverMsToGameSeconds(serverMs: number): number {
+    return performance.now() / 1000 + (serverMs - this.currentServerNowMs()) / 1000;
+  }
+
+  private syncTimerToServerClock(): void {
+    if (!this.currentConfig?.multiplayer || !this.timer) {
+      return;
+    }
+    this.timer.active = false;
+    if (typeof this.currentConfig.serverEndsAt !== 'number') {
+      return;
+    }
+    this.timer.remainingSeconds = Math.max(0, (this.currentConfig.serverEndsAt - this.currentServerNowMs()) / 1000);
+  }
+
+  private handleRoomEnded(roomId: string): void {
+    if (!this.currentConfig?.multiplayer || this.currentConfig.roomId !== roomId || this.state === 'ended') {
+      return;
+    }
+    if (this.timer) {
+      this.timer.remainingSeconds = 0;
+    }
+    this.endMatch();
+  }
+
+  private applyWorldEvents(events: ServerWorldEvent[]): void {
+    [...events]
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .forEach((event) => this.applyWorldEvent(event));
+  }
+
+  private applyWorldEvent(event: ServerWorldEvent): void {
+    if (!this.currentConfig?.multiplayer || this.currentConfig.roomId !== event.roomId) {
+      return;
+    }
+    if (this.appliedWorldEvents.has(event.id)) {
+      return;
+    }
+    this.appliedWorldEvents.add(event.id);
+    this.lastServerWorldEventTimestamp = Math.max(this.lastServerWorldEventTimestamp, event.timestamp);
+
+    switch (event.type) {
+      case 'powerup:collected':
+        this.applyPowerUpCollectedEvent(event);
+        break;
+      case 'object:swallow-started':
+        this.applyObjectSwallowStartedEvent(event);
+        break;
+      case 'object:swallowed':
+        this.applyObjectSwallowedEvent(event);
+        break;
+    }
+  }
+
+  private applyPowerUpCollectedEvent(event: ServerWorldEvent): void {
+    if (!this.world) {
+      return;
+    }
+    const powerUp = this.world.findPowerUp(event.targetId);
+    if (!powerUp) {
+      return;
+    }
+
+    const collector = this.playerManager.get(event.playerId);
+    const collectedType = event.collectedPowerUpType ?? powerUp.type;
+    if (collector && event.playerId !== this.playerManager.localPlayerId) {
+      collector.addPowerUp(collectedType, powerUp.durationSeconds, performance.now() / 1000);
+      this.addSystemMessage(tf(this.language, 'pickedUp', {
+        player: collector.name,
+        powerup: t(this.language, powerUpLabelKey(collectedType))
+      }));
+    }
+
+    powerUp.active = false;
+    powerUp.respawnAt = Number.POSITIVE_INFINITY;
+    if (event.respawnAt && event.position && event.powerUpType) {
+      this.schedulePowerUpRespawn(event.targetId, event.respawnAt, event.powerUpType, event.position);
+    } else {
+      this.pendingPowerUpRespawns.delete(event.targetId);
+    }
+  }
+
+  private applyObjectSwallowStartedEvent(event: ServerWorldEvent): void {
+    if (!this.world) {
+      return;
+    }
+    const object = this.world.findObject(event.targetId);
+    if (!object || !object.active || object.swallowAnimation) {
+      return;
+    }
+    const holeCenter = event.holeCenter
+      ? new THREE.Vector3(event.holeCenter.x, event.holeCenter.y, event.holeCenter.z)
+      : this.playerManager.get(event.playerId)?.position.clone();
+    if (!holeCenter) {
+      return;
+    }
+    const playerVelocity = event.playerVelocity
+      ? new THREE.Vector3(event.playerVelocity.x, event.playerVelocity.y, event.playerVelocity.z)
+      : this.playerManager.get(event.playerId)?.velocity.clone();
+    object.startSwallow(event.playerId, {
+      holeCenter,
+      holeRadius: event.holeRadius,
+      playerVelocity,
+      insideFraction: event.insideFraction
+    });
+    this.world.rebuildObjectGrid();
+  }
+
+  private applyObjectSwallowedEvent(event: ServerWorldEvent): void {
+    if (!this.world) {
+      return;
+    }
+    const object = this.world.findObject(event.targetId);
+    if (!object) {
+      return;
+    }
+
+    if (event.playerId !== this.playerManager.localPlayerId) {
+      const player = this.playerManager.get(event.playerId);
+      if (player) {
+        if (event.massDelta) {
+          player.addMass(event.massDelta);
+        }
+        if (event.scoreDelta) {
+          player.addScore(event.scoreDelta);
+        }
+        player.swallowedObjects += 1;
+        this.maybeAnnounceSize(player.id);
+      }
+    }
+
+    object.active = false;
+    object.swallowAnimation = null;
+    object.respawnAt = event.respawnAt ? this.serverMsToGameSeconds(event.respawnAt) : Number.POSITIVE_INFINITY;
+    if (event.respawnAt && this.currentServerNowMs() >= event.respawnAt) {
+      object.respawn();
+    }
+    this.world.rebuildObjectGrid();
+  }
+
+  private schedulePowerUpRespawn(
+    powerUpId: string,
+    serverRespawnAt: number,
+    type: PowerUpType,
+    position: { x: number; y: number; z: number }
+  ): void {
+    if (!this.world) {
+      return;
+    }
+    const powerUp = this.world.findPowerUp(powerUpId);
+    if (!powerUp) {
+      return;
+    }
+    const respawnAt = this.serverMsToGameSeconds(serverRespawnAt);
+    const respawnPosition = new THREE.Vector3(position.x, position.y, position.z);
+    if (respawnAt <= performance.now() / 1000 + 0.025) {
+      powerUp.changeType(type);
+      powerUp.respawn(respawnPosition);
+      this.pendingPowerUpRespawns.delete(powerUpId);
+      return;
+    }
+    powerUp.respawnAt = Number.POSITIVE_INFINITY;
+    this.pendingPowerUpRespawns.set(powerUpId, {
+      respawnAt,
+      type,
+      position: respawnPosition
+    });
+  }
+
+  private updateMultiplayerPowerUpRespawns(now: number): void {
+    if (!this.world || this.pendingPowerUpRespawns.size === 0) {
+      return;
+    }
+    for (const [powerUpId, plan] of this.pendingPowerUpRespawns) {
+      if (now < plan.respawnAt) {
+        continue;
+      }
+      const powerUp = this.world.findPowerUp(powerUpId);
+      if (powerUp) {
+        powerUp.changeType(plan.type);
+        powerUp.respawn(plan.position);
+      }
+      this.pendingPowerUpRespawns.delete(powerUpId);
+    }
+  }
+
+  private broadcastPowerUpCollected(
+    powerUp: PowerUp,
+    playerId: string,
+    respawnPlan: { type: PowerUpType; position: THREE.Vector3 } | null
+  ): void {
+    if (!this.currentConfig?.multiplayer || !this.currentConfig.roomId || !this.networkClient.connected) {
+      return;
+    }
+
+    const respawnEnabled = Boolean(this.currentConfig.powerUpRespawnEnabled && respawnPlan);
+    if (respawnEnabled && respawnPlan) {
+      this.schedulePowerUpRespawn(
+        powerUp.id,
+        this.currentServerNowMs() + powerUp.respawnDelay * 1000,
+        respawnPlan.type,
+        respawnPlan.position
+      );
+    }
+
+    this.networkClient.sendWorldEvent(this.currentConfig.roomId, {
+      type: 'powerup:collected',
+      targetId: powerUp.id,
+      playerId,
+      respawnDelayMs: respawnEnabled ? powerUp.respawnDelay * 1000 : undefined,
+      position: respawnPlan
+        ? { x: respawnPlan.position.x, y: respawnPlan.position.y, z: respawnPlan.position.z }
+        : undefined,
+      powerUpType: respawnPlan?.type,
+      collectedPowerUpType: powerUp.type
+    });
+  }
+
+  private broadcastObjectSwallowStarted(event: Extract<SwallowEvent, { type: 'objectSwallowStarted' }>): void {
+    if (!this.currentConfig?.multiplayer || !this.currentConfig.roomId || !this.networkClient.connected) {
+      return;
+    }
+    this.networkClient.sendWorldEvent(this.currentConfig.roomId, {
+      type: 'object:swallow-started',
+      targetId: event.object.id,
+      playerId: event.player.id,
+      holeCenter: {
+        x: event.holeCenter.x,
+        y: event.holeCenter.y,
+        z: event.holeCenter.z
+      },
+      playerVelocity: {
+        x: event.playerVelocity.x,
+        y: event.playerVelocity.y,
+        z: event.playerVelocity.z
+      },
+      holeRadius: event.holeRadius,
+      insideFraction: event.insideFraction
+    });
+  }
+
+  private broadcastObjectSwallowed(object: WorldObject, playerId: string): void {
+    if (!this.currentConfig?.multiplayer || !this.currentConfig.roomId || !this.networkClient.connected) {
+      return;
+    }
+    this.networkClient.sendWorldEvent(this.currentConfig.roomId, {
+      type: 'object:swallowed',
+      targetId: object.id,
+      playerId,
+      respawnDelayMs: this.currentConfig.itemRespawnEnabled ? object.respawnDelay * 1000 : undefined,
+      scoreDelta: object.score,
+      massDelta: object.mass
+    });
   }
 
   private broadcastHoleSwallow(attackerId: string, victimId: string): void {
@@ -1377,36 +1926,71 @@ export class Game {
     }
   }
 
+  private applyWorldSnapshot(snapshot: ServerWorldSnapshot): void {
+    if (
+      !this.world ||
+      !this.currentConfig?.multiplayer ||
+      this.currentConfig.roomId !== snapshot.roomId ||
+      snapshot.authorityId === this.playerManager.localPlayerId
+    ) {
+      return;
+    }
+    this.currentConfig.serverAuthorityId = snapshot.authorityId;
+    this.world.applyTrafficSnapshot(snapshot.traffic);
+  }
+
   private updateNetwork(deltaSeconds: number): void {
     if (!this.currentConfig?.multiplayer || !this.currentConfig.roomId || !this.networkClient.connected) {
       return;
     }
 
     this.networkSendAccumulator += deltaSeconds;
-    if (this.networkSendAccumulator < 0.08) {
-      return;
-    }
-    this.networkSendAccumulator = 0;
+    if (this.networkSendAccumulator >= 0.08) {
+      this.networkSendAccumulator = 0;
 
-    const local = this.playerManager.getLocalPlayer();
-    if (!local) return;
-    const state: ServerPlayerState = {
-      id: local.id,
-      name: local.name,
-      x: local.position.x,
-      z: local.position.z,
-      radius: local.radius,
-      score: local.score,
-      mass: local.mass,
-      rimColor: local.rimColor,
-      rimStyle: local.rimStyle,
-      alive: local.alive,
-      stamina: local.stamina,
-      eliminations: local.eliminations,
-      swallowedObjects: local.swallowedObjects,
-      spawnProtectionRemaining: local.spawnProtectionRemaining(performance.now() / 1000)
-    };
-    this.networkClient.sendPlayerState(this.currentConfig.roomId, state);
+      const local = this.playerManager.getLocalPlayer();
+      if (local) {
+        const state: ServerPlayerState = {
+          id: local.id,
+          name: local.name,
+          x: local.position.x,
+          z: local.position.z,
+          radius: local.radius,
+          score: local.score,
+          mass: local.mass,
+          rimColor: local.rimColor,
+          rimStyle: local.rimStyle,
+          alive: local.alive,
+          stamina: local.stamina,
+          eliminations: local.eliminations,
+          swallowedObjects: local.swallowedObjects,
+          spawnProtectionRemaining: local.spawnProtectionRemaining(performance.now() / 1000)
+        };
+        this.networkClient.sendPlayerState(this.currentConfig.roomId, state);
+      }
+    }
+
+    this.networkWorldSnapshotAccumulator += deltaSeconds;
+    if (this.networkWorldSnapshotAccumulator >= 0.35 && this.isWorldAuthority()) {
+      this.networkWorldSnapshotAccumulator = 0;
+      this.networkClient.sendWorldSnapshot(this.currentConfig.roomId, {
+        traffic: this.world?.createTrafficSnapshot() ?? []
+      });
+    }
+
+    this.networkClockAccumulator += deltaSeconds;
+    if (this.networkClockAccumulator >= 1) {
+      this.networkClockAccumulator = 0;
+      this.networkClient.requestRoomClock(this.currentConfig.roomId);
+    }
+  }
+
+  private isWorldAuthority(): boolean {
+    return Boolean(
+      this.currentConfig?.multiplayer &&
+      this.currentConfig.serverAuthorityId &&
+      this.currentConfig.serverAuthorityId === this.playerManager.localPlayerId
+    );
   }
 
   private applyRemotePlayerStates(states: ServerPlayerState[]): void {
@@ -1586,12 +2170,13 @@ export class Game {
     if (!playerName) {
       return;
     }
-    this.profileStore.updateAudioPreferences(playerName, {
+    const updated = this.profileStore.updateAudioPreferences(playerName, {
       sfxVolume: this.audioManager.getSfxVolume(),
       musicVolume: this.audioManager.getMusicVolume(),
       cityAmbienceVolume: this.audioManager.getCityAmbienceVolume(),
       musicEnabled: this.musicEnabled
     });
+    void this.syncPublicProfile(updated);
   }
 
   private startMenuMusicIfEnabled(): void {
@@ -1741,7 +2326,7 @@ export class Game {
     }
     const name = this.playerName || this.profileStore.load()?.playerName;
     if (name) {
-      this.profileStore.updateAppearance(name, rimColor, rimStyle);
+      void this.syncPublicProfile(this.profileStore.updateAppearance(name, rimColor, rimStyle));
     }
   }
 
@@ -1749,9 +2334,10 @@ export class Game {
     this.language = language;
     this.hud?.setLanguage(language);
     this.chatUI?.setLanguage(language);
-    const name = playerName || this.profileStore.load()?.playerName;
-    if (name) {
-      this.profileStore.updateLanguage(name, language);
+    const activeProfile = this.profileStore.load();
+    const name = playerName || activeProfile?.playerName;
+    if (activeProfile && name) {
+      void this.syncPublicProfile(this.profileStore.updateLanguage(name, language));
     }
   }
 
@@ -1871,7 +2457,7 @@ export class Game {
         players: 64,
         maxPlayers: 100,
         botsEnabled: true,
-        matchMode: MatchMode.Timed
+        matchMode: MatchMode.EliminationRush
       }
     ];
   }
@@ -1889,6 +2475,13 @@ export class Game {
     this.playerManager.clear();
     this.botManager.clear();
     this.appliedNetworkSwallows.clear();
+    this.appliedWorldEvents.clear();
+    this.pendingPowerUpRespawns.clear();
+    this.lastServerWorldEventTimestamp = 0;
+    this.serverTimeOffsetMs = 0;
+    this.networkSendAccumulator = 0;
+    this.networkWorldSnapshotAccumulator = 0;
+    this.networkClockAccumulator = 0;
     this.localHoleCombo = 0;
     this.lastLocalHoleKillAt = 0;
     this.localDashCooldown = 0;
@@ -1919,6 +2512,8 @@ export class Game {
     this.findGamesMenu?.hide();
     this.hostMenu?.hide();
     this.soloPresetMenu?.hide();
+    this.profileMenu?.hide();
+    this.rankingMenu?.hide();
     this.pauseMenu?.hide();
   }
 

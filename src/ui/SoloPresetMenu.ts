@@ -6,6 +6,7 @@ export type SoloPreset =
   | 'easy'
   | 'medium'
   | 'hard'
+  | 'eliminationRush'
   | 'timeTrial'
   | 'careerBuildings'
   | 'careerCollector'
@@ -47,6 +48,7 @@ export class SoloPresetMenu {
           ${this.presetButton('easy', t(language, 'presetEasy'), t(language, 'presetEasyDesc'))}
           ${this.presetButton('medium', t(language, 'presetMedium'), t(language, 'presetMediumDesc'))}
           ${this.presetButton('hard', t(language, 'presetHard'), t(language, 'presetHardDesc'))}
+          ${this.presetButton('eliminationRush', t(language, 'eliminationRushMode'), t(language, 'eliminationRushDesc'))}
           ${this.presetButton('timeTrial', t(language, 'timeTrialMode'), t(language, 'timeTrialModeDesc'))}
           <button class="preset-card custom-preset" type="button">
             <strong>${t(language, 'presetCustom')}</strong>

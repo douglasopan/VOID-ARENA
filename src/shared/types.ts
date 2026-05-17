@@ -65,6 +65,19 @@ export interface Vec3Data extends Vec2Data {
   y: number;
 }
 
+export interface WorldTrafficSnapshotEntry {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  rotationY: number;
+  routeT: number;
+  routeVelocity: number;
+  spawnFade: number;
+  visibilityFade: number;
+  active: boolean;
+}
+
 export interface ObjectSpawnDefinition {
   id: string;
   kind: WorldObjectKind;
@@ -233,6 +246,44 @@ export interface MatchResult {
   objectiveTarget?: number;
 }
 
+export interface PlayerLifetimeStats {
+  matchesPlayed: number;
+  wins: number;
+  timedWins: number;
+  lastHoleStandingWins: number;
+  eliminationRushWins: number;
+  timeTrialWins: number;
+  careerWins: number;
+  creativeWins: number;
+  totalScore: number;
+  bestScore: number;
+  totalEliminations: number;
+  totalObjectsSwallowed: number;
+}
+
+export interface PlayerExperience {
+  totalXp: number;
+  level: number;
+  currentLevelXp: number;
+  nextLevelXp: number;
+  progress: number;
+}
+
+export type ProfileSocialKind = 'website' | 'instagram' | 'youtube' | 'tiktok' | 'discord';
+
+export interface ProfileSocialLink {
+  kind: ProfileSocialKind;
+  label: string;
+  url: string;
+}
+
+export type VoidSkinId =
+  | 'neon-core'
+  | 'classic-singularity'
+  | 'aurora-rift'
+  | 'solar-flare'
+  | 'storm-pulse';
+
 export interface MatchHistoryEntry extends MatchResult {
   id: string;
   accountId: string;
@@ -255,12 +306,27 @@ export interface PlayerAudioPreferences {
 
 export interface PlayerProfile {
   accountId: string;
+  username: string;
+  email: string;
+  passwordHash?: string;
+  passwordSalt?: string;
+  avatarDataUrl?: string;
+  profileTitle?: string;
+  bio?: string;
+  profileAccentColor: string;
+  socialLinks: ProfileSocialLink[];
+  ownedVoidSkins: VoidSkinId[];
+  selectedVoidSkin: VoidSkinId;
   playerName: string;
   holeRimColor: string;
   holeRimStyle: HoleRimStyle;
   language: LanguageCode;
   audioPreferences: PlayerAudioPreferences;
+  stats: PlayerLifetimeStats;
+  experience: PlayerExperience;
   createdAt: string;
   updatedAt: string;
   matchHistory: MatchHistoryEntry[];
 }
+
+export type PublicPlayerProfile = Omit<PlayerProfile, 'email' | 'passwordHash' | 'passwordSalt' | 'audioPreferences' | 'matchHistory'>;

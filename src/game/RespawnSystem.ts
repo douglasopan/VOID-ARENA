@@ -23,6 +23,7 @@ export class RespawnSystem {
   update(now: number): RespawnEvent[] {
     if (
       this.config.matchMode !== MatchMode.Timed &&
+      this.config.matchMode !== MatchMode.EliminationRush &&
       this.config.matchMode !== MatchMode.TimeTrial &&
       this.config.matchMode !== MatchMode.Career &&
       this.config.matchMode !== MatchMode.Creative

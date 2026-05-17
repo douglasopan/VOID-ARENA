@@ -22,9 +22,9 @@ interface MusicFadeState {
 
 export class AudioManager {
   private context: AudioContext | null = null;
-  private sfxVolume = 0.55;
-  private musicVolume = 0.3;
-  private cityAmbienceVolume = 0.16;
+  private sfxVolume = 0.3;
+  private musicVolume = 0.15;
+  private cityAmbienceVolume = 0.01;
   private muted = false;
   private unlocked = false;
   private musicOscillator: OscillatorNode | null = null;
